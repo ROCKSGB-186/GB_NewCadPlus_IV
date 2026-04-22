@@ -1,0 +1,21 @@
+# EditorConfig for GB_NewCadPlus_LM
+# https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+[*.cs]
+dotnet_naming_rule.private_fields_should_have_underscore.severity = suggestion
+
+[*.xaml]
+indent_style = space
+indent_size = 4
+max_line_length = off

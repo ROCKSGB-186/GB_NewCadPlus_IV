@@ -1,0 +1,496 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <assembly alias="System.Windows.Forms" name="System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
+  <data name="DQTJ_EQUIP_220V用电设备点或配电柜" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_220V用电设备点或配电柜.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_380V用电设备大于10KW" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_380V用电设备大于10KW.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_380V用电设备点或配电柜" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_380V用电设备点或配电柜.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_UPS16A插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_UPS16A插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_UPS插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_UPS插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_三点互锁" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_三点互锁.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_三相380V插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_三相380V插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_三相岛型插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_三相岛型插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_三相潮湿插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_三相潮湿插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_三联插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_三联插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_两点互锁" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_两点互锁.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_互锁插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_互锁插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_传递窗电源插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_传递窗电源插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相16A三孔插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相16A三孔插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相20A三孔插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相20A三孔插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相25A三孔插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相25A三孔插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相32A三孔插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相32A三孔插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相三孔岛型插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相三孔岛型插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相三孔插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相三孔插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相五孔岛型插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相五孔岛型插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相地面插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相地面插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相夹层插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相夹层插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相空调插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相空调插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_单相防爆岛型插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_单相防爆岛型插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_厨宝安全型插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_厨宝安全型插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_厨宝电热水器安全型插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_厨宝电热水器安全型插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_四联插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_四联插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_地面插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_地面插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_壁挂空调插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_壁挂空调插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_实验台UPS功能柱插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_实验台UPS功能柱插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_实验台UPS功能柱电源" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_实验台UPS功能柱电源.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_实验台上方220V插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_实验台上方220V插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_实验台功能柱插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_实验台功能柱插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_带保护极的三相密闭插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_带保护极的三相密闭插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_带保护极的三相暗敷插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_带保护极的三相暗敷插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_带保护极的三相防爆插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_带保护极的三相防爆插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_带保护极的单相密闭插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_带保护极的单相密闭插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_带保护极的单相暗敷插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_带保护极的单相暗敷插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_带保护极的单相防爆插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_带保护极的单相防爆插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_应急16A插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_应急16A插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_应急插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_应急插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_手消毒插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_手消毒插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_插座箱" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_插座箱.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_潮湿插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_潮湿插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_灭蝇灯插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_灭蝇灯插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_灭蝇灯插座_底边" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ-EQUIP-灭蝇灯插座(底边).dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_烘手器" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_烘手器.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_烘手器插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_烘手器插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_用电设备点或配电柜" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_用电设备点或配电柜.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_电热水器安全型插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_电热水器安全型插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_空调插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_空调插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_立式空调插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_立式空调插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_红外感应门插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_红外感应门插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_视孔灯" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_视孔灯.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_设备用电点位" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_设备用电点位.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_门禁插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_门禁插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DQTJ_EQUIP_驱鼠器插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DQTJ_EQUIP_驱鼠器插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DUCT-风口_F1_600x1200_TCH" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DUCT-风口_F1_600x1200_TCH.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DUCT-风口_F2_900x600_TCH" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DUCT-风口_F2_900x600_TCH.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DUCT-风口_F3_600x600_TCH" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DUCT-风口_F3_600x600_TCH.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="DUCT-风口_F4_900x1200_TCH" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\DUCT-风口_F4_900x1200_TCH.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="GB_LOGO" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\GB-LOGO.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="GB_LOGO_02" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\GB-LOGO-02.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="GB_PID_FL_法兰" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\GB_PID_FL_法兰.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="GB_PID_FMDF_蝶阀" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\GB_PID_FMDF_蝶阀.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="GB_PID_GDJK_出口管道" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\GB_PID_GDJK_出口管道.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="GB_PID_GDJK_进口管道" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\GB_PID_GDJK_进口管道.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="GB_PID_YJJG_异径接管" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\GB_PID_YJJG_异径接管.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_冷不带压直排" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_冷不带压直排.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_冷直排管" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_冷直排管.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_地漏" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_地漏.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_大便器给水" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_大便器给水.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_大洗涤池_1x0_5m" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_大洗涤池_1x0_5m.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_大洗涤池_1_2x0_5m" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_大洗涤池_1_2x0_5m.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_大洗涤池_1_5x0_5m" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_大洗涤池_1_5x0_5m.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_大洗涤池_1_8x0_5m" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_大洗涤池_1_8x0_5m.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_大洗涤池_2_0x0_5m" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_大洗涤池_2_0x0_5m.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_小便器给水" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_小便器给水.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_拖布池" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_拖布池.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_水池给水" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_水池给水.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_洗涤盆" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_洗涤盆.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_洗眼器" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_洗眼器.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_洗脸盆" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_洗脸盆.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_热不带压直排" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_热不带压直排.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_热直排管" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_热直排管.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="PTJ_给水点" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\PTJ_给水点.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="STJ_受力点" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\STJ_受力点.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_互联网插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_互联网插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_人像识别器" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_人像识别器.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_人脸识别一体机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_人脸识别一体机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_内线电话插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_内线电话插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_半球彩色摄像机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_半球彩色摄像机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_吸顶式无线AP" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_吸顶式无线AP.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_外线电话插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_外线电话插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_安防监控" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_安防监控.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_室外彩色云台摄像机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_室外彩色云台摄像机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_室外彩色摄像机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_室外彩色摄像机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_局域网插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_局域网插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_带扬声器电话机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_带扬声器电话机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_广角彩色摄像机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_广角彩色摄像机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_无线AP" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_无线AP.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_电控锁" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_电控锁.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_电话插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_电话插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_电话网络插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_电话网络插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_电锁按键" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_电锁按键.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_监控文字" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_监控文字.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_眼纹识别器" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_眼纹识别器.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_网络交换机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_网络交换机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_网络插座" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_网络插座.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_读卡器" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_读卡器.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_门磁开关" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_门磁开关.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_门禁控制器" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_门禁控制器.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_防爆型电话机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_防爆型电话机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="ZKTJ_EQUIP_防爆型网络摄像机" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\ZKTJ_EQUIP_防爆型网络摄像机.dwg;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="_00_脱硫系统计算_总表" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\_00_脱硫系统计算_总表.xlsx;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="_00_计算总表_公式导出" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\_00_计算总表_公式导出.csv;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="上" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\上.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="下" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\下.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="右" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\右.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="右上" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\右上.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="右下" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\右下.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="左" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\左.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="左上" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\左上.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="左下" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>Resources\左下.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+</root>

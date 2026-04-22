@@ -1,0 +1,348 @@
+
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Name="WpfStyLe">
+
+    <!--  自定义控件的资源样式 按钮样式  -->
+    <Style TargetType="Button">
+        <Setter Property="Width" Value="65" />
+        <!--  宽度  -->
+        <Setter Property="Height" Value="30" />
+        <!--  高度  -->
+        <Setter Property="Margin" Value="1" />
+        <!--  间隔  -->
+        <Setter Property="Background" Value="#FFF3EEEE" />
+        <!--  背景颜色  -->
+        <Setter Property="BorderBrush" Value="Gray" />
+        <!--  边框颜色  -->
+        <Setter Property="BorderThickness" Value="1" />
+        <!--  边框宽度  -->
+        <Setter Property="FontSize" Value="12" />
+        <!--  字体大小  -->
+        <Setter Property="FontWeight" Value="Normal" />
+        <!--  字体加粗  -->
+        <Setter Property="Cursor" Value="Hand" />
+        <!--  鼠标样式  -->
+        <Setter Property="Template">
+            <!--  模板内容  -->
+            <Setter.Value>
+                <!--  模板内容  -->
+                <ControlTemplate TargetType="Button">
+                    <!--  控件模板  -->
+                    <Border
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="5">
+                        <!--  边框  -->
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!--  内容  -->
+                    </Border>
+                    <!--  边框  -->
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="LightBlue" />
+                        </Trigger>
+                        <!--  鼠标移入时  -->
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Background" Value="White" />
+                        </Trigger>
+                        <!--  按下时  -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Background" Value="Gray" />
+                            <Setter Property="Foreground" Value="Gray" />
+                        </Trigger>
+                        <!--  禁用时  -->
+                    </ControlTemplate.Triggers>
+                    <!--  触发器  -->
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!--  TabControlStyle样式  -->
+    <Style x:Key="TabControlStyle" TargetType="{x:Type TabControl}">
+        <Setter Property="Background" Value="White" />
+        <!--  背景颜色  -->
+        <Setter Property="BorderBrush" Value="Gray" />
+        <!--  边框颜色  -->
+        <Setter Property="BorderThickness" Value="2" />
+        <!--  边框宽度  -->
+        <Setter Property="Foreground" Value="Black" />
+        <!--  字体颜色  -->
+        <Setter Property="FontSize" Value="14" />
+        <!--  字体大小  -->
+        <Setter Property="FontWeight" Value="Bold" />
+        <!--  字体加粗  -->
+        <Setter Property="Margin" Value="0" />
+        <!--  间隔  -->
+    </Style>
+    <!--  修改TabItem的样式，使其适应纵向布局  -->
+    <Style x:Key="VerticalTabStyle" TargetType="{x:Type TabItem}">
+        <!--  纵向TabItem样式  -->
+        <Setter Property="Height" Value="50" />
+        <!--  高度  -->
+        <Setter Property="Width" Value="28" />
+        <!--  宽度  -->
+        <Setter Property="Margin" Value="0,0,0,0" />
+        <!--  间隔  -->
+        <Setter Property="Padding" Value="0" />
+        <!--  内间距  -->
+        <Setter Property="FontSize" Value="13" />
+        <!--  字体大小  -->
+        <Setter Property="FontWeight" Value="Normal" />
+        <!--  字体加粗  -->
+        <Setter Property="Template">
+            <!--  模板  -->
+            <Setter.Value>
+                <!--  模板内容  -->
+                <ControlTemplate TargetType="{x:Type TabItem}">
+                    <!--  控件模板  -->
+                    <Grid>
+                        <!--  网格  -->
+                        <Border
+                            Name="Border"
+                            Margin="0,0,-1,0"
+                            Background="LightBlue"
+                            BorderBrush="Gray"
+                            BorderThickness="1,1,0,1"
+                            CornerRadius="5">
+                            <ContentPresenter
+                                x:Name="ContentSite"
+                                Margin="-10,0,-10,0"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                ContentSource="Header"
+                                RenderTransformOrigin="0.5,0.5">
+                                <ContentPresenter.RenderTransform>
+                                    <RotateTransform Angle="270" />
+                                </ContentPresenter.RenderTransform>
+                            </ContentPresenter>
+                        </Border>
+                        <!--  边框  -->
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!--  触发器  -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <!--  选中时  -->
+                            <Setter TargetName="Border" Property="Background" Value="LightGoldenrodYellow" />
+                            <!--  背景颜色  -->
+                            <Setter TargetName="Border" Property="BorderThickness" Value="1,1,0,1" />
+                            <!--  边框宽度  -->
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!--  修改TextBox的样式，实现水印功能  -->
+    <Style x:Key="WatermarkTextBoxStyle" TargetType="{x:Type TextBox}">
+        <Setter Property="Padding" Value="3,0,0,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <!--  添加默认值属性  -->
+        <Setter Property="Tag" Value="" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Grid>
+                        <!--
+                            定义边框背景和边框线
+                            设置边框背景色，绑定到控件的Background属性
+                            设置边框画笔颜色，绑定到控件的BorderBrush属性
+                            设置边框厚度，绑定到控件的BorderThickness属性
+                            设置边框圆角半径为5个像素
+                        -->
+                        <Border
+                            x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3">
+                            <!--
+                                内容显示区域，用于显示用户输入的文字
+                                定义ScrollViewer的名称，这是TextBox必须的部分
+                            -->
+                            <ScrollViewer
+                                x:Name="PART_ContentHost"
+                                Margin="{TemplateBinding Padding}"
+                                VerticalAlignment="Center" />
+                        </Border>
+                        <!--
+                            水印文字x:Name="WatermarkText"显示区域
+                            水印提示文字Text内容
+                            水印文字Foreground颜色
+                            水印文字FontSize大小
+                            垂直居中VerticalAlignment对齐
+                            左边距Margin微调
+                            默认隐藏水印文字Visibility
+                        -->
+                        <TextBlock
+                            x:Name="WatermarkText"
+                            Margin="5,0,0,0"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontStyle="Italic"
+                            Foreground="Gray"
+                            IsHitTestVisible="False"
+                            Text="{TemplateBinding Tag}"
+                            Visibility="Collapsed" />
+
+                    </Grid>
+                    <!--  定义触发器  -->
+                    <ControlTemplate.Triggers>
+                        <!--  当TextBox为空时显示水印  -->
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="WatermarkText" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <!--  当TextBox获得焦点时隐藏水印  -->
+                        <Trigger Property="IsFocused" Value="True">
+                            <Setter TargetName="WatermarkText" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <!--  当TextBox失去焦点且为空时显示水印  -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsFocused" Value="False" />
+                                <Condition Property="Text" Value="" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="WatermarkText" Property="Visibility" Value="Visible" />
+                        </MultiTrigger>
+                        <!--  边框样式触发器  -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="border" Property="Background" Value="#FFFBFF" />
+                            <Setter TargetName="border" Property="BorderBrush" Value="#FFB0B0B0" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="#FF569DE5" />
+                        </Trigger>
+                        <Trigger Property="IsFocused" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="#FF569DE5" />
+                            <Setter TargetName="border" Property="BorderThickness" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!--  滚动条样式  -->
+    <Style x:Key="ScrollBarTrackThumb" TargetType="{x:Type Thumb}">
+        <!--  定义滚动条样式  -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Grid x:Name="Grid">
+                        <Rectangle
+                            Width="Auto"
+                            Height="Auto"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Fill="Transparent" />
+                        <Border
+                            x:Name="CornerScrollBar"
+                            Width="Auto"
+                            Height="Auto"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="2" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!--  定义滚动条样式触发器  -->
+                        <Trigger Property="Tag" Value="Horizontal">
+                            <!--  水平滚动条  -->
+                            <Setter TargetName="CornerScrollBar" Property="Width" Value="Auto" />
+                            <!--  设置滚动条宽度  -->
+                            <Setter TargetName="CornerScrollBar" Property="Height" Value="6" />
+                            <!--  设置滚动条高度  -->
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!--  滚动条样式  -->
+    <Style TargetType="{x:Type ScrollBar}">
+        <Setter Property="Stylus.IsFlicksEnabled" Value="false" />
+        <!--  禁用滚动条翻页  -->
+        <Setter Property="Foreground" Value="#8C8C8C" />
+        <!--  滚动条颜色  -->
+        <Setter Property="Background" Value="Transparent" />
+        <!--  滚动条背景颜色  -->
+        <Setter Property="Width" Value="6" />
+        <!--  滚动条宽度  -->
+        <Setter Property="Template">
+            <!--  定义滚动条模板  -->
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ScrollBar}">
+                    <!--  定义滚动条模板  -->
+                    <Grid
+                        x:Name="GridRoot"
+                        Width="{TemplateBinding Width}"
+                        Background="{TemplateBinding Background}">
+                        <!--  定义滚动条模板  -->
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="0.00001*" />
+                            <!--  定义滚动条模板  -->
+                        </Grid.RowDefinitions>
+                        <Track
+                            x:Name="PART_Track"
+                            Grid.Row="0"
+                            Focusable="false"
+                            IsDirectionReversed="true">
+                            <!--  定义滚动条模板  -->
+                            <Track.Thumb>
+                                <Thumb
+                                    x:Name="Thumb"
+                                    Background="{TemplateBinding Foreground}"
+                                    Style="{DynamicResource ScrollBarTrackThumb}" />
+                                <!--  定义滚动条模板  -->
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton
+                                    x:Name="PageUp"
+                                    Command="ScrollBar.PageDownCommand"
+                                    Focusable="false"
+                                    Opacity="0" />
+                                <!--  定义滚动条模板  -->
+                            </Track.IncreaseRepeatButton>
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton
+                                    x:Name="PageDown"
+                                    Command="ScrollBar.PageUpCommand"
+                                    Focusable="false"
+                                    Opacity="0" />
+                            </Track.DecreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter TargetName="Thumb" Property="Visibility" Value="Collapsed" />
+                            <!--  定义滚动条模板  -->
+                        </Trigger>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter TargetName="GridRoot" Property="LayoutTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="-90" />
+                                    <!--  定义滚动条模板  -->
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="PART_Track" Property="LayoutTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="-90" />
+                                    <!--  定义滚动条模板  -->
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Width" Value="Auto" />
+                            <!--  定义滚动条模板  -->
+                            <Setter Property="Height" Value="6" />
+                            <Setter TargetName="Thumb" Property="Tag" Value="Horizontal" />
+                            <Setter TargetName="PageDown" Property="Command" Value="ScrollBar.PageLeftCommand" />
+                            <Setter TargetName="PageUp" Property="Command" Value="ScrollBar.PageRightCommand" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
+

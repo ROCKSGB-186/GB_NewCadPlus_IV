@@ -1,0 +1,615 @@
+﻿ 
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+	<PropertyGroup>
+		<TargetFramework>net48</TargetFramework>
+		<Nullable>enable</Nullable>
+		<EnableNETAnalyzers>true</EnableNETAnalyzers>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<LangVersion>preview</LangVersion>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<Platforms>AnyCPU;x64</Platforms>
+		<AssemblyName>$(MSBuildProjectName)</AssemblyName>
+		<ErrorReport>prompt</ErrorReport>
+                <AssemblyVersion>3.26.04.20119</AssemblyVersion>
+                <FileVersion>3.26.04.20119</FileVersion>
+                <Version>3.26.04.20119</Version>      
+	</PropertyGroup>
+
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Debug'">
+		<DefineConstants>$(Configuration);DEBUG</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(TargetFramework)' == 'NET48'">
+		<DefineConstants>$(Configuration);acad</DefineConstants>
+	</PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>portable</DebugType>
+        <Optimize>false</Optimize>
+        <DefineDebug>true</DefineDebug>
+        <DefineTrace>true</DefineTrace>
+    </PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+	  <Optimize>False</Optimize>
+	  <DebugType>full</DebugType>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+	  <Optimize>False</Optimize>
+	  <DebugType>full</DebugType>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+	  <Optimize>False</Optimize>
+	  <DebugType>full</DebugType>
+	</PropertyGroup>
+
+    
+
+	<ItemGroup>
+	  <Compile Remove="FakesAssemblies\**" />
+	  <Compile Remove="Fakes\**" />
+	  <Compile Remove="packages\**" />
+	  <EmbeddedResource Remove="FakesAssemblies\**" />
+	  <EmbeddedResource Remove="Fakes\**" />
+	  <EmbeddedResource Remove="packages\**" />
+	  <None Remove="FakesAssemblies\**" />
+	  <None Remove="Fakes\**" />
+	  <None Remove="packages\**" />
+	  <Page Remove="FakesAssemblies\**" />
+	  <Page Remove="Fakes\**" />
+	  <Page Remove="packages\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Costura.Fody" Version="6.0.0">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Dapper.Database" Version="5.0.0.258" />
+		<PackageReference Include="IFox.CAD.ACAD" Version="0.9.8.1" />
+		<PackageReference Include="MySql.Data" Version="9.5.0" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="OkEPPlus" Version="8.1.1" />
+		<PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.1" />
+
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="Microsoft.CSharp" />
+		<Reference Include="Microsoft.VisualBasic" />
+		<Reference Include="System.Web" />
+		<Reference Include="System.Web.Extensions" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="Properties\Settings.Designer.cs">
+	    <DesignTimeSharedInput>True</DesignTimeSharedInput>
+	    <AutoGen>True</AutoGen>
+	    <DependentUpon>Settings.settings</DependentUpon>
+	  </Compile>
+	  <Compile Update="Resources.Designer.cs">
+	    <DesignTime>True</DesignTime>
+	    <AutoGen>True</AutoGen>
+	    <DependentUpon>Resources.resx</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Update="Resources.resx">
+	    <Generator>PublicResXFileCodeGenerator</Generator>
+	    <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+	  </EmbeddedResource>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Resources\暖通\02-设备\" />
+	  <Folder Include="Resources\暖通\01-风路\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <AdditionalDesignTimeBuildInput Remove="FakesAssemblies\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Remove="WpfMainWindow - 复制.xaml.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="Resources\上.png" />
+	  <None Remove="Resources\下.png" />
+	  <None Remove="Resources\右.png" />
+	  <None Remove="Resources\右上.png" />
+	  <None Remove="Resources\右下.png" />
+	  <None Remove="Resources\工艺\GB_PID_FL_法兰.dwg" />
+	  <None Remove="Resources\工艺\GB_PID_FMDF_蝶阀.dwg" />
+	  <None Remove="Resources\工艺\GB_PID_GDJK_出口管道.dwg" />
+	  <None Remove="Resources\工艺\GB_PID_GDJK_进口管道.dwg" />
+	  <None Remove="Resources\工艺\GB_PID_YJJG_异径接管.dwg" />
+	  <None Remove="Resources\左.png" />
+	  <None Remove="Resources\左上.png" />
+	  <None Remove="Resources\左下.png" />
+	  <None Remove="Resources\电气\DQTJ-EQUIP-灭蝇灯插座%28底边%29.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_220V用电设备点或配电柜.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_380V用电设备大于10KW.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_380V用电设备点或配电柜.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_UPS16A插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_UPS插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_三点互锁.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_三相380V插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_三相岛型插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_三相潮湿插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_三联插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_两点互锁.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_互锁插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_传递窗电源插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相16A三孔插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相20A三孔插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相25A三孔插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相32A三孔插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相三孔岛型插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相三孔插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相五孔岛型插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相地面插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相夹层插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相空调插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_单相防爆岛型插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_厨宝安全型插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_厨宝电热水器安全型插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_四联插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_地面插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_壁挂空调插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_实验台UPS功能柱插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_实验台UPS功能柱电源.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_实验台上方220V插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_实验台功能柱插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_带保护极的三相密闭插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_带保护极的三相暗敷插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_带保护极的三相防爆插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_带保护极的单相密闭插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_带保护极的单相暗敷插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_带保护极的单相防爆插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_应急16A插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_应急插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_手消毒插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_插座箱.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_潮湿插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_灭蝇灯插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_灭蝇灯插座_底边.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_烘手器.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_烘手器插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_用电设备点或配电柜.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_电热水器安全型插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_空调插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_立式空调插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_红外感应门插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_视孔灯.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_设备用电点位.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_门禁插座.dwg" />
+	  <None Remove="Resources\电气\DQTJ_EQUIP_驱鼠器插座.dwg" />
+	  <None Remove="Resources\结构\01-结点\STJ_受力点.dwg" />
+	  <None Remove="Resources\给排水\PTJ_冷不带压直排.dwg" />
+	  <None Remove="Resources\给排水\PTJ_冷直排管.dwg" />
+	  <None Remove="Resources\给排水\PTJ_地漏.dwg" />
+	  <None Remove="Resources\给排水\PTJ_大便器给水.dwg" />
+	  <None Remove="Resources\给排水\PTJ_大洗涤池_1x0_5m.dwg" />
+	  <None Remove="Resources\给排水\PTJ_大洗涤池_1_2x0_5m.dwg" />
+	  <None Remove="Resources\给排水\PTJ_大洗涤池_1_5x0_5m.dwg" />
+	  <None Remove="Resources\给排水\PTJ_大洗涤池_1_8x0_5m.dwg" />
+	  <None Remove="Resources\给排水\PTJ_大洗涤池_2_0x0_5m.dwg" />
+	  <None Remove="Resources\给排水\PTJ_小便器给水.dwg" />
+	  <None Remove="Resources\给排水\PTJ_拖布池.dwg" />
+	  <None Remove="Resources\给排水\PTJ_水池给水.dwg" />
+	  <None Remove="Resources\给排水\PTJ_洗涤盆.dwg" />
+	  <None Remove="Resources\给排水\PTJ_洗眼器.dwg" />
+	  <None Remove="Resources\给排水\PTJ_洗脸盆.dwg" />
+	  <None Remove="Resources\给排水\PTJ_热不带压直排.dwg" />
+	  <None Remove="Resources\给排水\PTJ_热直排管.dwg" />
+	  <None Remove="Resources\给排水\PTJ_给水点.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_互联网插座.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_人像识别器.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_内线电话插座.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_半球彩色摄像机.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_外线电话插座.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_安防监控.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_室外彩色云台摄像机.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_室外彩色摄像机.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_局域网插座.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_带扬声器电话机.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_广角彩色摄像机.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_无线AP.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_电控锁.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_电话插座.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_电话网络插座.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_电锁按键.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_监控文字.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_眼纹识别器.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_网络交换机.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_网络插座.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_读卡器.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_门磁开关.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_门禁控制器.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_防爆型电话机.dwg" />
+	  <None Remove="Resources\自控\ZKTJ_EQUIP_防爆型网络摄像机.dwg" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="Resources\下.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="Resources\上.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	  <Resource Include="Resources\右.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	  <Resource Include="Resources\右上.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	  <Resource Include="Resources\右下.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	  <Content Include="Resources\工艺\03-法兰\GB_PID_FL_法兰.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\工艺\02-阀门\GB_PID_FMDF_蝶阀.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\工艺\01-管道\GB_PID_GDJK_出口管道.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\工艺\01-管道\GB_PID_GDJK_进口管道.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\工艺\04-异径管\GB_PID_YJJG_异径接管.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\建筑\01-通用\01.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\总图\01-通用\01.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\暖通\00-通用\01.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ-EQUIP-灭蝇灯插座%28底边%29.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_220V用电设备点或配电柜.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\03-TJ（电气D2）\DQTJ_EQUIP_380V大于10KW用电设备.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_380V用电设备点或配电柜.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\02-TJ（电气D1）\DQTJ_EQUIP_UPS16A插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\02-TJ（电气D1）\DQTJ_EQUIP_UPS插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_三点互锁.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_三相380V插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_三相岛型插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_三相潮湿插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_三联插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_两点互锁.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_互锁插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_传递窗电源插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相16A三孔插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相20A三孔插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相25A三孔插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相32A三孔插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相三孔岛型插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相三孔插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相五孔岛型插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相地面插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相夹层插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相空调插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_单相防爆岛型插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_厨宝安全型插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_厨宝电热水器安全型插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_四联插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_地面插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_壁挂空调插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_实验台UPS功能柱插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\02-TJ（电气D1）\DQTJ_EQUIP_UPS供电回路电源.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_实验台上方220V插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_实验台功能柱插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_带保护极的三相密闭插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_带保护极的三相暗敷插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_带保护极的三相防爆插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_带保护极的单相密闭插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_带保护极的单相暗敷插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_带保护极的单相防爆插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\02-TJ（电气D1）\DQTJ_EQUIP_双电源16A应急插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\02-TJ（电气D1）\DQTJ_EQUIP_双电源应急插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_手消毒插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_插座箱.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_潮湿插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_灭蝇灯插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_灭蝇灯插座_底边.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_烘手器.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_烘手器插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_用电设备点或配电柜.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_电热水器安全型插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_空调插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_立式空调插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_红外感应门插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_视孔灯.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_设备用电点位.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_门禁插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\电气\01-TJ（电气D）\DQTJ_EQUIP_驱鼠器插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\结构\01-结点\STJ_受力点.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\02-排水\PTJ_冷不带压直排.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\02-排水\PTJ_冷直排管.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\02-排水\PTJ_地漏.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\01-给水\PTJ_大便器给水.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\01-给水\PTJ_小便器给水.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\03-洗涤（池、盆）\PTJ_拖布池.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\01-给水\PTJ_水池给水.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\03-洗涤（池、盆）\PTJ_洗涤盆.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\04-水设备\PTJ_洗眼器.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\03-洗涤（池、盆）\PTJ_洗脸盆.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\02-排水\PTJ_热不带压直排.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\02-排水\PTJ_热直排管.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\给排水\01-给水\PTJ_给水点.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\01-网络\ZKTJ_EQUIP_互联网插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\04-自控设备\ZKTJ_EQUIP_人像识别器.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\02-通信\ZKTJ_EQUIP_内线电话插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\03-监控\ZKTJ_EQUIP_半球彩色摄像机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\02-通信\ZKTJ_EQUIP_外线电话插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\03-监控\ZKTJ_EQUIP_安防监控.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\03-监控\ZKTJ_EQUIP_室外彩色云台摄像机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\03-监控\ZKTJ_EQUIP_室外彩色摄像机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\01-网络\ZKTJ_EQUIP_局域网插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\02-通信\ZKTJ_EQUIP_带扬声器电话机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\03-监控\ZKTJ_EQUIP_广角彩色摄像机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\01-网络\ZKTJ_EQUIP_无线AP.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\04-自控设备\ZKTJ_EQUIP_电控锁.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\02-通信\ZKTJ_EQUIP_电话插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\02-通信\ZKTJ_EQUIP_电话网络插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\04-自控设备\ZKTJ_EQUIP_电锁按键.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\03-监控\ZKTJ_EQUIP_监控文字.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\04-自控设备\ZKTJ_EQUIP_眼纹识别器.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\01-网络\ZKTJ_EQUIP_网络交换机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\01-网络\ZKTJ_EQUIP_网络插座.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\04-自控设备\ZKTJ_EQUIP_读卡器.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\04-自控设备\ZKTJ_EQUIP_门磁开关.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\04-自控设备\ZKTJ_EQUIP_门禁控制器.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\02-通信\ZKTJ_EQUIP_防爆型电话机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="Resources\自控\03-监控\ZKTJ_EQUIP_防爆型网络摄像机.dwg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	  <None Include=".github\copilot-instructions.md" />
+	  <Resource Include="Resources\左.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	  <Resource Include="Resources\左上.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	  <Resource Include="Resources\左下.png">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="Properties\Settings.settings">
+	    <Generator>SettingsSingleFileGenerator</Generator>
+	    <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+	  </None>
+	  <None Update="Resources\PTJ_大洗涤池_1x0_5m.dwg">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Resources\PTJ_大洗涤池_1_2x0_5m.dwg">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Resources\PTJ_大洗涤池_1_5x0_5m.dwg">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Resources\PTJ_大洗涤池_1_8x0_5m.dwg">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Resources\PTJ_大洗涤池_2_0x0_5m.dwg">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>  
+
+</Project>
+
+
