@@ -1,12 +1,12 @@
 using Autodesk.AutoCAD.Windows;
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.Helpers;
-using GB_NewCadPlus_LM.UniFiedStandards;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.Helpers;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Forms.VisualStyles;
 
-namespace GB_NewCadPlus_LM
+namespace GB_NewCadPlus_IV
 {
     public partial class FormMain : Form
     {
@@ -1687,7 +1687,7 @@ namespace GB_NewCadPlus_LM
             {
                 var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                 // 调用 Command 层处理
-                GB_NewCadPlus_LM.FunctionalMethod.Command.GenerateAndInsertTransferWindow(doc, coreLen, coreWid, coreHeightVal, typeVal, paramVal, selectedRadioNames);
+                GB_NewCadPlus_IV.FunctionalMethod.Command.GenerateAndInsertTransferWindow(doc, coreLen, coreWid, coreHeightVal, typeVal, paramVal, selectedRadioNames);
             }
             catch (Exception ex)
             {
@@ -1780,7 +1780,7 @@ namespace GB_NewCadPlus_LM
             // 生成临时文件名（放在系统临时目录，带 .dwg 扩展名）
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         private void button_风口_F2_Click(object sender, EventArgs e)
@@ -1993,11 +1993,11 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "EQUIP-通讯";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 3;//设置为被插入的图层颜色
-            VariableDictionary.resourcesFile = GB_NewCadPlus_LM.Resources.ZKTJ_EQUIP_无线AP;
+            VariableDictionary.resourcesFile = GB_NewCadPlus_IV.Resources.ZKTJ_EQUIP_无线AP;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_电话插座_Click(object sender, EventArgs e)
         {
@@ -2014,7 +2014,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_网络插座_Click(object sender, EventArgs e)
         {
@@ -2031,7 +2031,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_电话网络插座_Click(object sender, EventArgs e)
         {
@@ -2048,7 +2048,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_安防监控_Click(object sender, EventArgs e)
         {
@@ -2065,7 +2065,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_眼纹识别器_Click(object sender, EventArgs e)
         {
@@ -2082,7 +2082,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_无线网络接入点_Click(object sender, EventArgs e)
         {
@@ -2098,7 +2098,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         private void button_无线AP_吊顶_Click(object sender, EventArgs e)
@@ -2115,7 +2115,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_室外彩色云台摄像机_Click(object sender, EventArgs e)
         {
@@ -2131,7 +2131,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_外线电话插座_Click(object sender, EventArgs e)
         {
@@ -2147,7 +2147,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_网络交换机_Click(object sender, EventArgs e)
         {
@@ -2163,7 +2163,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_室外彩色摄像机_Click(object sender, EventArgs e)
         {
@@ -2179,7 +2179,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_人像识别器_Click(object sender, EventArgs e)
         {
@@ -2195,7 +2195,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         private void button_ZK_人脸识别一体机_Click(object sender, EventArgs e)
         {
@@ -2211,7 +2211,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_内线电话插座_Click(object sender, EventArgs e)
         {
@@ -2227,7 +2227,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_门磁开关_Click(object sender, EventArgs e)
         {
@@ -2243,7 +2243,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_局域网插座_Click(object sender, EventArgs e)
         {
@@ -2259,7 +2259,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_门禁控制器_Click(object sender, EventArgs e)
         {
@@ -2275,7 +2275,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_读卡器_Click(object sender, EventArgs e)
         {
@@ -2291,7 +2291,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_带扬声器电话机_Click(object sender, EventArgs e)
         {
@@ -2307,7 +2307,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_互联网插座_Click(object sender, EventArgs e)
         {
@@ -2323,7 +2323,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_广角彩色摄像机_Click(object sender, EventArgs e)
         {
@@ -2339,7 +2339,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_防爆型网络摄像机_Click(object sender, EventArgs e)
         {
@@ -2355,7 +2355,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_防爆型电话机_Click(object sender, EventArgs e)
         {
@@ -2371,7 +2371,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_半球彩色摄像机_Click(object sender, EventArgs e)
         {
@@ -2388,7 +2388,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_ZK_电锁按键_Click(object sender, EventArgs e)
@@ -2405,7 +2405,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_ZK_电控锁_Click(object sender, EventArgs e)
         {
@@ -2421,7 +2421,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_ZK_监控文字_Click(object sender, EventArgs e)
@@ -2438,7 +2438,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         #endregion
 
@@ -2666,7 +2666,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_不给饮用水_Click(object sender, EventArgs e)
@@ -2694,7 +2694,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_大洗涤池_Click_1(object sender, EventArgs e)
@@ -2710,7 +2710,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_大便器给水_Click(object sender, EventArgs e)
@@ -2726,7 +2726,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_洗涤盆_Click(object sender, EventArgs e)
@@ -2744,7 +2744,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock_Ptj ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_水池给水_Click(object sender, EventArgs e)
@@ -2761,7 +2761,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_热直排管_Click(object sender, EventArgs e)
@@ -2779,7 +2779,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_冷直排管_Click(object sender, EventArgs e)
@@ -2797,7 +2797,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_地漏_Click(object sender, EventArgs e)
@@ -2815,7 +2815,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_给水点_Click(object sender, EventArgs e)
@@ -2832,7 +2832,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_洗脸盆_Click(object sender, EventArgs e)
@@ -2850,7 +2850,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_冷不带压直排_Click(object sender, EventArgs e)
@@ -2868,7 +2868,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_热不带压直排_Click(object sender, EventArgs e)
@@ -2886,7 +2886,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_拖布池_Click(object sender, EventArgs e)
@@ -2903,7 +2903,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_洗涤池1x05m_Click(object sender, EventArgs e)
@@ -2920,7 +2920,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_洗涤池12x05m_Click(object sender, EventArgs e)
@@ -2937,7 +2937,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_洗涤池15x05m_Click(object sender, EventArgs e)
@@ -2954,7 +2954,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_洗涤池18x05m_Click(object sender, EventArgs e)
@@ -2971,7 +2971,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         public void button_P_洗涤池2x05m_Click(object sender, EventArgs e)
@@ -2988,7 +2988,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         #endregion
@@ -3008,7 +3008,7 @@ namespace GB_NewCadPlus_LM
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
 
         }
         public void button_DQ_三相380V插座_Click(object sender, EventArgs e)
@@ -3026,7 +3026,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_潮湿插座_Click(object sender, EventArgs e)
         {
@@ -3043,7 +3043,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_三相潮湿插座_Click(object sender, EventArgs e)
         {
@@ -3060,7 +3060,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_空调插座_Click(object sender, EventArgs e)
         {
@@ -3077,7 +3077,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_设备用电点位_Click(object sender, EventArgs e)
         {
@@ -3094,7 +3094,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相夹层_Click(object sender, EventArgs e)
         {
@@ -3111,7 +3111,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_插座箱_Click(object sender, EventArgs e)
         {
@@ -3129,7 +3129,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_应急插座_Click(object sender, EventArgs e)
         {
@@ -3146,7 +3146,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_应急16A电源_Click(object sender, EventArgs e)
         {
@@ -3163,7 +3163,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_UPS插座_Click(object sender, EventArgs e)
         {
@@ -3180,7 +3180,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_UPS16A插座_Click(object sender, EventArgs e)
         {
@@ -3197,7 +3197,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_传递窗电源插座_Click(object sender, EventArgs e)
         {
@@ -3214,7 +3214,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_门禁插座_Click(object sender, EventArgs e)
         {
@@ -3231,7 +3231,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_红外感应门插座_Click(object sender, EventArgs e)
         {
@@ -3248,7 +3248,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_紫外灯_Click(object sender, EventArgs e)
         {
@@ -3277,7 +3277,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_四联插座_Click(object sender, EventArgs e)
         {
@@ -3293,7 +3293,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_互锁插座_Click(object sender, EventArgs e)
         {
@@ -3309,7 +3309,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_两点互锁_Click(object sender, EventArgs e)
         {
@@ -3326,7 +3326,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_三点互锁_Click(object sender, EventArgs e)
         {
@@ -3343,7 +3343,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_立式空调插座_Click(object sender, EventArgs e)
         {
@@ -3359,7 +3359,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_壁挂空调插座_Click(object sender, EventArgs e)
         {
@@ -3376,7 +3376,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_手消毒插座_Click(object sender, EventArgs e)
         {
@@ -3393,7 +3393,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_视孔灯_Click(object sender, EventArgs e)
         {
@@ -3410,7 +3410,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_烘手器插座_Click(object sender, EventArgs e)
         {
@@ -3427,7 +3427,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_实验台功能柱插座_Click(object sender, EventArgs e)
         {
@@ -3444,7 +3444,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_实验台UPS功能柱插座_Click(object sender, EventArgs e)
         {
@@ -3461,7 +3461,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_电热水器插座_Click(object sender, EventArgs e)
         {
@@ -3478,7 +3478,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_厨宝插座_Click(object sender, EventArgs e)
         {
@@ -3495,7 +3495,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_烘手器_Click(object sender, EventArgs e)
         {
@@ -3512,7 +3512,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_驱鼠器插座_Click(object sender, EventArgs e)
         {
@@ -3529,7 +3529,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_灭蝇灯插座_Click(object sender, EventArgs e)
         {
@@ -3546,7 +3546,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_灭蝇灯插座_底边_Click(object sender, EventArgs e)
         {
@@ -3563,7 +3563,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_实验台UPS功能柱电源_Click(object sender, EventArgs e)
         {
@@ -3580,7 +3580,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_实验台上方220V插座_Click(object sender, EventArgs e)
         {
@@ -3597,7 +3597,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_380V用电设备_点或配电柜_Click(object sender, EventArgs e)
         {
@@ -3616,7 +3616,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
 
         }
         public void button_DQ_380V用电设备大于10KW_Click(object sender, EventArgs e)
@@ -3636,7 +3636,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
             //VariableDictionary.dimString = null;
         }
         public void button_DQ_220V用电设备_点或配电柜_Click(object sender, EventArgs e)
@@ -3658,7 +3658,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
 
         }
         public void button_DQ_单相插座_Click(object sender, EventArgs e)
@@ -3676,7 +3676,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相地面插座_Click(object sender, EventArgs e)
         {
@@ -3693,7 +3693,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相三孔插座_Click(object sender, EventArgs e)
         {
@@ -3710,7 +3710,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相空调插座_Click(object sender, EventArgs e)
         {
@@ -3727,7 +3727,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相16A三孔插座_Click(object sender, EventArgs e)
         {
@@ -3744,7 +3744,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相20A三孔插座_Click(object sender, EventArgs e)
         {
@@ -3761,7 +3761,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相25A三孔插座_Click(object sender, EventArgs e)
         {
@@ -3778,7 +3778,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相32A三孔_Click(object sender, EventArgs e)
         {
@@ -3795,7 +3795,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相五孔岛型插座_Click(object sender, EventArgs e)
         {
@@ -3812,7 +3812,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相三孔岛型插座_Click(object sender, EventArgs e)
         {
@@ -3829,7 +3829,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_三相岛型插座_Click(object sender, EventArgs e)
         {
@@ -3846,7 +3846,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_带保护极的单相防爆插座_Click(object sender, EventArgs e)
         {
@@ -3863,7 +3863,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_带保护极的三相防爆插座_Click(object sender, EventArgs e)
         {
@@ -3880,7 +3880,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相防爆岛型插座_Click(object sender, EventArgs e)
         {
@@ -3897,7 +3897,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相暗敷插座_Click(object sender, EventArgs e)
         {
@@ -3914,7 +3914,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_单相密闭插座_Click(object sender, EventArgs e)
         {
@@ -3932,7 +3932,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_三相密闭插座_Click(object sender, EventArgs e)
         {
@@ -3949,7 +3949,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
         public void button_DQ_三相暗敷插座_Click(object sender, EventArgs e)
         {
@@ -3966,7 +3966,7 @@ namespace GB_NewCadPlus_LM
             //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
         }
 
         #endregion

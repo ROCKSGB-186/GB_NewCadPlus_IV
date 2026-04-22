@@ -2,9 +2,9 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.GraphicsInterface;
 using Autodesk.AutoCAD.PlottingServices;
 using Autodesk.AutoCAD.Windows;
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.Helpers;
-using GB_NewCadPlus_LM.UniFiedStandards;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.Helpers;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using IFoxCAD.Cad;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
@@ -46,7 +46,7 @@ public class PsetArgs
     public PsetArgs() { }
 
 }
-namespace GB_NewCadPlus_LM.FunctionalMethod
+namespace GB_NewCadPlus_IV.FunctionalMethod
 {
     /// <summary>
     /// Point3d 扩展方法：提供根据极坐标计算点位置的功能，简化在 CAD 中基于角度和距离定位点的操作。通过 PolarPoint 方法，用户可以直接从一个中心点出发，指定一个角度和距离，快速得到目标点的位置。这对于需要在特定方向上放置对象或进行测量的场景非常有用，提升了代码的可读性和开发效率。

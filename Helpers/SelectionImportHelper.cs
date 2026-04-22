@@ -2,7 +2,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using GB_NewCadPlus_LM.FunctionalMethod;
+using GB_NewCadPlus_IV.FunctionalMethod;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -12,10 +12,10 @@ using System.Windows.Media.Imaging;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
 // 兼容 DatabaseManager 内部嵌套类型：给类型起别名，避免全文件逐个替换
-using FileStorage = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileAttribute;
+using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
+using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
 
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>
     /// 用于从CAD选择导入时传输数据的DTO
@@ -788,7 +788,7 @@ namespace GB_NewCadPlus_LM.Helpers
         /// <returns>预览图路径</returns>
         private static string PreparePreviewPath()
         {
-            string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_LM_Previews");
+            string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV_Previews");
             Directory.CreateDirectory(tempDir);
             return Path.Combine(tempDir, $"preview_{Guid.NewGuid()}.png");
         }

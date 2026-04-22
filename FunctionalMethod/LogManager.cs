@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace GB_NewCadPlus_LM.FunctionalMethod
+namespace GB_NewCadPlus_IV.FunctionalMethod
 {
     /// <summary>
     /// 日志管理器类
@@ -58,7 +58,7 @@ namespace GB_NewCadPlus_LM.FunctionalMethod
                 }
 
                 // 创建日志文件名（按天命名）
-                string fileName = $"GB_NewCadPlus_LM_{DateTime.Now:yyyyMMdd}.log";
+                string fileName = $"GB_NewCadPlus_IV_{DateTime.Now:yyyyMMdd}.log";
                 _logFilePath = Path.Combine(logDirectory, fileName);
 
                 // 确保日志文件存在

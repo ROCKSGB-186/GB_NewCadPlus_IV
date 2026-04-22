@@ -4,7 +4,7 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>    
     ///  - 如果箭头位于第1段或最后一段 -> 强制添加；

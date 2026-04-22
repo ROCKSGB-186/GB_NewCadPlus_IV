@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace GB_NewCadPlus_LM.UniFiedStandards
+namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
     /// 统一界面管理器 - 管理WPF和WinForm界面的统一访问

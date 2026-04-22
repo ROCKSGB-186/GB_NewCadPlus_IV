@@ -1,4 +1,4 @@
-using GB_NewCadPlus_LM.FunctionalMethod;
+using GB_NewCadPlus_IV.FunctionalMethod;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {
     public static class LayerInfoHelper
     {

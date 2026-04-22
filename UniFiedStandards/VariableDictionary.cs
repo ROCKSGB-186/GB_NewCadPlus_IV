@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace GB_NewCadPlus_LM.UniFiedStandards
+namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
     /// 变量

@@ -1,4 +1,4 @@
-namespace GB_NewCadPlus_LM.UniFiedStandards
+namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
     /// 获取路径相关

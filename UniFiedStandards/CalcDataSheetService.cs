@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace GB_NewCadPlus_LM.FunctionalMethod.Calculation
+namespace GB_NewCadPlus_IV.FunctionalMethod.Calculation
 {
     public sealed class CalcDataSheetInput
     {

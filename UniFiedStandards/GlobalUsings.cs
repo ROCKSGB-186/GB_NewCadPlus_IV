@@ -20,5 +20,5 @@ global using Exception = System.Exception;
 global using Polyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
 global using Viewport = Autodesk.AutoCAD.DatabaseServices.Viewport;
 global using WorldDraw = Autodesk.AutoCAD.GraphicsInterface.WorldDraw;
-global using GB_NewCadPlus_LM;
+global using GB_NewCadPlus_IV;
 

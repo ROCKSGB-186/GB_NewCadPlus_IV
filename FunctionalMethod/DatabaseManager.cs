@@ -1,5 +1,5 @@
 using Dapper;
-using GB_NewCadPlus_LM.UniFiedStandards;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace GB_NewCadPlus_LM.FunctionalMethod
+namespace GB_NewCadPlus_IV.FunctionalMethod
 {    
     /// <summary>
     /// 数据库访问类  

@@ -1,9 +1,9 @@
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.Helpers;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.Helpers;
 using System;
 using System.Linq;
 
-namespace GB_NewCadPlus_LM.UniFiedStandards
+namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
     /// 统一命令管理器 - 整合所有专业命令
@@ -180,14 +180,14 @@ namespace GB_NewCadPlus_LM.UniFiedStandards
                 }
                 //string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
                 //System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-                //GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+                //GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
                 #region 再次点方向按键的重复插入逻辑
                 try
                 {
                     // 非拖拽阶段：方向键 = 调角度 + 立即重复上次图元插入
-                    if (!GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging)
+                    if (!GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging)
                     {
-                        GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.RepeatLastCopyDwgAllFastFromDirection();
+                        GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.RepeatLastCopyDwgAllFastFromDirection();
                     }
                 }
                 catch (Exception repeatEx)

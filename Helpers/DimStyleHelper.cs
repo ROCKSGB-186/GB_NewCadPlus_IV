@@ -5,10 +5,10 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Colors;
 using IFoxCAD.Cad; // 如果 DBTrans 在其它命名空间，请按项目实际修改
-using GB_NewCadPlus_LM.Helpers;
+using GB_NewCadPlus_IV.Helpers;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>
     /// 标注样式（DimStyle）相关帮助方法

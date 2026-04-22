@@ -1,7 +1,7 @@
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.UniFiedStandards;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>
     /// AutoCAD操作工具类
@@ -750,7 +750,7 @@ namespace GB_NewCadPlus_LM.Helpers
             try
             {
                 // 优先使用 WpfMainWindow.Instance（更可靠且不依赖于 Window 类型）
-                var inst = GB_NewCadPlus_LM.WpfMainWindow.Instance;
+                var inst = GB_NewCadPlus_IV.WpfMainWindow.Instance;
                 if (inst != null)
                 {
                     try
@@ -793,7 +793,7 @@ namespace GB_NewCadPlus_LM.Helpers
             try
             {
                 // 优先返回静态实例（若已初始化）
-                var inst = GB_NewCadPlus_LM.WpfMainWindow.Instance;
+                var inst = GB_NewCadPlus_IV.WpfMainWindow.Instance;
                 if (inst != null) return inst;
 
                 // 兜底：尝试遍历 Application.Windows 查找包含 WpfMainWindow 的 Window 并返回其 Content
@@ -805,10 +805,10 @@ namespace GB_NewCadPlus_LM.Helpers
                         try
                         {
                             // 若 Window 的 Content 或视觉树中包含 WpfMainWindow，返回它
-                            if (w.Content is GB_NewCadPlus_LM.WpfMainWindow wc) return wc;
+                            if (w.Content is GB_NewCadPlus_IV.WpfMainWindow wc) return wc;
 
                             // 遍历视觉树查找 UserControl
-                            var found = FindChildInVisualTree<GB_NewCadPlus_LM.WpfMainWindow>(w);
+                            var found = FindChildInVisualTree<GB_NewCadPlus_IV.WpfMainWindow>(w);
                             if (found != null) return found;
                         }
                         catch { }

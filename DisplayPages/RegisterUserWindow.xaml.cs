@@ -1,5 +1,5 @@
 using Dapper;
-using GB_NewCadPlus_LM.FunctionalMethod;
+using GB_NewCadPlus_IV.FunctionalMethod;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using MessageBox = System.Windows.MessageBox;
 
-namespace GB_NewCadPlus_LM
+namespace GB_NewCadPlus_IV
 {
     /// <summary>
     /// 注册用户窗口

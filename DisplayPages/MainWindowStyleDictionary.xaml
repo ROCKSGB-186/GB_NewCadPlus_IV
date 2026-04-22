@@ -1,7 +1,7 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:fm="clr-namespace:GB_NewCadPlus_LM.FunctionalMethod;assembly=GB_NewCadPlus_LM">
+    xmlns:fm="clr-namespace:GB_NewCadPlus_IV.FunctionalMethod;assembly=GB_NewCadPlus_IV">
 
 
     <!--  自定义控件的资源样式  -->

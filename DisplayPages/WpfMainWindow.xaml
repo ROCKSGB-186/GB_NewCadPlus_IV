@@ -1,9 +1,9 @@
 <UserControl
-    x:Class="GB_NewCadPlus_LM.WpfMainWindow"
+    x:Class="GB_NewCadPlus_IV.WpfMainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="clr-namespace:GB_NewCadPlus_LM"
+    xmlns:local="clr-namespace:GB_NewCadPlus_IV"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:wf="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
     xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
@@ -17,7 +17,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <!--  引用外部样式资源文件  -->
-                <ResourceDictionary Source="/GB_NewCadPlus_LM;component/DisplayPages/MainWindowStyleDictionary.xaml" />
+                <ResourceDictionary Source="/GB_NewCadPlus_IV;component/DisplayPages/MainWindowStyleDictionary.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -64,7 +64,7 @@
                             VerticalAlignment="Top"
                             Click="上_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/上.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/上.png" />
                             </Button.Background>
                         </Button>
                         <Button
@@ -76,7 +76,7 @@
                             VerticalAlignment="Top"
                             Click="右上_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/右上.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/右上.png" />
                             </Button.Background>
                         </Button>
                         <Button
@@ -88,7 +88,7 @@
                             VerticalAlignment="Top"
                             Click="右_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/右.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/右.png" />
                             </Button.Background>
                         </Button>
                         <Button
@@ -100,7 +100,7 @@
                             VerticalAlignment="Top"
                             Click="右下_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/右下.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/右下.png" />
                             </Button.Background>
                         </Button>
 
@@ -113,7 +113,7 @@
                             VerticalAlignment="Top"
                             Click="左上_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/左上.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/左上.png" />
                             </Button.Background>
                         </Button>
                         <Button
@@ -125,7 +125,7 @@
                             VerticalAlignment="Top"
                             Click="左_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/左.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/左.png" />
                             </Button.Background>
                         </Button>
                         <Button
@@ -137,7 +137,7 @@
                             VerticalAlignment="Top"
                             Click="左下_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/左下.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/左下.png" />
                             </Button.Background>
                         </Button>
                         <Button
@@ -149,7 +149,7 @@
                             VerticalAlignment="Top"
                             Click="下_Btn_Click">
                             <Button.Background>
-                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_LM;component/Resources/下.png" />
+                                <ImageBrush ImageSource="pack://application:,,,/GB_NewCadPlus_IV;component/Resources/下.png" />
                             </Button.Background>
                         </Button>
                         <TextBlock

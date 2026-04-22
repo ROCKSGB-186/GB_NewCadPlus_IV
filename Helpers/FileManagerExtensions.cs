@@ -1,11 +1,11 @@
-using GB_NewCadPlus_LM.FunctionalMethod;
+using GB_NewCadPlus_IV.FunctionalMethod;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>
     /// FileManager 的扩展占位，用于覆盖已有存储项的内容。

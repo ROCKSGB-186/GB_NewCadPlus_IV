@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace GB_NewCadPlus_LM.FunctionalMethod
+namespace GB_NewCadPlus_IV.FunctionalMethod
 {
     /// <summary>
     /// MySQL 认证服务（增强：部门管理与用户-部门分配）

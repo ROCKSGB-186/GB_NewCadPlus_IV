@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {/// <summary>
  /// 辅助类：处理字体样式
  /// 说明：统一使用 DrawingScaleService 获取当前视图比例并据此计算最终字高，保证与项目其它地方比例一致。

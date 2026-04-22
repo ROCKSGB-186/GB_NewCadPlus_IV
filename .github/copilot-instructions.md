@@ -12,7 +12,7 @@
 - Follow naming conventions
 
 ## Project-Specific Rules
-- 用户的项目使用附加属性 SelectionManager 放在命名空间 GB_NewCadPlus_LM.FunctionalMethod，并在 XAML 中通过前缀 fm 引用。今后在 XAML/样式修订中应确认 xmlns 包含 assembly 指定并在 ControlTemplate 中为被触发的元素添加 x:Name.
+- 用户的项目使用附加属性 SelectionManager 放在命名空间 GB_NewCadPlus_IV.FunctionalMethod，并在 XAML 中通过前缀 fm 引用。今后在 XAML/样式修订中应确认 xmlns 包含 assembly 指定并在 ControlTemplate 中为被触发的元素添加 x:Name.
 - 保留工艺图元按钮的拖拽命令，仅在“双击”或“单击按住后拖动”时触发，不能在普通悬停时触发。
 - 在 AreaByPoints 交互中，按 Z 必须可撤销上一步，并保留选点过程的动态预览连线。
 - 首选将功能按文件拆分：线型相关放在 LineTypeStyleHelper.cs，通用系统变量读取放在 AutoCadHelper.cs，命令入口保留在 FunctionalMethod\Command.cs；今后按此约定拆分方法。

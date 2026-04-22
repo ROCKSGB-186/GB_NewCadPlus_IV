@@ -1,7 +1,7 @@
 
 using Autodesk.AutoCAD.DatabaseServices;
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.Helpers;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.Helpers;
 using Mysqlx.Crud;
 using OfficeOpenXml;
 using System.Data;
@@ -12,7 +12,7 @@ using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using AttributeCollection = Autodesk.AutoCAD.DatabaseServices.AttributeCollection;
 using DataTable = System.Data.DataTable;
 
-namespace GB_NewCadPlus_LM.UniFiedStandards
+namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
     /// 设备属性块信息类（用于存储CAD块中的设备信息）
@@ -93,7 +93,7 @@ namespace GB_NewCadPlus_LM.UniFiedStandards
                 }
 
                 // 基于所选图元推断比例分母（优先使用所选图元的布局/视口）
-                //double scaleDenom = GB_NewCadPlus_LM.Helpers.AutoCadHelper.GetScaleDenominatorForSelection(doc.Database, selIds, roundToCommon: false);
+                //double scaleDenom = GB_NewCadPlus_IV.Helpers.AutoCadHelper.GetScaleDenominatorForSelection(doc.Database, selIds, roundToCommon: false);
                 double scaleDenom = AutoCadHelper.GetScale();
                 // 按 Type 分组并为每组生成独立表
                 var groups = devices.GroupBy(e => string.IsNullOrWhiteSpace(e.Type) ? "设备" : e.Type);

@@ -1,4 +1,4 @@
-using GB_NewCadPlus_LM.Helpers;
+using GB_NewCadPlus_IV.Helpers;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using System.Collections.ObjectModel;
@@ -34,15 +34,15 @@ using TabControl = System.Windows.Controls.TabControl;
 using TextBox = System.Windows.Controls.TextBox;
 using UserControl = System.Windows.Controls.UserControl;
 using System.Text.RegularExpressions;
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.UniFiedStandards;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using Autodesk.AutoCAD.Internal.Calculator;
-using FileStorage = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileAttribute;
-using CadCategory = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.CadCategory;
-using CadSubcategory = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.CadSubcategory;
+using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
+using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
+using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
+using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
 
-namespace GB_NewCadPlus_LM
+namespace GB_NewCadPlus_IV
 {
     /// <summary>
     /// WpfMainWindow.xaml 的交互逻辑
@@ -184,7 +184,7 @@ namespace GB_NewCadPlus_LM
             try
             {
                 // 从登录窗口中读取服务器配置
-                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_LM", "login_config.json");
+                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 if (!File.Exists(configPath))// 如果文件不存在，则返回
                     return;
 
@@ -447,7 +447,7 @@ namespace GB_NewCadPlus_LM
         /// </summary>
         private string DrawingConfigPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "GB_NewCadPlus_LM",
+            "GB_NewCadPlus_IV",
             "drawing_config.json"
         );
 
@@ -927,7 +927,7 @@ namespace GB_NewCadPlus_LM
                 // 首先尝试从资源加载默认图片
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
-                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_LM;component/Resources/default_preview.png");
+                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/default_preview.png");
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -942,7 +942,7 @@ namespace GB_NewCadPlus_LM
                 {
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
-                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_LM;component/Resources/no_preview.png");
+                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/no_preview.png");
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.EndInit();
                     bitmap.Freeze();
@@ -8712,7 +8712,7 @@ namespace GB_NewCadPlus_LM
             {
                 _layerInfo = new List<LayerInfo>();
                 _workingDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                                               "GB_NewCadPlus_LM");
+                                               "GB_NewCadPlus_IV");
                 if (!Directory.Exists(_workingDirectory))
                     Directory.CreateDirectory(_workingDirectory);
             }
@@ -9368,7 +9368,7 @@ namespace GB_NewCadPlus_LM
 
         /// <summary>
         /// 将管道汇总表生成到一个临时 DWG 文件（ModelSpace，表放在原点）。
-        /// 文件名格式：{layerPart}_{yyyyMMdd_HHmmss}.dwg，保存在 %TEMP%\GB_NewCadPlus_LM 下。ParseLengthValueFromAttribute
+        /// 文件名格式：{layerPart}_{yyyyMMdd_HHmmss}.dwg，保存在 %TEMP%\GB_NewCadPlus_IV 下。ParseLengthValueFromAttribute
         /// 生成后会把路径写入字段 `_lastSavedPipeTablePath` 并提示用户下一步操作。
         /// 列宽会根据表头与单元格内容自动计算（近似字符宽度）。
         /// </summary>
@@ -9392,7 +9392,7 @@ namespace GB_NewCadPlus_LM
                 catch { }
 
                 string buttonFolderName = "生成管道表";
-                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_LM", buttonFolderName);
+                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", buttonFolderName);
                 if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
                 string firstLayer = summaries.FirstOrDefault()?.Name ?? "PipeTable";
@@ -11089,7 +11089,7 @@ namespace GB_NewCadPlus_LM
             try
             {
                 /// 从 login 配置优先读取服务器/端口（与之前主界面约定一致）
-                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_LM", "login_config.json");
+                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "3306";
                 if (System.IO.File.Exists(cfgPath))
@@ -11460,7 +11460,7 @@ namespace GB_NewCadPlus_LM
             try
             {
                 // 读取 login_config.json 或使用默认值初始化 _svc
-                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_LM", "login_config.json");
+                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "3306";
 

@@ -1,6 +1,6 @@
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.Helpers;
-using GB_NewCadPlus_LM.UniFiedStandards;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.Helpers;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using OfficeOpenXml.FormulaParsing.Excel.Functions.Text;
 using System;
 using System.Collections.Generic;
@@ -24,7 +24,7 @@ using MessageBox = System.Windows.MessageBox;
 using Path = System.IO.Path;
 using UserControl = System.Windows.Controls.UserControl;
 
-namespace GB_NewCadPlus_LM
+namespace GB_NewCadPlus_IV
 {
     /// <summary>
     /// LoginWindow.xaml 的交互逻辑
@@ -46,7 +46,7 @@ namespace GB_NewCadPlus_LM
         public LoginWindow()
         {
             InitializeComponent();
-            _configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_LM", "login_config.json");// 配置文件路径
+            _configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");// 配置文件路径
             LoadConfig();//加载配置
             Loaded += LoginWindow_Loaded;//注册窗口加载事件处理程序
         }

@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace GB_NewCadPlus_LM.FunctionalMethod
+namespace GB_NewCadPlus_IV.FunctionalMethod
 {
     /// <summary>
     /// 附加属性：表示控件是否被选中（用于样式触发高亮）

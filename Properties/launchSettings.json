@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "GB_NewCadPlus_LM": {
+    "GB_NewCadPlus_IV": {
       "commandName": "Executable",
       "executablePath": "D:\\Program Files\\Autodesk\\AutoCAD 2021\\acad.exe",
       "commandLineArgs": "/nologo",

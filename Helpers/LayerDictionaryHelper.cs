@@ -1,5 +1,5 @@
 using Dapper; // Dapper 微ORM，用于简洁执行 SQL
-using GB_NewCadPlus_LM.FunctionalMethod;
+using GB_NewCadPlus_IV.FunctionalMethod;
 using MySql.Data.MySqlClient; // MySQL 连接
 using System;
 using System.Collections.Generic;
@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application; // JavaScriptSerializer（用于 JSON 序列化/反序列化，兼容 .NET Framework 4.8）
 
-namespace GB_NewCadPlus_LM.Helpers
+namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>
     /// 单条映射项：表示一个原图层名与解释名的对应关系（可有任意多项）

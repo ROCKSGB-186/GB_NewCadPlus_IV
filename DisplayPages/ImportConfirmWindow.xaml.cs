@@ -1,4 +1,4 @@
-using GB_NewCadPlus_LM.Helpers;
+using GB_NewCadPlus_IV.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -25,11 +25,11 @@ using Path = System.IO.Path;
 using MessageBox = System.Windows.MessageBox;
 using DataTable = Autodesk.AutoCAD.DatabaseServices.DataTable;
 using Cursors = System.Windows.Input.Cursors;
-using GB_NewCadPlus_LM.FunctionalMethod;
-using FileStorage = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileAttribute;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
+using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
 
-namespace GB_NewCadPlus_LM.Views
+namespace GB_NewCadPlus_IV.Views
 {
 
     /// <summary>
@@ -146,7 +146,7 @@ namespace GB_NewCadPlus_LM.Views
 
                 try
                 {
-                    string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_LM_Previews");
+                    string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV_Previews");
                     Directory.CreateDirectory(tempDir);
                     string ext = Path.GetExtension(selectedFile);
                     string newPreviewPath = Path.Combine(tempDir, $"preview_uploaded_{Guid.NewGuid()}{ext}");

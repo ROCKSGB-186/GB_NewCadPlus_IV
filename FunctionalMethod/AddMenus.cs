@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using System.Reflection;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
-namespace GB_NewCadPlus_LM.FunctionalMethod
+namespace GB_NewCadPlus_IV.FunctionalMethod
 {
     public static class AddMenus
     {

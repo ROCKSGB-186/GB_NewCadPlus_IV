@@ -1,4 +1,4 @@
-using GB_NewCadPlus_LM.Helpers;
+using GB_NewCadPlus_IV.Helpers;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using System.Collections.ObjectModel;
@@ -34,15 +34,15 @@ using TabControl = System.Windows.Controls.TabControl;
 using TextBox = System.Windows.Controls.TextBox;
 using UserControl = System.Windows.Controls.UserControl;
 using System.Text.RegularExpressions;
-using GB_NewCadPlus_LM.FunctionalMethod;
-using GB_NewCadPlus_LM.UniFiedStandards;
+using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using Autodesk.AutoCAD.Internal.Calculator;
-using FileStorage = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.FileAttribute;
-using CadCategory = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.CadCategory;
-using CadSubcategory = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.CadSubcategory;
+using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
+using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
+using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
+using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
 
-namespace GB_NewCadPlus_LM
+namespace GB_NewCadPlus_IV
 {
     /// <summary>
     /// WpfMainWindow.xaml 鐨勪氦浜掗€昏緫
@@ -184,7 +184,7 @@ namespace GB_NewCadPlus_LM
             try
             {
                 // 浠庣櫥褰曠獥鍙ｄ腑璇诲彇鏈嶅姟鍣ㄩ厤缃?
-                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_LM", "login_config.json");
+                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 if (!File.Exists(configPath))// 濡傛灉鏂囦欢涓嶅瓨鍦紝鍒欒繑鍥?
                     return;
 
@@ -449,7 +449,7 @@ namespace GB_NewCadPlus_LM
         /// </summary>
         private string DrawingConfigPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "GB_NewCadPlus_LM",
+            "GB_NewCadPlus_IV",
             "drawing_config.json"
         );
 
@@ -931,7 +931,7 @@ namespace GB_NewCadPlus_LM
                 // 棣栧厛灏濊瘯浠庤祫婧愬姞杞介粯璁ゅ浘鐗?
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
-                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_LM;component/Resources/default_preview.png");
+                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/default_preview.png");
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -946,7 +946,7 @@ namespace GB_NewCadPlus_LM
                 {
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
-                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_LM;component/Resources/no_preview.png");
+                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/no_preview.png");
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.EndInit();
                     bitmap.Freeze();
@@ -1309,7 +1309,7 @@ namespace GB_NewCadPlus_LM
                 _lastSavedPipeTablePath = string.Empty;
 
                 // 绠￠亾琛ㄤ复鏃剁洰褰?
-                var pipeTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_LM", "鐢熸垚绠￠亾琛?);
+                var pipeTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", "鐢熸垚绠￠亾琛?);
                 if (Directory.Exists(pipeTempDir))
                 {
                     foreach (var f in Directory.GetFiles(pipeTempDir, "*.dwg", SearchOption.TopDirectoryOnly))
@@ -1319,7 +1319,7 @@ namespace GB_NewCadPlus_LM
                 }
 
                 // 璁＄畻琛ㄤ复鏃剁洰褰?
-                var calcTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_LM", "CalcTables");
+                var calcTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", "CalcTables");
                 if (Directory.Exists(calcTempDir))
                 {
                     foreach (var f in Directory.GetFiles(calcTempDir, "*.dwg", SearchOption.TopDirectoryOnly))
@@ -1620,8 +1620,8 @@ namespace GB_NewCadPlus_LM
                             VariableDictionary.wpfTextBoxScale = VariableDictionary.blockScale;
                         }
                         // 鏂板锛欴rag鏈熼棿绂佹鍐嶆瑙﹀彂锛岄伩鍏嶉噸鍏ュ穿婧?
-                        if (GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
-                            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+                        if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
                         {
                             LogManager.Instance.LogWarning("褰撳墠鍥惧厓姝ｅ湪璺熼殢鎻掑叆锛屽拷鐣ユ湰娆″弻鍑昏Е鍙戙€?);
                             return;
@@ -1636,8 +1636,8 @@ namespace GB_NewCadPlus_LM
                             using (doc.LockDocument())
                             {
                                 // 缁熶竴璧板彲閲嶅鍛戒护鍏ュ彛锛屼笉鍐嶇洿鎺ヨ皟鐢?CopyDwgAllFast
-                                GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwg);
-                                //GB_NewCadPlus_LM.FunctionalMethod.Command.CopyDwgAllFast(localDwg);
+                                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwg);
+                                //GB_NewCadPlus_IV.FunctionalMethod.Command.CopyDwgAllFast(localDwg);
                             }
                         }
                         else
@@ -1729,8 +1729,8 @@ namespace GB_NewCadPlus_LM
             try
             {
                 // 鏂板锛欴rag鏈熼棿绂佹鍐嶆瑙﹀彂锛岄伩鍏嶅懡浠ら噸鍏ュ鑷村穿婧?
-                if (GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
-                    GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
                 {
                     LogManager.Instance.LogWarning("褰撳墠鍥惧厓姝ｅ湪璺熼殢鎻掑叆锛屽拷鐣ユ湰娆℃嫋鎷借Е鍙戙€?);
                     return;
@@ -1757,7 +1757,7 @@ namespace GB_NewCadPlus_LM
                 VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
 
                 // 蹇€熼噸澶嶆墽琛屾墍鏈夊浘绾稿鍒舵搷浣?
-                GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
 
                 var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);
                 if (ok)
@@ -2191,8 +2191,8 @@ namespace GB_NewCadPlus_LM
             try
             {
                 // 鏂板锛欴rag鏈熼棿绂佹鍐嶆瑙﹀彂锛岄伩鍏嶅懡浠ら噸鍏ュ鑷村穿婧?
-                if (GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
-                    GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
                 {
                     MessageBox.Show("褰撳墠鍥惧厓姝ｅ湪璺熼殢鎻掑叆锛岃鍏堝乏閿惤鐐规垨鎸?Esc 缁撴潫褰撳墠鎻掑叆銆?, "鎻愮ず", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
@@ -2245,7 +2245,7 @@ namespace GB_NewCadPlus_LM
                 }
 
                 // 璋冪敤缁熶竴鎻掑叆鏂规硶
-                GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
             }
             catch (Exception ex)
             {
@@ -4249,10 +4249,10 @@ namespace GB_NewCadPlus_LM
                 tcs.TrySetResult((success, error ?? string.Empty));
             }
 
-            GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted += OnCompleted;
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted += OnCompleted;
             try
             {
-                GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(sourcePath);
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(sourcePath);
 
                 var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
                 if (completed != tcs.Task)
@@ -4262,7 +4262,7 @@ namespace GB_NewCadPlus_LM
             }
             finally
             {
-                GB_NewCadPlus_LM.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted -= OnCompleted;
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted -= OnCompleted;
             }
         }
 
@@ -8595,7 +8595,7 @@ namespace GB_NewCadPlus_LM
             {
                 _layerInfo = new List<LayerInfo>();
                 _workingDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                                               "GB_NewCadPlus_LM");
+                                               "GB_NewCadPlus_IV");
                 if (!Directory.Exists(_workingDirectory))
                     Directory.CreateDirectory(_workingDirectory);
             }
@@ -9254,7 +9254,7 @@ namespace GB_NewCadPlus_LM
 
         /// <summary>
         /// 灏嗙閬撴眹鎬昏〃鐢熸垚鍒颁竴涓复鏃?DWG 鏂囦欢锛圡odelSpace锛岃〃鏀惧湪鍘熺偣锛夈€?
-        /// 鏂囦欢鍚嶆牸寮忥細{layerPart}_{yyyyMMdd_HHmmss}.dwg锛屼繚瀛樺湪 %TEMP%\GB_NewCadPlus_LM 涓嬨€侾arseLengthValueFromAttribute
+        /// 鏂囦欢鍚嶆牸寮忥細{layerPart}_{yyyyMMdd_HHmmss}.dwg锛屼繚瀛樺湪 %TEMP%\GB_NewCadPlus_IV 涓嬨€侾arseLengthValueFromAttribute
         /// 鐢熸垚鍚庝細鎶婅矾寰勫啓鍏ュ瓧娈?`_lastSavedPipeTablePath` 骞舵彁绀虹敤鎴蜂笅涓€姝ユ搷浣溿€?
         /// 鍒楀浼氭牴鎹〃澶翠笌鍗曞厓鏍煎唴瀹硅嚜鍔ㄨ绠楋紙杩戜技瀛楃瀹藉害锛夈€?
         /// </summary>
@@ -9278,7 +9278,7 @@ namespace GB_NewCadPlus_LM
                 catch { }
 
                 string buttonFolderName = "鐢熸垚绠￠亾琛?;
-                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_LM", buttonFolderName);
+                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", buttonFolderName);
                 if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
                 string firstLayer = summaries.FirstOrDefault()?.Name ?? "PipeTable";
@@ -10978,7 +10978,7 @@ namespace GB_NewCadPlus_LM
             try
             {
                 /// 浠?login 閰嶇疆浼樺厛璇诲彇鏈嶅姟鍣?绔彛锛堜笌涔嬪墠涓荤晫闈㈢害瀹氫竴鑷达級
-                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_LM", "login_config.json");
+                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "3306";
                 if (System.IO.File.Exists(cfgPath))
@@ -11349,7 +11349,7 @@ namespace GB_NewCadPlus_LM
             try
             {
                 // 璇诲彇 login_config.json 鎴栦娇鐢ㄩ粯璁ゅ€煎垵濮嬪寲 _svc
-                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_LM", "login_config.json");
+                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "3306";
 
@@ -13010,7 +13010,7 @@ namespace GB_NewCadPlus_LM
 
             // 3) 寮€鍙戠洰褰?Resources 浣滀负绉嶅瓙锛堣皟璇曞厹搴曪級
             string devResourcePath = System.IO.Path.Combine(
-                @"C:\Users\ShiGu\source\repos\GB_NewCadPlus_LM\Resources",
+                @"C:\Users\ShiGu\source\repos\GB_NewCadPlus_IV\Resources",
                 fileName);
 
             if (TrySeedCalcCsvToExternal(devResourcePath, externalPath, out string resolvedFromDev))
@@ -13069,9 +13069,9 @@ namespace GB_NewCadPlus_LM
             {
                 try
                 {
-                    object? resourceObject = global::GB_NewCadPlus_LM.Resources.ResourceManager.GetObject(
+                    object? resourceObject = global::GB_NewCadPlus_IV.Resources.ResourceManager.GetObject(
                         resourceKey,
-                        global::GB_NewCadPlus_LM.Resources.Culture);
+                        global::GB_NewCadPlus_IV.Resources.Culture);
 
                     if (!(resourceObject is byte[] bytes) || bytes.Length == 0)
                         continue;
@@ -13935,7 +13935,7 @@ namespace GB_NewCadPlus_LM
                 throw new InvalidOperationException("褰撳墠娌℃湁鍙彃鍏ョ殑璁＄畻琛ㄦ暟鎹€?);
 
             // 2) 鍒涘缓涓存椂DWG璺緞
-            string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_LM", "CalcTables");
+            string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", "CalcTables");
             if (!Directory.Exists(tempDir))
                 Directory.CreateDirectory(tempDir);
 

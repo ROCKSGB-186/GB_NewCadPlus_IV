@@ -1,12 +1,12 @@
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using static GB_NewCadPlus_LM.WpfMainWindow;
+using static GB_NewCadPlus_IV.WpfMainWindow;
 using MessageBox = System.Windows.MessageBox;
-using CadCategory = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.CadCategory;
-using CadSubcategory = GB_NewCadPlus_LM.FunctionalMethod.DatabaseManager.CadSubcategory;
+using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
+using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
 
-namespace GB_NewCadPlus_LM.FunctionalMethod
+namespace GB_NewCadPlus_IV.FunctionalMethod
 {
     /// <summary>
     /// 分类管理器
