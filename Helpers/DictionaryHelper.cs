@@ -206,5 +206,92 @@ namespace GB_NewCadPlus_IV.Helpers
             { "SafetyValveModel", "安全阀型号" },
             { "FlexibleJointModel", "柔性接头型号" },
         };
+
+        /// <summary>
+        /// 管道属性编辑页：字段排序规则（按关键词匹配，数值越小越靠前）
+        /// 说明：后续如需调整排序，只需改这里，不用改窗体代码。
+        /// </summary>
+        public static readonly List<KeyValuePair<string, int>> PipeAttributeSortPriorityRules = new List<KeyValuePair<string, int>>
+        {
+            // 重点字段
+            new KeyValuePair<string, int>("dn", 1),
+            new KeyValuePair<string, int>("公称直径", 1),
+            new KeyValuePair<string, int>("nominaldiameter", 1),
+            new KeyValuePair<string, int>("压力等级", 2),
+            new KeyValuePair<string, int>("rating", 2),
+            new KeyValuePair<string, int>("class", 2),
+            new KeyValuePair<string, int>("操作压力", 3),
+            new KeyValuePair<string, int>("pressure", 3),
+            new KeyValuePair<string, int>("操作温度", 4),
+            new KeyValuePair<string, int>("temperature", 4),
+
+            // 管道识别字段
+            new KeyValuePair<string, int>("管段号", 5),
+            new KeyValuePair<string, int>("管段编号", 5),
+            new KeyValuePair<string, int>("管道标题", 6),
+            new KeyValuePair<string, int>("起点", 7),
+            new KeyValuePair<string, int>("始点", 7),
+            new KeyValuePair<string, int>("终点", 8),
+            new KeyValuePair<string, int>("止点", 8),
+
+            // 常见工程字段
+            new KeyValuePair<string, int>("介质", 20),
+            new KeyValuePair<string, int>("规格", 21),
+            new KeyValuePair<string, int>("材质", 22),
+            new KeyValuePair<string, int>("材料", 22),
+            new KeyValuePair<string, int>("流速", 23),
+            new KeyValuePair<string, int>("流量", 23)
+        };
+
+        /// <summary>
+        /// 管道属性编辑页：字段别名显示（键为标准化后的字段名）
+        /// 说明：后续如需改显示文案，只需改这里。
+        /// </summary>
+        public static readonly Dictionary<string, string> PipeAttributeDisplayAliasMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "dn", "DN（公称直径）" },
+            { "nominaldiameter", "NominalDiameter（公称直径）" },
+            { "rating", "Rating（压力等级）" },
+            { "class", "Class（压力等级）" }
+        };
+
+        /// <summary>
+        /// 获取管道属性字段排序优先级（数值越小越靠前）
+        /// </summary>
+        public static int GetPipeAttributeSortPriority(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return 999;
+            var normalized = key.Trim().ToLowerInvariant();
+
+            foreach (var rule in PipeAttributeSortPriorityRules)
+            {
+                if (string.IsNullOrWhiteSpace(rule.Key)) continue;
+                if (normalized.Contains(rule.Key.ToLowerInvariant()))
+                {
+                    return rule.Value;
+                }
+            }
+
+            return 100;
+        }
+
+        /// <summary>
+        /// 获取管道属性字段显示别名（未命中则返回原字段）
+        /// </summary>
+        public static string GetPipeAttributeDisplayAlias(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return key;
+            var normalized = key.Trim().ToLowerInvariant();
+
+            if (PipeAttributeDisplayAliasMap.TryGetValue(normalized, out var alias))
+            {
+                return alias;
+            }
+
+            if (normalized.Contains("nominaldiameter")) return key + "（公称直径）";
+            if (normalized.Contains("rating") || normalized.Contains("class")) return key + "（压力等级）";
+
+            return key;
+        }
     }
 }

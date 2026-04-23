@@ -57,13 +57,63 @@ namespace GB_NewCadPlus_IV.Helpers
                 // 使用 PipeDirectionHelper.AlignArrowToDirection 将模板对齐到段方向
                 var aligned = PipeDirectionHelper.AlignArrowToDirection(arrowTemplate, dirNorm);
 
-                // 把 aligned 平移到 mid 的位置。计算 aligned 质心
-                var centroid = typeof(PipeDirectionHelper)
-                    .GetMethod("ComputePolylineCentroid", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-                    ?.Invoke(null, new object[] { aligned }) as Point3d?;
+                // 把 aligned 平移到 mid 的位置。这里使用“短边中点”对齐到线段中点，确保短边中心落在管道线上
+                Point3d refPt;
+                try
+                {
+                    // 先找尖端：沿流向投影最大顶点
+                    double maxProj = double.NegativeInfinity;
+                    Point3d tip = aligned.GetPoint3dAt(0);
+                    for (int vi = 0; vi < aligned.NumberOfVertices; vi++)
+                    {
+                        var vp = aligned.GetPoint3dAt(vi);
+                        double proj = vp.X * dirNorm.X + vp.Y * dirNorm.Y + vp.Z * dirNorm.Z;
+                        if (proj > maxProj)
+                        {
+                            maxProj = proj;
+                            tip = vp;
+                        }
+                    }
 
-                // 如果获取不到非公开方法，改用简单的第一个顶点作为参考
-                Point3d refPt = centroid ?? aligned.GetPoint3dAt(0);
+                    // 再找短边：排除尖端后，两点距离最短的一对作为短边
+                    var others = new List<Point3d>();
+                    for (int vi = 0; vi < aligned.NumberOfVertices; vi++)
+                    {
+                        var vp = aligned.GetPoint3dAt(vi);
+                        if (!vp.IsEqualTo(tip)) others.Add(vp);
+                    }
+
+                    if (others.Count >= 2)
+                    {
+                        double minDist = double.PositiveInfinity;
+                        Point3d a = others[0], b = others[1];
+                        for (int i2 = 0; i2 < others.Count; i2++)
+                        {
+                            for (int j2 = i2 + 1; j2 < others.Count; j2++)
+                            {
+                                double d = others[i2].DistanceTo(others[j2]);
+                                if (d < minDist)
+                                {
+                                    minDist = d;
+                                    a = others[i2];
+                                    b = others[j2];
+                                }
+                            }
+                        }
+                        // 短边中点作为对齐基准
+                        refPt = new Point3d((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0, (a.Z + b.Z) / 2.0);
+                    }
+                    else
+                    {
+                        // 兜底：若无法识别短边，回退尖端
+                        refPt = tip;
+                    }
+                }
+                catch
+                {
+                    // 兜底：若计算失败，使用第一个顶点
+                    refPt = aligned.GetPoint3dAt(0);
+                }
 
                 var translation = Matrix3d.Displacement(mid - refPt);
                 aligned.TransformBy(translation);

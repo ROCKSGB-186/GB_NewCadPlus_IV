@@ -2450,48 +2450,15 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         (
             category_id, file_storage_id, file_name, file_attribute_id, description, attribute_group, remarks,
             customize1, customize2, customize3, length, width, height, angle, base_point_x, base_point_y, base_point_z,
-            model, specifications, material, medium_name, standard_number, pressure, temperature, pressure_rating,
-            operating_pressure, operating_temperature, diameter, outer_diameter, inner_diameter, nominal_diameter,
-            thickness, weight, density, volume, flow, velocity, lift, power, voltage, current, frequency, conductivity,
-            moisture, humidity, vacuum, radiation,
-            pipe_spec, pipe_nominal_diameter, pipe_wall_thickness, pipe_pressure_class, connection_type, pipe_slope, anticorrosion_treatment,
-            valve_model, valve_body_material, valve_disc_material, valve_ball_material, seal_material, drive_type, open_mode, applicable_medium,
-            flange_model, flange_type, flange_face_type, flange_standard, bolt_spec,
-            reducer_spec, reducer_large_dn, reducer_small_dn, reducer_wall_thickness_large, reducer_wall_thickness_small,
-            reducer_connection_type, reducer_conicity, reducer_eccentric_direction, reducer_applicable_medium, reducer_anticorrosion,
-            pump_model, pump_flow, pump_head, pump_body_material, motor_power, inlet_outlet_diameter, rated_speed, pump_applicable_medium,
-            working_pressure, protection_level,
-            expansion_joint_model, bellows_material, flange_or_nozzle_material, compensation_amount, expansion_joint_connection_type,
-            expansion_joint_medium, expansion_joint_working_temp,
-            flue_gas_capacity, desulfurization_efficiency, droplet_size, spray_layer_count,
-            chimney_spec, chimney_diameter, chimney_height, chimney_material, chimney_thickness, outlet_wind_speed, insulation_thickness,
-            support_type, flue_gas_temperature,
-            pressure_gauge_model, thermometer_model, filter_model, check_valve_model, sprinkler_model, flow_meter_model, safety_valve_model, flexible_joint_model,
-            created_at, updated_at
-        )
+            model, specifications, material, medium_name, standard_number, pressure, temperature, diameter, outer_diameter,
+            inner_diameter, thickness, weight, volume, power, created_at, updated_at)
         VALUES
         (
             @CategoryId, @FileStorageId, @FileName, @FileAttributeId, @Description, @AttributeGroup, @Remarks,
             @Customize1, @Customize2, @Customize3, @Length, @Width, @Height, @Angle, @BasePointX, @BasePointY, @BasePointZ,
-            @Model, @Specifications, @Material, @MediumName, @StandardNumber, @Pressure, @Temperature, @PressureRating,
-            @OperatingPressure, @OperatingTemperature, @Diameter, @OuterDiameter, @InnerDiameter, @NominalDiameter,
-            @Thickness, @Weight, @Density, @Volume, @Flow, @Velocity, @Lift, @Power, @Voltage, @Current, @Frequency, @Conductivity,
-            @Moisture, @Humidity, @Vacuum, @Radiation,
-            @PipeSpec, @PipeNominalDiameter, @PipeWallThickness, @PipePressureClass, @ConnectionType, @PipeSlope, @AnticorrosionTreatment,
-            @ValveModel, @ValveBodyMaterial, @ValveDiscMaterial, @ValveBallMaterial, @SealMaterial, @DriveType, @OpenMode, @ApplicableMedium,
-            @FlangeModel, @FlangeType, @FlangeFaceType, @FlangeStandard, @BoltSpec,
-            @ReducerSpec, @ReducerLargeDn, @ReducerSmallDn, @ReducerWallThicknessLarge, @ReducerWallThicknessSmall,
-            @ReducerConnectionType, @ReducerConicity, @ReducerEccentricDirection, @ReducerApplicableMedium, @ReducerAnticorrosion,
-            @PumpModel, @PumpFlow, @PumpHead, @PumpBodyMaterial, @MotorPower, @InletOutletDiameter, @RatedSpeed, @PumpApplicableMedium,
-            @WorkingPressure, @ProtectionLevel,
-            @ExpansionJointModel, @BellowsMaterial, @FlangeOrNozzleMaterial, @CompensationAmount, @ExpansionJointConnectionType,
-            @ExpansionJointMedium, @ExpansionJointWorkingTemp,
-            @FlueGasCapacity, @DesulfurizationEfficiency, @DropletSize, @SprayLayerCount,
-            @ChimneySpec, @ChimneyDiameter, @ChimneyHeight, @ChimneyMaterial, @ChimneyThickness, @OutletWindSpeed, @InsulationThickness,
-            @SupportType, @FlueGasTemperature,
-            @PressureGaugeModel, @ThermometerModel, @FilterModel, @CheckValveModel, @SprinklerModel, @FlowMeterModel, @SafetyValveModel, @FlexibleJointModel,
-            @CreatedAt, @UpdatedAt
-        );";
+            @Model, @Specifications, @Material, @MediumName, @StandardNumber, @Pressure, @Temperature, @Diameter, @OuterDiameter,
+            @InnerDiameter, @Thickness, @Weight, @Volume, @Power, @CreatedAt, @UpdatedAt);
+                SELECT LAST_INSERT_ID();";
 
                 var attrParams = BuildFileAttributeParameters(attribute, includeId: false);
                 await connection.ExecuteAsync(insertAttributeSql, attrParams, tx).ConfigureAwait(false);
@@ -2815,6 +2782,447 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             public DateTime UpdatedAt { get; set; }
         }
 
+        /// <summary>
+        /// 文件访问日志（兼容 FileManager）
+        /// </summary>
+        public class FileAccessLog
+        {
+            public int Id { get; set; }
+            public int FileId { get; set; }
+            public string? UserName { get; set; }
+            public string? ActionType { get; set; }
+            public string? IpAddress { get; set; }
+            public string? UserAgent { get; set; }
+            public DateTime AccessTime { get; set; }
+        }
 
+        /// <summary>
+        /// 文件标签（兼容 FileManager）
+        /// </summary>
+        public class FileTag
+        {
+            public int Id { get; set; }
+            public int FileId { get; set; }
+            public string? TagName { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+
+        /// <summary>
+        /// 新增文件访问日志（兼容旧调用）
+        /// </summary>
+        public async Task<int> AddFileAccessLogAsync(FileAccessLog accessLog)
+        {
+            if (accessLog == null) return 0;
+
+            const string sql = @"
+                INSERT INTO file_access_logs (file_id, user_name, action_type, ip_address, user_agent, access_time)
+                VALUES (@FileId, @UserName, @ActionType, @IpAddress, @UserAgent, @AccessTime);";
+
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.ExecuteAsync(sql, new
+                {
+                    accessLog.FileId,
+                    accessLog.UserName,
+                    accessLog.ActionType,
+                    accessLog.IpAddress,
+                    accessLog.UserAgent,
+                    AccessTime = accessLog.AccessTime == default ? DateTime.Now : accessLog.AccessTime
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"AddFileAccessLogAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 新增文件标签（兼容旧调用）
+        /// </summary>
+        public async Task<bool> AddFileTagAsync(FileTag tag)
+        {
+            if (tag == null || tag.FileId <= 0 || string.IsNullOrWhiteSpace(tag.TagName))
+                return false;
+
+            const string sql = @"
+                INSERT INTO file_tags (file_id, tag_name, created_at)
+                VALUES (@FileId, @TagName, @CreatedAt);";
+
+            try
+            {
+                using var connection = GetConnection();
+                var affected = await connection.ExecuteAsync(sql, new
+                {
+                    tag.FileId,
+                    tag.TagName,
+                    CreatedAt = tag.CreatedAt == default ? DateTime.Now : tag.CreatedAt
+                }).ConfigureAwait(false);
+                return affected > 0;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"AddFileTagAsync 出错: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 兼容旧调用：软删除文件记录
+        /// </summary>
+        public async Task<int> DeleteFileAsync(int fileId, string deletedBy)
+        {
+            const string sql = @"
+                UPDATE cad_file_storage
+                SET is_active = 0,
+                    updated_by = @UpdatedBy,
+                    updated_at = NOW()
+                WHERE id = @Id;";
+
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.ExecuteAsync(sql, new
+                {
+                    Id = fileId,
+                    UpdatedBy = deletedBy ?? string.Empty
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DeleteFileAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 兼容旧调用：删除文件属性
+        /// </summary>
+        public async Task<int> DeleteFileAttributeAsync(long id)
+        {
+            const string sql = "DELETE FROM cad_file_attributes WHERE id = @Id";
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.ExecuteAsync(sql, new { Id = id }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DeleteFileAttributeAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 兼容旧调用：删除文件存储
+        /// </summary>
+        public async Task<int> DeleteFileStorageAsync(int id)
+        {
+            const string sql = "DELETE FROM cad_file_storage WHERE id = @Id";
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.ExecuteAsync(sql, new { Id = id }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DeleteFileStorageAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 兼容旧调用：新增文件存储并返回主键ID
+        /// </summary>
+        public async Task<int> AddFileStorageAsync(FileStorage storage)
+        {
+            if (storage == null) return 0;
+
+            const string sql = @"
+                INSERT INTO cad_file_storage
+                (category_id, category_type, file_attribute_id, file_name, file_stored_name, display_name, file_type, is_tianzheng, file_hash,
+                 block_name, layer_name, color_index, scale, file_path, preview_image_name, preview_image_path, file_size, is_preview,
+                 version, description, is_active, created_by, title, keywords, is_public, updated_by, last_accessed_at, created_at, updated_at)
+                VALUES
+                (@CategoryId, @CategoryType, @FileAttributeId, @FileName, @FileStoredName, @DisplayName, @FileType, @IsTianZheng, @FileHash,
+                 @BlockName, @LayerName, @ColorIndex, @Scale, @FilePath, @PreviewImageName, @PreviewImagePath, @FileSize, @IsPreview,
+                 @Version, @Description, @IsActive, @CreatedBy, @Title, @Keywords, @IsPublic, @UpdatedBy, @LastAccessedAt, @CreatedAt, @UpdatedAt);
+                SELECT LAST_INSERT_ID();";
+
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.QuerySingleAsync<int>(sql, new
+                {
+                    storage.CategoryId,
+                    CategoryType = storage.CategoryType ?? "sub",
+                    storage.FileAttributeId,
+                    FileName = storage.FileName ?? string.Empty,
+                    FileStoredName = storage.FileStoredName ?? string.Empty,
+                    DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
+                    FileType = storage.FileType ?? string.Empty,
+                    storage.IsTianZheng,
+                    FileHash = storage.FileHash ?? string.Empty,
+                    BlockName = storage.BlockName ?? string.Empty,
+                    LayerName = storage.LayerName ?? string.Empty,
+                    ColorIndex = storage.ColorIndex ?? 0,
+                    Scale = storage.Scale ?? 1.0,
+                    FilePath = storage.FilePath ?? string.Empty,
+                    PreviewImageName = storage.PreviewImageName ?? string.Empty,
+                    PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
+                    FileSize = storage.FileSize ?? 0L,
+                    storage.IsPreview,
+                    storage.Version,
+                    Description = storage.Description ?? string.Empty,
+                    storage.IsActive,
+                    CreatedBy = storage.CreatedBy ?? Environment.UserName,
+                    Title = storage.Title ?? string.Empty,
+                    Keywords = storage.Keywords ?? string.Empty,
+                    storage.IsPublic,
+                    UpdatedBy = storage.UpdatedBy ?? string.Empty,
+                    storage.LastAccessedAt,
+                    CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
+                    UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"AddFileStorageAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 兼容旧调用：新增文件属性并返回主键ID
+        /// </summary>
+        public async Task<int> AddFileAttributeAsync(FileAttribute attribute)
+        {
+            if (attribute == null) return 0;
+
+            if (string.IsNullOrWhiteSpace(attribute.FileAttributeId))
+            {
+                attribute.FileAttributeId = Guid.NewGuid().ToString("N");
+            }
+
+            const string sql = @"
+                INSERT INTO cad_file_attributes
+                (category_id, file_storage_id, file_name, file_attribute_id, description, attribute_group, remarks,
+                 customize1, customize2, customize3, length, width, height, angle, base_point_x, base_point_y, base_point_z,
+                 model, specifications, material, medium_name, standard_number, pressure, temperature, diameter, outer_diameter,
+                 inner_diameter, thickness, weight, volume, power, created_at, updated_at)
+                VALUES
+                (@CategoryId, @FileStorageId, @FileName, @FileAttributeId, @Description, @AttributeGroup, @Remarks,
+                 @Customize1, @Customize2, @Customize3, @Length, @Width, @Height, @Angle, @BasePointX, @BasePointY, @BasePointZ,
+                 @Model, @Specifications, @Material, @MediumName, @StandardNumber, @Pressure, @Temperature, @Diameter, @OuterDiameter,
+                 @InnerDiameter, @Thickness, @Weight, @Volume, @Power, @CreatedAt, @UpdatedAt);
+                SELECT LAST_INSERT_ID();";
+
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.QuerySingleAsync<int>(sql, new
+                {
+                    attribute.CategoryId,
+                    FileStorageId = attribute.FileStorageId <= 0 ? 0 : attribute.FileStorageId,
+                    FileName = attribute.FileName ?? string.Empty,
+                    attribute.FileAttributeId,
+                    Description = attribute.Description ?? string.Empty,
+                    AttributeGroup = attribute.AttributeGroup ?? string.Empty,
+                    Remarks = attribute.Remarks ?? string.Empty,
+                    Customize1 = attribute.Customize1 ?? string.Empty,
+                    Customize2 = attribute.Customize2 ?? string.Empty,
+                    Customize3 = attribute.Customize3 ?? string.Empty,
+                    attribute.Length,
+                    attribute.Width,
+                    attribute.Height,
+                    attribute.Angle,
+                    attribute.BasePointX,
+                    attribute.BasePointY,
+                    attribute.BasePointZ,
+                    Model = attribute.Model ?? string.Empty,
+                    Specifications = attribute.Specifications ?? string.Empty,
+                    Material = attribute.Material ?? string.Empty,
+                    MediumName = attribute.MediumName ?? string.Empty,
+                    StandardNumber = attribute.StandardNumber ?? string.Empty,
+                    attribute.Pressure,
+                    attribute.Temperature,
+                    attribute.Diameter,
+                    attribute.OuterDiameter,
+                    attribute.InnerDiameter,
+                    attribute.Thickness,
+                    attribute.Weight,
+                    attribute.Volume,
+                    attribute.Power,
+                    CreatedAt = attribute.CreatedAt == default ? DateTime.Now : attribute.CreatedAt,
+                    UpdatedAt = attribute.UpdatedAt == default ? DateTime.Now : attribute.UpdatedAt
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"AddFileAttributeAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 兼容旧调用：更新文件存储记录
+        /// </summary>
+        public async Task<int> UpdateFileStorageAsync(FileStorage storage)
+        {
+            if (storage == null || storage.Id <= 0) return 0;
+
+            const string sql = @"
+                UPDATE cad_file_storage
+                SET file_attribute_id = @FileAttributeId,
+                    file_name = @FileName,
+                    file_stored_name = @FileStoredName,
+                    display_name = @DisplayName,
+                    file_type = @FileType,
+                    file_hash = @FileHash,
+                    block_name = @BlockName,
+                    layer_name = @LayerName,
+                    color_index = @ColorIndex,
+                    scale = @Scale,
+                    file_path = @FilePath,
+                    preview_image_name = @PreviewImageName,
+                    preview_image_path = @PreviewImagePath,
+                    file_size = @FileSize,
+                    is_preview = @IsPreview,
+                    version = @Version,
+                    description = @Description,
+                    is_active = @IsActive,
+                    title = @Title,
+                    keywords = @Keywords,
+                    is_public = @IsPublic,
+                    updated_by = @UpdatedBy,
+                    last_accessed_at = @LastAccessedAt,
+                    updated_at = NOW()
+                WHERE id = @Id;";
+
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.ExecuteAsync(sql, new
+                {
+                    storage.Id,
+                    storage.FileAttributeId,
+                    storage.FileName,
+                    storage.FileStoredName,
+                    storage.DisplayName,
+                    storage.FileType,
+                    storage.FileHash,
+                    storage.BlockName,
+                    storage.LayerName,
+                    storage.ColorIndex,
+                    storage.Scale,
+                    storage.FilePath,
+                    storage.PreviewImageName,
+                    storage.PreviewImagePath,
+                    storage.FileSize,
+                    storage.IsPreview,
+                    storage.Version,
+                    storage.Description,
+                    storage.IsActive,
+                    storage.Title,
+                    storage.Keywords,
+                    storage.IsPublic,
+                    storage.UpdatedBy,
+                    storage.LastAccessedAt
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"UpdateFileStorageAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 兼容旧调用：更新文件属性记录
+        /// </summary>
+        public async Task<int> UpdateFileAttributeAsync(FileAttribute attribute)
+        {
+            if (attribute == null || attribute.Id <= 0) return 0;
+
+            const string sql = @"
+                UPDATE cad_file_attributes
+                SET category_id = @CategoryId,
+                    file_storage_id = @FileStorageId,
+                    file_name = @FileName,
+                    description = @Description,
+                    attribute_group = @AttributeGroup,
+                    remarks = @Remarks,
+                    customize1 = @Customize1,
+                    customize2 = @Customize2,
+                    customize3 = @Customize3,
+                    length = @Length,
+                    width = @Width,
+                    height = @Height,
+                    angle = @Angle,
+                    base_point_x = @BasePointX,
+                    base_point_y = @BasePointY,
+                    base_point_z = @BasePointZ,
+                    model = @Model,
+                    specifications = @Specifications,
+                    material = @Material,
+                    medium_name = @MediumName,
+                    standard_number = @StandardNumber,
+                    pressure = @Pressure,
+                    temperature = @Temperature,
+                    diameter = @Diameter,
+                    outer_diameter = @OuterDiameter,
+                    inner_diameter = @InnerDiameter,
+                    thickness = @Thickness,
+                    weight = @Weight,
+                    volume = @Volume,
+                    power = @Power,
+                    updated_at = NOW()
+                WHERE id = @Id;";
+
+            try
+            {
+                using var connection = GetConnection();
+                return await connection.ExecuteAsync(sql, new
+                {
+                    attribute.Id,
+                    attribute.CategoryId,
+                    attribute.FileStorageId,
+                    attribute.FileName,
+                    attribute.Description,
+                    attribute.AttributeGroup,
+                    attribute.Remarks,
+                    attribute.Customize1,
+                    attribute.Customize2,
+                    attribute.Customize3,
+                    attribute.Length,
+                    attribute.Width,
+                    attribute.Height,
+                    attribute.Angle,
+                    attribute.BasePointX,
+                    attribute.BasePointY,
+                    attribute.BasePointZ,
+                    attribute.Model,
+                    attribute.Specifications,
+                    attribute.Material,
+                    attribute.MediumName,
+                    attribute.StandardNumber,
+                    attribute.Pressure,
+                    attribute.Temperature,
+                    attribute.Diameter,
+                    attribute.OuterDiameter,
+                    attribute.InnerDiameter,
+                    attribute.Thickness,
+                    attribute.Weight,
+                    attribute.Volume,
+                    attribute.Power
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"UpdateFileAttributeAsync 出错: {ex.Message}");
+                return 0;
+            }
+        }
     }
 }

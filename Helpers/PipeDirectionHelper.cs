@@ -66,26 +66,91 @@ namespace GB_NewCadPlus_IV.Helpers
                 var p2d = arrowTemplate.GetPoint2dAt(k);
                 result.AddVertexAt(k, p2d, arrowTemplate.GetBulgeAt(k), arrowTemplate.GetStartWidthAt(k), arrowTemplate.GetEndWidthAt(k));
             }
+            // 保留模板的闭合状态，避免三角箭头丢失一条边只显示两条线
+            result.Closed = arrowTemplate.Closed;
 
             // 计算模板质心（2D 平面近似）
             Point3d centroid = ComputePolylineCentroid(arrowTemplate);
 
-            // 计算模板主方向：在模板顶点中查找 minX 和 maxX 点
-            Point3d? minXPt = null;
-            Point3d? maxXPt = null;
-            double minX = double.PositiveInfinity, maxX = double.NegativeInfinity;
-            for (int k = 0; k < vn; k++)
+            // 计算模板主方向：优先使用“短边中点 -> 尖端”方向（比 minX/maxX 更稳定）
+            Vector3d templateDir = Vector3d.XAxis;
+            bool gotAxisFromTriangle = false;
+            if (vn >= 3)
             {
-                var p = arrowTemplate.GetPoint3dAt(k);
-                if (p.X < minX) { minX = p.X; minXPt = p; }
-                if (p.X > maxX) { maxX = p.X; maxXPt = p; }
+                try
+                {
+                    // 1) 先找尖端：沿 X 方向投影最大的点（对常见箭头模板有效）
+                    int tipIdx = 0;
+                    double maxXProj = double.NegativeInfinity;
+                    for (int k = 0; k < vn; k++)
+                    {
+                        var p = arrowTemplate.GetPoint3dAt(k);
+                        if (p.X > maxXProj)
+                        {
+                            maxXProj = p.X;
+                            tipIdx = k;
+                        }
+                    }
+
+                    // 2) 再找短边中点：排除尖端后，剩余点中距离最短的一对
+                    var others = new List<Point3d>();
+                    for (int k = 0; k < vn; k++)
+                    {
+                        if (k == tipIdx) continue;
+                        others.Add(arrowTemplate.GetPoint3dAt(k));
+                    }
+
+                    if (others.Count >= 2)
+                    {
+                        double minDist = double.PositiveInfinity;
+                        Point3d a = others[0], b = others[1];
+                        for (int i = 0; i < others.Count; i++)
+                        {
+                            for (int j = i + 1; j < others.Count; j++)
+                            {
+                                var d = others[i].DistanceTo(others[j]);
+                                if (d < minDist)
+                                {
+                                    minDist = d;
+                                    a = others[i];
+                                    b = others[j];
+                                }
+                            }
+                        }
+
+                        var baseMid = new Point3d((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0, (a.Z + b.Z) / 2.0);
+                        var tip = arrowTemplate.GetPoint3dAt(tipIdx);
+                        var axis = tip - baseMid;
+                        if (!axis.IsZeroLength())
+                        {
+                            templateDir = axis.GetNormal();
+                            gotAxisFromTriangle = true;
+                        }
+                    }
+                }
+                catch
+                {
+                    gotAxisFromTriangle = false;
+                }
             }
 
-            // 如果无法得到主方向则退回使用 (1,0,0)
-            Vector3d templateDir = Vector3d.XAxis;
-            if (minXPt.HasValue && maxXPt.HasValue && !minXPt.Value.IsEqualTo(maxXPt.Value))
+            // 3) 回退：无法从三角解析时，仍用 minX->maxX 作为主方向
+            if (!gotAxisFromTriangle)
             {
-                templateDir = (maxXPt.Value - minXPt.Value).GetNormal();
+                Point3d? minXPt = null;
+                Point3d? maxXPt = null;
+                double minX = double.PositiveInfinity, maxX = double.NegativeInfinity;
+                for (int k = 0; k < vn; k++)
+                {
+                    var p = arrowTemplate.GetPoint3dAt(k);
+                    if (p.X < minX) { minX = p.X; minXPt = p; }
+                    if (p.X > maxX) { maxX = p.X; maxXPt = p; }
+                }
+
+                if (minXPt.HasValue && maxXPt.HasValue && !minXPt.Value.IsEqualTo(maxXPt.Value))
+                {
+                    templateDir = (maxXPt.Value - minXPt.Value).GetNormal();
+                }
             }
 
             // 规范化路径方向（若非法则不旋转）

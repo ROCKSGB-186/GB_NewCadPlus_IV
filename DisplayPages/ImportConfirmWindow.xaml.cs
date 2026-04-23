@@ -318,14 +318,138 @@ namespace GB_NewCadPlus_IV.Views
 
             foreach (var item in items)
             {
-                // 使用主窗口的 SetFileAttributeProperty 方法来解析和设置属性
+                // 先走原有逻辑（兼容已有字段）
                 _mainWindow.SetFileAttributeProperty(_dto.FileAttribute, item.PropertyName1, item.PropertyValue1);
                 _mainWindow.SetFileAttributeProperty(_dto.FileAttribute, item.PropertyName2, item.PropertyValue2);
-                // 采集文件信息（完善：支持FileStorage字段）
                 _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName1, item.PropertyValue1);
                 _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName2, item.PropertyValue2);
+
+                // 再走通用显示名回写（覆盖原有遗漏字段：如 公称直径DN、压力等级、操作压力等）
+                ApplyDisplayNameToDto(_dto.FileAttribute, _dto.FileStorage, item.PropertyName1, item.PropertyValue1);
+                ApplyDisplayNameToDto(_dto.FileAttribute, _dto.FileStorage, item.PropertyName2, item.PropertyValue2);
             }
         }
 
+        /// <summary>
+        /// 按显示名（中文列名）回写到 DTO，避免 SetFileAttributeProperty 未覆盖新字段导致漏存
+        /// </summary>
+        private static void ApplyDisplayNameToDto(FileAttribute fileAttribute, FileStorage fileStorage, string displayName, string rawValue)
+        {
+            if (string.IsNullOrWhiteSpace(displayName)) return;
+
+            // 空值不强制覆盖，保持用户未填写字段原样
+            if (rawValue == null) return;
+
+            var normalizedName = displayName.Trim();
+
+            // 先用字典反查属性名
+            string targetPropertyName = null;
+            foreach (var kv in DictionaryHelper._propertyDisplayNameMap)
+            {
+                if (string.Equals(kv.Value, normalizedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetPropertyName = kv.Key;
+                    break;
+                }
+            }
+
+            // 常见别名兜底（针对 CAD 属性块标签命名不统一）
+            if (string.IsNullOrWhiteSpace(targetPropertyName))
+            {
+                var key = normalizedName.Replace(" ", string.Empty).Replace("_", string.Empty).ToLowerInvariant();
+                switch (key)
+                {
+                    case "公称直径":
+                    case "公称直径dn":
+                    case "dn":
+                        targetPropertyName = "NominalDiameter";
+                        break;
+                    case "压力等级":
+                        targetPropertyName = "PressureRating";
+                        break;
+                    case "操作压力":
+                        targetPropertyName = "OperatingPressure";
+                        break;
+                    case "操作温度":
+                        targetPropertyName = "OperatingTemperature";
+                        break;
+                    case "管道公称直径":
+                        targetPropertyName = "PipeNominalDiameter";
+                        break;
+                    case "管道压力等级":
+                        targetPropertyName = "PipePressureClass";
+                        break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(targetPropertyName)) return;
+
+            // 优先写入 FileAttribute
+            var faProp = typeof(FileAttribute).GetProperty(targetPropertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (faProp != null && faProp.CanWrite)
+            {
+                TrySetObjectProperty(fileAttribute, faProp, rawValue);
+                return;
+            }
+
+            // 再尝试 FileStorage
+            var fsProp = typeof(FileStorage).GetProperty(targetPropertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (fsProp != null && fsProp.CanWrite)
+            {
+                TrySetObjectProperty(fileStorage, fsProp, rawValue);
+            }
+        }
+
+        /// <summary>
+        /// 字符串到目标属性类型的安全转换写入
+        /// </summary>
+        private static void TrySetObjectProperty(object target, PropertyInfo property, string raw)
+        {
+            try
+            {
+                var targetType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+
+                if (targetType == typeof(string))
+                {
+                    property.SetValue(target, raw?.Trim());
+                    return;
+                }
+
+                var text = (raw ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(text)) return;
+
+                if (targetType == typeof(int))
+                {
+                    if (int.TryParse(text, out var i)) property.SetValue(target, i);
+                    return;
+                }
+                if (targetType == typeof(long))
+                {
+                    if (long.TryParse(text, out var l)) property.SetValue(target, l);
+                    return;
+                }
+                if (targetType == typeof(decimal))
+                {
+                    if (decimal.TryParse(text, out var d)) property.SetValue(target, d);
+                    return;
+                }
+                if (targetType == typeof(double))
+                {
+                    if (double.TryParse(text, out var d2)) property.SetValue(target, d2);
+                    return;
+                }
+                if (targetType == typeof(bool))
+                {
+                    var lower = text.ToLowerInvariant();
+                    if (lower == "是" || lower == "true" || lower == "1") property.SetValue(target, true);
+                    else if (lower == "否" || lower == "false" || lower == "0") property.SetValue(target, false);
+                    return;
+                }
+            }
+            catch
+            {
+                // 保持静默，避免单字段异常影响整体导入
+            }
+        }
     }
 }

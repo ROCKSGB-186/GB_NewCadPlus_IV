@@ -1,4 +1,4 @@
-using GB_NewCadPlus_IV.Helpers;
+﻿using GB_NewCadPlus_IV.Helpers;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using System.Collections.ObjectModel;
@@ -6642,31 +6642,31 @@ namespace GB_NewCadPlus_IV
                         attribute.StandardNumber = propertyValue;
                         break;
                     case "功率":
-                        attribute.Power = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal power)) attribute.Power = power;
                         break;
                     case "容积":
-                        attribute.Volume = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal volume)) attribute.Volume = volume;
                         break;
                     case "压力":
-                        attribute.Pressure = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal pressure)) attribute.Pressure = pressure;
                         break;
                     case "温度":
-                        attribute.Temperature = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal temperature)) attribute.Temperature = temperature;
                         break;
                     case "直径":
-                        attribute.Diameter = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal diameter)) attribute.Diameter = diameter;
                         break;
                     case "外径":
-                        attribute.OuterDiameter = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal outerDiameter)) attribute.OuterDiameter = outerDiameter;
                         break;
                     case "内径":
-                        attribute.InnerDiameter = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal innerDiameter)) attribute.InnerDiameter = innerDiameter;
                         break;
                     case "厚度":
-                        attribute.Thickness = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal thickness)) attribute.Thickness = thickness;
                         break;
                     case "重量":
-                        attribute.Weight = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal weight)) attribute.Weight = weight;
                         break;
                     case "型号":
                         attribute.Model = propertyValue;
