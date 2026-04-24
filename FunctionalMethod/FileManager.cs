@@ -12,6 +12,8 @@ using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorag
 using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
 using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
 using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
+using FileTag = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileTag; // 文件标签别名
+using FileAccessLog = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAccessLog; // 文件访问日志别名
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
 {
@@ -798,7 +800,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
                     return;
                 }
-                _currentFileStorage.FileAttributeId = _currentFileAttribute.Id;
+                // FileAttribute.Id 是 long，FileStorage.FileAttributeId 在模型中为 string（业务ID），
+                // 这里转换为字符串以避免类型不匹配
+                _currentFileStorage.FileAttributeId = _currentFileAttribute.Id.ToString();
 
                 //新加文件到数据库中
                 var fileResult = await _databaseManager.AddFileStorageAsync(_currentFileStorage);
@@ -822,7 +826,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 await ProcessFileTags(_currentFileStorage.Id, properties);
 
                 // 9. 更新分类统计
-                var updateBool = await _databaseManager.UpdateCategoryStatisticsAsync(
+                // UpdateCategoryStatisticsAsync 可能返回 Task 或 Task<bool>，此处不需要赋值，直接 await
+                await _databaseManager.UpdateCategoryStatisticsAsync(
                     _currentFileStorage.CategoryId,
                     _currentFileStorage.CategoryType);
 
@@ -1274,15 +1279,15 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     Specifications = GetStringValue(row, "规格"),
                     Material = GetStringValue(row, "材质"),
                     StandardNumber = GetStringValue(row, "标准编号"),
-                    Power = GetStringValue(row, "功率"),
-                    Volume = GetStringValue(row, "容积"),
-                    Pressure = GetStringValue(row, "压力"),
-                    Temperature = GetStringValue(row, "温度"),
-                    Diameter = GetStringValue(row, "直径"),
-                    OuterDiameter = GetStringValue(row, "外径"),
-                    InnerDiameter = GetStringValue(row, "内径"),
-                    Thickness = GetStringValue(row, "厚度"),
-                    Weight = GetStringValue(row, "重量"),
+                    Power = (decimal?)GetDoubleValue(row, "功率"),
+                    Volume = (decimal?)GetDoubleValue(row, "容积"),
+                    Pressure = (decimal?)GetDoubleValue(row, "压力"),
+                    Temperature = (decimal?)GetDoubleValue(row, "温度"),
+                    Diameter = (decimal?)GetDoubleValue(row, "直径"),
+                    OuterDiameter = (decimal?)GetDoubleValue(row, "外径"),
+                    InnerDiameter = (decimal?)GetDoubleValue(row, "内径"),
+                    Thickness = (decimal?)GetDoubleValue(row, "厚度"),
+                    Weight = (decimal?)GetDoubleValue(row, "重量"),
                     Model = GetStringValue(row, "型号"),
                     Remarks = GetStringValue(row, "备注"),
                     Customize1 = GetStringValue(row, "自定义1"),

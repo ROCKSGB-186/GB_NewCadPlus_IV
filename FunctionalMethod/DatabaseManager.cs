@@ -24,6 +24,128 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             return new MySqlConnection(_connectionString);
         }
 
+        // -----------------------------
+        // 简易异步方法占位实现（避免引用处编译错误）
+        // 说明：这些方法为占位实现，返回默认值或抛出未实现异常。
+        // 在接入真实后端时，请替换为完整实现。
+        // -----------------------------
+
+        /// <summary>
+        /// 文件访问日志模型（占位）
+        /// </summary>
+        public class FileAccessLog
+        {
+            public int FileId { get; set; }
+            public string? UserName { get; set; }
+            public string? ActionType { get; set; }
+            public DateTime AccessTime { get; set; }
+            public string? IpAddress { get; set; }
+        }
+
+        /// <summary>
+        /// 文件标签模型（占位）
+        /// </summary>
+        public class FileTag
+        {
+            public int FileId { get; set; }
+            public string? TagName { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+
+        /// <summary>
+        /// 添加文件访问日志（占位）
+        /// </summary>
+        public virtual async Task<bool> AddFileAccessLogAsync(FileAccessLog log)
+        {
+            await Task.Yield();
+            // 占位：默认记录成功
+            return true;
+        }
+
+        /// <summary>
+        /// 删除文件（占位）
+        /// </summary>
+        public virtual async Task<int> DeleteFileAsync(int fileId, string deletedBy)
+        {
+            await Task.Yield();
+            // 占位：返回 1 表示已删除
+            return 1;
+        }
+
+        public virtual async Task<bool> DeleteFileAttributeAsync(long attributeId)
+        {
+            await Task.Yield();
+            return true;
+        }
+
+        public virtual async Task<bool> DeleteFileStorageAsync(long storageId)
+        {
+            await Task.Yield();
+            return true;
+        }
+
+        public virtual async Task<int> AddFileAttributeAsync(FileAttribute attribute)
+        {
+            await Task.Yield();
+            // 占位：返回模拟的插入结果（>0 表示成功）
+            return 1;
+        }
+
+        //public virtual async Task<FileAttribute?> GetFileAttributeAsync(string displayName)
+        //{
+        //    await Task.Yield();
+        //    return null;
+        //}
+
+        public virtual async Task<int> AddFileStorageAsync(FileStorage storage)
+        {
+            await Task.Yield();
+            return 1;
+        }
+
+        //public virtual async Task<FileStorage?> GetFileStorageAsync(string fileHash)
+        //{
+        //    await Task.Yield();
+        //    return null;
+        //}
+
+        public virtual async Task<bool> UpdateFileAttributeAsync(FileAttribute attribute)
+        {
+            await Task.Yield();
+            return true;
+        }
+
+        public virtual async Task<bool> UpdateFileStorageAsync(FileStorage storage)
+        {
+            await Task.Yield();
+            return true;
+        }
+
+        public virtual async Task<bool> AddFileTagAsync(FileTag tag)
+        {
+            await Task.Yield();
+            return true;
+        }
+
+        public virtual async Task<int> AddFileAccessLogAsync(object accessLog)
+        {
+            await Task.Yield();
+            return 1;
+        }
+
+        //public virtual async Task<FileStorage?> GetFileByIdAsync(int fileId)
+        //{
+        //    await Task.Yield();
+        //    return null;
+        //}
+
+        //public virtual async Task UpdateCategoryStatisticsAsync(int categoryId, string categoryType)
+        //{
+        //    await Task.Yield();
+        //    // 占位：不返回值
+        //}
+
+
         /// <summary>
         /// 用户实体（对应 users 表）
         /// </summary>

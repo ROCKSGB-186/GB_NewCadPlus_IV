@@ -542,7 +542,7 @@ namespace GB_NewCadPlus_IV.Helpers
         public static double GetAndApplyActiveDrawingScale()
         {
             double scale = GetScale(false);
-            VariableDictionary.blockScale = scale;
+            //VariableDictionary.blockScale = scale;
             VariableDictionary.wpfTextBoxScale = scale;
             return scale;
         }

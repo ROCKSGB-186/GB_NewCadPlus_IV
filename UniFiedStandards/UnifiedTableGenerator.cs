@@ -1741,13 +1741,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             bool isInlet = nameLower.Contains("入口") || nameLower.Contains("inlet");
 
             // 出口=黄色(ACI 2)，入口=绿色(ACI 3)，默认黄色
-            short colorIndex = isInlet ? (short)3 : (short)2;
+            short colorIndex = isInlet ? (short)6 : (short)2;
             if (!isInlet && !isOutlet)
             {
-                colorIndex = 2;
+                colorIndex = 6;
             }
 
-            return (colorIndex, 10.0, 3.0);
+            return (colorIndex, 8.0, 2.5);
         }
 
         /// <summary>
@@ -2828,16 +2828,12 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             if (sampleInfo == null || verticesWorld == null || verticesWorld.Count < 2) return overlay;
 
             // 优先使用用户在TextBox_绘图比例中设置的比例值
-            var scaleDenom = VariableDictionary.textBoxScale;
-            if (scaleDenom <= 0) // 如果获取失败，使用原有逻辑
+            var scaleFactor = VariableDictionary.textBoxScale;
+            if (scaleFactor <= 0) // 如果获取失败，使用原有逻辑
             {
-                AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
-                scaleDenom = VariableDictionary.blockScale;
-            }
-
-            // 计算缩放因子（相对于100的比例）
-            //double scaleFactor = scaleDenom / 100.0;
-            double scaleFactor = scaleDenom;
+                //AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
+                scaleFactor = AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
+            }           
 
             // 箭头模板与填充准备：若无模板则用默认三角
             Polyline arrowTemplate = sampleInfo.DirectionArrowTemplate;
@@ -2881,7 +2877,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             }
 
             // 标题最终高度：基准 3.5 * 比例分母（与表格一致）
-            double finalTitleHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, scaleDenom);
+            double finalTitleHeight = TextFontsStyleHelper.ComputeScaledHeight(4, scaleFactor);
 
             // 遍历每一段，生成箭头并在箭头"上方"放置居中对齐的标题文字
             for (int i = 0; i < verticesWorld.Count - 1; i++)
@@ -2956,8 +2952,9 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                     // 文字偏移：箭头上方 + 与文字高度相关的间距（按比例调整）
                     //double offset = (arrowHalfHeight + finalTitleHeight * 0.8) * scaleFactor; // 应用比例
-                    double offset = (arrowHalfHeight + finalTitleHeight * 0.8); // 应用比例
-                    var worldTextPos = mid + perp * offset;
+                    double offset = (400 + finalTitleHeight * 0.75); // 应用比例
+                    var worldTextPos = mid + perp * offset;// 文字放在箭头上方一定距离处
+                    // 计算文字的局部坐标位置（相对于 midPointWorld）
                     var localTextPos = new Point3d(worldTextPos.X - midPointWorld.X, worldTextPos.Y - midPointWorld.Y, worldTextPos.Z - midPointWorld.Z);
 
                     // 文字方向：沿段方向，保证可读（不倒置）
@@ -2967,38 +2964,66 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     if (textRot > Math.PI) textRot -= 2.0 * Math.PI;
                     if (textRot <= -Math.PI) textRot += 2.0 * Math.PI;
 
-                    // 创建 DBText 并设置为居中对齐
+                    // 中文注释：创建标题文字对象
                     var dbText = new DBText
                     {
-                        Position = localTextPos,
-                        Height = finalTitleHeight,
+                        // 中文注释：文字实际内容，优先使用管道标题，没有则回退到块名，再没有则显示“管道”
                         TextString = string.IsNullOrWhiteSpace(pipeTitle) ? sampleBlockName ?? "管道" : pipeTitle,
+
+                        // 中文注释：设置文字高度
+                        Height = finalTitleHeight,
+
+                        // 中文注释：这里先给 Position 一个值，作为兼容性兜底
+                        Position = localTextPos,
+
+                        // 中文注释：设置文字旋转角度，使文字沿管段方向显示
                         Rotation = textRot,
+
+                        // 中文注释：设置图层，仍然跟随管道主体图层
                         Layer = sampleInfo.PipeBodyTemplate.Layer,
+
+                        // 中文注释：设置法向量，保持文字位于当前 XY 平面
                         Normal = Vector3d.ZAxis,
-                        Oblique = 0.0
+
+                        // 中文注释：设置倾斜角为 0，不做斜体处理
+                        Oblique = 0.0,
+
+                        // 根据图层名设置颜色
+                        Color = sampleInfo.PipeBodyTemplate.Layer.Contains("进口") ? Color.FromColorIndex(ColorMethod.ByAci, 1) :
+                                sampleInfo.PipeBodyTemplate.Layer.Contains("出口") ? Color.FromColorIndex(ColorMethod.ByAci, 2) :
+                                sampleInfo.PipeBodyTemplate.Color,
+
+                        // 中文注释：关键设置——把文字对齐方式改成“中间居中”
+                        Justify = AttachmentPoint.MiddleCenter,
+
+                        // 中文注释：关键设置——让文字的“中心点”对齐到目标点，而不是首字符落点对齐
+                        AlignmentPoint = localTextPos
                     };
 
-                    // 设置对齐点并置中（水平 + 垂直）
+                    // 中文注释：再次显式设置水平居中，增强兼容性
+                    dbText.HorizontalMode = TextHorizontalMode.TextCenter;
+
+                    // 中文注释：再次显式设置垂直居中，增强兼容性
+                    dbText.VerticalMode = TextVerticalMode.TextVerticalMid;
+
+                    // 中文注释：先应用您项目里的标题文字样式（文字样式、高度、注释性等）
                     try
                     {
-                        dbText.AlignmentPoint = localTextPos;
-                        dbText.HorizontalMode = TextHorizontalMode.TextCenter;
-                        dbText.VerticalMode = TextVerticalMode.TextVerticalMid;
+                        TextFontsStyleHelper.ApplyTitleToDBText(tr, dbText, scaleFactor);
                     }
                     catch
                     {
-                        // 某些 API/版本对这些属性有限制，忽略异常
+                        // 中文注释：若样式应用失败，则保留当前 DBText 基本设置继续执行
                     }
 
-                    // 应用样式并保证高度按当前比例（FontsStyleHelper 内部也会确保 TextStyle 存在）
+                    // 中文注释：非常关键——让 AutoCAD 根据 Justify 和 AlignmentPoint 重新计算文字位置
                     try
                     {
-                        TextFontsStyleHelper.ApplyTitleToDBText(tr, dbText, scaleDenom);
+                        dbText.AdjustAlignment(tr.Database);
                     }
                     catch
                     {
-                        // 若样式应用失败，仍使用 dbText 的 Height
+                        // 中文注释：某些场景下对象尚未加入数据库，可能会失败，这里忽略异常即可
                     }
 
                     overlay.Add(dbText);

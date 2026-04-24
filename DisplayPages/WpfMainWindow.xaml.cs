@@ -1,4 +1,7 @@
+using Autodesk.AutoCAD.Internal.Calculator;
+using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using System.Collections.ObjectModel;
@@ -6,6 +9,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
@@ -15,6 +19,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Xml.Linq;
+using static Autodesk.AutoCAD.DatabaseServices.TextEditor;
+using static GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Binding = System.Windows.Data.Binding;
 using Border = System.Windows.Controls.Border;
@@ -33,14 +39,9 @@ using Point = System.Windows.Point;
 using TabControl = System.Windows.Controls.TabControl;
 using TextBox = System.Windows.Controls.TextBox;
 using UserControl = System.Windows.Controls.UserControl;
-using System.Text.RegularExpressions;
-using GB_NewCadPlus_IV.FunctionalMethod;
-using GB_NewCadPlus_IV.UniFiedStandards;
-using Autodesk.AutoCAD.Internal.Calculator;
 using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
 using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
-using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
-using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
+
 
 namespace GB_NewCadPlus_IV
 {
@@ -184,7 +185,7 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 从登录窗口中读取服务器配置
-                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
+                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_III", "login_config.json");
                 if (!File.Exists(configPath))// 如果文件不存在，则返回
                     return;
 
@@ -243,6 +244,8 @@ namespace GB_NewCadPlus_IV
             _layerData = new ObservableCollection<LayerInfo>();
             // 初始化DataGrid
             InitializeLayerDataGrid();
+            // 初始化“计算数据表”页签中的 CSV 驱动表
+            InitializeCalcCsvTables();
         }
         /// <summary>
         /// 初始化图层数据DataGrid表
@@ -447,7 +450,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private string DrawingConfigPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "GB_NewCadPlus_IV",
+            "GB_NewCadPlus_III",
             "drawing_config.json"
         );
 
@@ -561,6 +564,7 @@ namespace GB_NewCadPlus_IV
 
                 // 更新全局并刷新 AutoCAD 端缓存（确保其它模块读取到最新值）
                 VariableDictionary.blockScale = loadedScale;
+
                 try
                 {
                     AutoCadHelper.Invalidate(); // 清缓存
@@ -614,6 +618,7 @@ namespace GB_NewCadPlus_IV
 
                 // 更新全局变量，保证立即生效
                 VariableDictionary.blockScale = config.DrawingScale;
+                VariableDictionary.textBoxScale = config.DrawingScale;
 
                 // 刷新 AutoCadHelper 的内部缓存（使 CAD 端能及时读取到新比例）
                 try
@@ -927,7 +932,7 @@ namespace GB_NewCadPlus_IV
                 // 首先尝试从资源加载默认图片
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
-                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/default_preview.png");
+                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_III;component/Resources/default_preview.png");
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -942,7 +947,7 @@ namespace GB_NewCadPlus_IV
                 {
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
-                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/no_preview.png");
+                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_III;component/Resources/no_preview.png");
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.EndInit();
                     bitmap.Freeze();
@@ -1264,12 +1269,72 @@ namespace GB_NewCadPlus_IV
 
                 // 清理图片缓存
                 CleanupInvalidImageCache();
-
+                // 清理项目临时文件（管道表/计算表/AutoCadHelper临时DWG）
+                CleanupGeneratedTempArtifacts();
                 // 如果有其它需要释放的资源或取消的操作，在这里处理
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"关闭窗口时清理缓存失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 删除单个临时文件（失败不抛异常）
+        /// </summary>
+        private void TryDeleteTempFile(string? path)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                {
+                    File.Delete(path);
+                    LogManager.Instance.LogInfo($"已删除临时文件: {path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"删除临时文件失败: {path}, {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 清理项目生成的临时文件（管道表/计算表）
+        /// </summary>
+        private void CleanupGeneratedTempArtifacts()
+        {
+            try
+            {
+                // 已记录的最近一次临时文件
+                TryDeleteTempFile(_lastSavedPipeTablePath);
+                _lastSavedPipeTablePath = string.Empty;
+
+                // 管道表临时目录
+                var pipeTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", "生成管道表");
+                if (Directory.Exists(pipeTempDir))
+                {
+                    foreach (var f in Directory.GetFiles(pipeTempDir, "*.dwg", SearchOption.TopDirectoryOnly))
+                    {
+                        TryDeleteTempFile(f);
+                    }
+                }
+
+                // 计算表临时目录
+                var calcTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", "CalcTables");
+                if (Directory.Exists(calcTempDir))
+                {
+                    foreach (var f in Directory.GetFiles(calcTempDir, "*.dwg", SearchOption.TopDirectoryOnly))
+                    {
+                        TryDeleteTempFile(f);
+                    }
+                }
+
+                // 同时清理 AutoCadHelper 临时 DWG 目录中的历史遗留
+                AutoCadHelper.CleanupTempDwgFiles(olderThanMinutes: 30);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"CleanupGeneratedTempArtifacts 异常: {ex.Message}");
             }
         }
 
@@ -1345,7 +1410,7 @@ namespace GB_NewCadPlus_IV
         {
             // 从 FileStorage 获取数据库中的"显示名称"字段，回退到空字符串以避免 null 引发异常
             string buttonText = file?.DisplayName ?? string.Empty;
-           
+
             Button btn = new Button
             {
                 Content = buttonText,
@@ -1371,137 +1436,72 @@ namespace GB_NewCadPlus_IV
             btn.PreviewMouseMove += DynamicButton_PreviewMouseMove;
             // 结束拖拽检测
             btn.PreviewMouseLeftButtonUp += DynamicButton_PreviewMouseLeftButtonUp;
-            
+
             return btn;
         }
 
         /// <summary>
         /// 修改 DynamicButton_Click：在数据库模式下将文件缓存到本地并确保使用真实文件名
         /// </summary>
-        private void DynamicButton_Click(object sender, RoutedEventArgs e)
+        private async void DynamicButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // 检查发送者是否为按钮
                 if (sender is Button btn)
                 {
-                    // 处理按钮高亮显示（仅限数据库模式的动态按钮）
                     if (sender is System.Windows.Controls.Button clickedBtn)
                     {
-                        // 如果有上一个选中且不是当前，恢复它的原始背景
                         if (_lastSelectedDynamicButton != null && _lastSelectedDynamicButton != clickedBtn)
                         {
                             if (_originalButtonBackgrounds.TryGetValue(_lastSelectedDynamicButton, out var prevBrush))
-                            {
                                 _lastSelectedDynamicButton.Background = prevBrush;
-                            }
                             else
-                            {
-                                // 没有备份则设置为样式默认（清空以让模板/样式生效）
                                 _lastSelectedDynamicButton.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
-                            }
                         }
 
-                        // 记录当前按钮原始背景（第一次点击时）
                         if (!_originalButtonBackgrounds.ContainsKey(clickedBtn))
                         {
                             var current = clickedBtn.Background;
-                            //_originalButtonBackgrounds[clickedBtn] = current ?? System.Windows.SystemColors.ControlBrush;
                             _originalButtonBackgrounds[clickedBtn] = current ?? System.Windows.SystemColors.ControlBrush;
                         }
 
-                        // 设置当前按钮高亮
                         clickedBtn.Background = System.Windows.Media.Brushes.LightGoldenrodYellow;
-
-                        // 更新上一次引用
                         _lastSelectedDynamicButton = clickedBtn;
                     }
-                    FileStorage fileStorage = null; // 获取按钮的 Tag 属性 用于后续处理的文件存储对象
-                    LogManager.Instance.LogInfo($"单次点击了按钮: {btn.Content} ");
-                    if (_useDatabaseMode && btn.Tag is ButtonTagCommandInfo tagInfo)// 数据库模式
+
+                    FileStorage fileStorage = null;
+                    LogManager.Instance.LogInfo($"单次点击了按钮: {btn.Content}");
+
+                    if (_useDatabaseMode && btn.Tag is ButtonTagCommandInfo tagInfo)
                     {
-                        // 数据库模式：处理数据库图元
                         fileStorage = tagInfo.fileStorage;
                         LogManager.Instance.LogInfo($"点击了数据库图元按钮: {tagInfo.ButtonName}");
 
-                        // 缓存到本地：使用真实文件名 fileStorage.FileName（带扩展）
-                        try
+                        // 关键修复：确保当前图元有可用本地缓存文件（会自动回源恢复）
+                        if (fileStorage != null)
                         {
-                            if (fileStorage != null)
+                            var cachedPath = await EnsureLocalCachedFilePathAsync(fileStorage);
+                            if (string.IsNullOrWhiteSpace(cachedPath))
                             {
-                                string localDir = _cadStoragePath;// 本地缓存目录
-                                if (string.IsNullOrEmpty(localDir))
-                                {
-                                    localDir = Path.Combine(AppPath, "CadFiles");// 默认缓存目录
-                                    _cadStoragePath = localDir;// 保存到默认缓存目录
-                                }
-                                if (!Directory.Exists(localDir)) Directory.CreateDirectory(localDir);// 创建目录 确保目录存在
-
-                                string sourcePath = fileStorage.FilePath ?? string.Empty;// 源文件路径
-                                string sourceExt = Path.GetExtension(sourcePath);// 源文件扩展名
-                                if (string.IsNullOrEmpty(sourceExt)) sourceExt = ".dwg";// 源文件没有扩展名则默认为 .dwg
-
-                                string realName = fileStorage.FileName ?? Path.GetFileNameWithoutExtension(sourcePath);// 获取真实文件名
-                                if (!realName.EndsWith(sourceExt, StringComparison.OrdinalIgnoreCase))// 真实文件名没有扩展名则添加源文件扩展名
-                                {
-                                    realName = Path.GetFileNameWithoutExtension(realName) + sourceExt;// 添加源文件扩展名
-                                }
-
-                                string localPath = Path.Combine(localDir, realName);// 本地缓存文件路径
-
-                                if (!File.Exists(localPath))// 本地缓存文件不存在 本地缓存不存在则复制文件到本地
-                                {
-                                    if (!string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath))// 源文件存在 源文件存在 则复制文件到本地缓存
-                                    {
-                                        File.Copy(sourcePath, localPath, true);// 复制文件 复制文件到本地缓存
-                                        LogManager.Instance.LogInfo($"已将图元缓存到本地: {localPath}");// 记录日志
-                                    }
-                                    else
-                                    {
-                                        LogManager.Instance.LogWarning($"无法找到源文件，未能缓存: {sourcePath}");
-                                    }
-                                }
-                                else
-                                {
-                                    LogManager.Instance.LogInfo($"本地缓存已存在: {localPath}");
-                                }
-
-                                // 更新路径，后续预览/插入使用本地缓存
-                                if (File.Exists(localPath))
-                                {
-                                    fileStorage.FilePath = localPath;
-                                }
+                                LogManager.Instance.LogWarning($"图元缓存失败，无法获得可用文件: {fileStorage.DisplayName ?? fileStorage.FileName}");
                             }
                         }
-                        catch (Exception ex)
-                        {
-                            LogManager.Instance.LogWarning($"缓存文件到本地失败: {ex.Message}");
-                        }
 
-                        // 记录为当前选中文件，供“应用图元”使用
                         _currentFileStorage = fileStorage;
                         _selectedFileStorage = fileStorage;
 
-                        // 显示预览图片（使用可能已更新的本地路径）
                         ShowFilePreview(fileStorage);
-
-                        // 显示文件详细属性（使用PropertiesDataGrid）
                         DisplayFilePropertiesInDataGridAsync(fileStorage);
                     }
                     else if (!_useDatabaseMode && btn.Tag is string filePath)
                     {
-                        // Resources模式：处理文件路径
                         LogManager.Instance.LogInfo($"点击了Resources图元按钮: {filePath}");
 
-                        // 从文件路径提取按钮名称
                         string fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
                         string buttonName = fileNameWithoutExt;
                         if (fileNameWithoutExt.Contains("_"))
-                        {
                             buttonName = fileNameWithoutExt.Substring(fileNameWithoutExt.IndexOf("_") + 1);
-                        }
 
-                        // 构造临时 FileStorage 并设置为当前选中
                         fileStorage = new FileStorage
                         {
                             FilePath = filePath,
@@ -1511,74 +1511,22 @@ namespace GB_NewCadPlus_IV
                         _currentFileStorage = fileStorage;
                         _selectedFileStorage = fileStorage;
 
-                        // 显示预览图片
                         ShowPreviewImage(filePath, buttonName);
-
-                        // 清空属性显示
                         ClearFilePropertiesInDataGrid();
-
-                        // 执行原有操作
                         ExecuteDynamicButtonActionFromResources(buttonName, filePath);
                     }
                     else if (btn.Tag is FileStorage directFileStorage)
                     {
-                        // 直接的FileStorage对象
                         fileStorage = directFileStorage;
                         LogManager.Instance.LogInfo($"点击了文件按钮: {fileStorage.DisplayName}");
 
-                        // 记录为当前选中文件，供“应用图元”使用
                         _currentFileStorage = fileStorage;
                         _selectedFileStorage = fileStorage;
 
-                        // 尝试缓存到本地（同上逻辑）
-                        try
-                        {
-                            if (fileStorage != null)
-                            {
-                                string localDir = _cadStoragePath;
-                                if (string.IsNullOrEmpty(localDir))
-                                {
-                                    localDir = Path.Combine(AppPath, "CadFiles");
-                                    _cadStoragePath = localDir;
-                                }
-                                if (!Directory.Exists(localDir)) Directory.CreateDirectory(localDir);
+                        // 关键修复：直接对象也走统一缓存恢复逻辑
+                        await EnsureLocalCachedFilePathAsync(fileStorage);
 
-                                string sourcePath = fileStorage.FilePath ?? string.Empty;
-                                string sourceExt = Path.GetExtension(sourcePath);
-                                if (string.IsNullOrEmpty(sourceExt)) sourceExt = ".dwg";
-
-                                string realName = fileStorage.FileName ?? Path.GetFileNameWithoutExtension(sourcePath);
-                                if (!realName.EndsWith(sourceExt, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    realName = Path.GetFileNameWithoutExtension(realName) + sourceExt;
-                                }
-
-                                string localPath = Path.Combine(localDir, realName);
-
-                                if (!File.Exists(localPath))
-                                {
-                                    if (!string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath))
-                                    {
-                                        File.Copy(sourcePath, localPath, true);
-                                        LogManager.Instance.LogInfo($"已将图元缓存到本地: {localPath}");
-                                    }
-                                }
-
-                                if (File.Exists(localPath))
-                                {
-                                    fileStorage.FilePath = localPath;
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            LogManager.Instance.LogWarning($"缓存文件到本地失败: {ex.Message}");
-                        }
-
-                        // 显示预览图片
                         ShowFilePreview(fileStorage);
-
-                        // 显示文件详细属性（使用PropertiesDataGrid）
                         _ = DisplayFilePropertiesInDataGridAsync(fileStorage);
                     }
                     else
@@ -1592,173 +1540,6 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogError($"处理按钮点击事件时出错: {ex.Message}");
                 System.Windows.MessageBox.Show($"处理按钮点击事件时出错: {ex.Message}");
             }
-
-
-            //try
-            //{
-            //    // 检查发送者是否为按钮
-            //    if (sender is Button btn)
-            //    {
-            //        FileStorage fileStorage = null;// 获取按钮的 Tag 属性 用于后续处理的文件存储对象
-            //        LogManager.Instance.LogInfo($"单次点击了按钮: {btn.Content} ");
-            //        if (_useDatabaseMode && btn.Tag is ButtonTagCommandInfo tagInfo)// 数据库模式
-            //        {
-            //            // 数据库模式：处理数据库图元
-            //            fileStorage = tagInfo.fileStorage;
-            //            LogManager.Instance.LogInfo($"点击了数据库图元按钮: {tagInfo.ButtonName}");
-
-            //            // 缓存到本地：使用真实文件名 fileStorage.FileName（带扩展）
-            //            try
-            //            {
-            //                if (fileStorage != null)
-            //                {
-            //                    string localDir = _cadStoragePath;// 本地缓存目录
-            //                    if (string.IsNullOrEmpty(localDir))
-            //                    {
-            //                        localDir = Path.Combine(AppPath, "CadFiles");// 默认缓存目录
-            //                        _cadStoragePath = localDir;// 保存到默认缓存目录
-            //                    }
-            //                    if (!Directory.Exists(localDir)) Directory.CreateDirectory(localDir);// 创建目录 确保目录存在
-
-            //                    string sourcePath = fileStorage.FilePath ?? string.Empty;// 源文件路径
-            //                    string sourceExt = Path.GetExtension(sourcePath);// 源文件扩展名
-            //                    if (string.IsNullOrEmpty(sourceExt)) sourceExt = ".dwg";// 源文件没有扩展名则默认为 .dwg
-
-            //                    string realName = fileStorage.FileName ?? Path.GetFileNameWithoutExtension(sourcePath);// 获取真实文件名
-            //                    if (!realName.EndsWith(sourceExt, StringComparison.OrdinalIgnoreCase))// 真实文件名没有扩展名则添加源文件扩展名
-            //                    {
-            //                        realName = Path.GetFileNameWithoutExtension(realName) + sourceExt;// 添加源文件扩展名
-            //                    }
-
-            //                    string localPath = Path.Combine(localDir, realName);// 本地缓存文件路径
-
-            //                    if (!File.Exists(localPath))// 本地缓存文件不存在 本地缓存不存在则复制文件到本地
-            //                    {
-            //                        if (!string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath))// 源文件存在 源文件存在 则复制文件到本地缓存
-            //                        {
-            //                            File.Copy(sourcePath, localPath, true);// 复制文件 复制文件到本地缓存
-            //                            LogManager.Instance.LogInfo($"已将图元缓存到本地: {localPath}");// 记录日志
-            //                        }
-            //                        else
-            //                        {
-            //                            LogManager.Instance.LogWarning($"无法找到源文件，未能缓存: {sourcePath}");
-            //                        }
-            //                    }
-            //                    else
-            //                    {
-            //                        LogManager.Instance.LogInfo($"本地缓存已存在: {localPath}");
-            //                    }
-
-            //                    // 更新路径，后续预览/插入使用本地缓存
-            //                    if (File.Exists(localPath))
-            //                    {
-            //                        fileStorage.FilePath = localPath;
-            //                    }
-            //                }
-            //            }
-            //            catch (Exception ex)
-            //            {
-            //                LogManager.Instance.LogWarning($"缓存文件到本地失败: {ex.Message}");
-            //            }
-
-            //            // 显示预览图片（使用可能已更新的本地路径）
-            //            ShowFilePreview(fileStorage);
-
-            //            // 显示文件详细属性（使用PropertiesDataGrid）
-            //            DisplayFilePropertiesInDataGridAsync(fileStorage);
-
-            //        }
-            //        else if (!_useDatabaseMode && btn.Tag is string filePath)
-            //        {
-            //            // Resources模式：处理文件路径
-            //            LogManager.Instance.LogInfo($"点击了Resources图元按钮: {filePath}");
-
-            //            // 从文件路径提取按钮名称
-            //            string fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
-            //            string buttonName = fileNameWithoutExt;
-            //            if (fileNameWithoutExt.Contains("_"))
-            //            {
-            //                buttonName = fileNameWithoutExt.Substring(fileNameWithoutExt.IndexOf("_") + 1);
-            //            }
-
-            //            // 显示预览图片
-            //            ShowPreviewImage(filePath, buttonName);
-
-            //            // 清空属性显示
-            //            ClearFilePropertiesInDataGrid();
-
-            //            // 执行原有操作
-            //            ExecuteDynamicButtonActionFromResources(buttonName, filePath);
-            //        }
-            //        else if (btn.Tag is FileStorage directFileStorage)
-            //        {
-            //            // 直接的FileStorage对象
-            //            fileStorage = directFileStorage;
-            //            LogManager.Instance.LogInfo($"点击了文件按钮: {fileStorage.DisplayName}");
-
-            //            // 尝试缓存到本地（同上逻辑）
-            //            try
-            //            {
-            //                if (fileStorage != null)
-            //                {
-            //                    string localDir = _cadStoragePath;
-            //                    if (string.IsNullOrEmpty(localDir))
-            //                    {
-            //                        localDir = Path.Combine(AppPath, "CadFiles");
-            //                        _cadStoragePath = localDir;
-            //                    }
-            //                    if (!Directory.Exists(localDir)) Directory.CreateDirectory(localDir);
-
-            //                    string sourcePath = fileStorage.FilePath ?? string.Empty;
-            //                    string sourceExt = Path.GetExtension(sourcePath);
-            //                    if (string.IsNullOrEmpty(sourceExt)) sourceExt = ".dwg";
-
-            //                    string realName = fileStorage.FileName ?? Path.GetFileNameWithoutExtension(sourcePath);
-            //                    if (!realName.EndsWith(sourceExt, StringComparison.OrdinalIgnoreCase))
-            //                    {
-            //                        realName = Path.GetFileNameWithoutExtension(realName) + sourceExt;
-            //                    }
-
-            //                    string localPath = Path.Combine(localDir, realName);
-
-            //                    if (!File.Exists(localPath))
-            //                    {
-            //                        if (!string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath))
-            //                        {
-            //                            File.Copy(sourcePath, localPath, true);
-            //                            LogManager.Instance.LogInfo($"已将图元缓存到本地: {localPath}");
-            //                        }
-            //                    }
-
-            //                    if (File.Exists(localPath))
-            //                    {
-            //                        fileStorage.FilePath = localPath;
-            //                    }
-            //                }
-            //            }
-            //            catch (Exception ex)
-            //            {
-            //                LogManager.Instance.LogWarning($"缓存文件到本地失败: {ex.Message}");
-            //            }
-
-            //            // 显示预览图片
-            //            ShowFilePreview(fileStorage);
-
-            //            // 显示文件详细属性（使用PropertiesDataGrid）
-            //            _ = DisplayFilePropertiesInDataGridAsync(fileStorage);
-
-            //        }
-            //        else
-            //        {
-            //            LogManager.Instance.LogWarning("按钮点击事件处理失败：无法识别的数据类型");
-            //        }
-            //    }
-            //}
-            //catch (Exception ex)
-            //{
-            //    LogManager.Instance.LogError($"处理按钮点击事件时出错: {ex.Message}");
-            //    System.Windows.MessageBox.Show($"处理按钮点击事件时出错: {ex.Message}");
-            //}
         }
 
         /// <summary>
@@ -1768,18 +1549,23 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                // 记录按下状态（用于拖拽判断）
-                _isButtonMouseDown = true;
-                _isButtonDragging = false;
-                _buttonDragStartPoint = e.GetPosition(this);
-                _dragSourceButton = sender as Button;
-
-                // 双击逻辑仍然保留
+                // 中文注释：双击优先处理，双击时不进入拖拽流程
                 if (e.ClickCount == 2)
                 {
+                    _isButtonMouseDown = false;
+                    _isButtonDragging = false;
+                    _dragSourceButton = null;
+
                     DynamicButton_MouseDoubleClick(sender, e);
                     e.Handled = true;
+                    return;
                 }
+
+                // 中文注释：仅记录“左键按下”的起点，等待后续拖拽判断
+                _isButtonMouseDown = true;
+                _isButtonDragging = false;
+                _buttonDragStartPoint = e.GetPosition(null); // 与 MouseMove 使用同一坐标系
+                _dragSourceButton = sender as Button;
             }
             catch (Exception ex)
             {
@@ -1798,7 +1584,8 @@ namespace GB_NewCadPlus_IV
                 if (sender is Button btn)
                 {
                     // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
-                    VariableDictionary.textBoxScale = GetDrawingScaleFromTextBox();
+                    VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
+
                     // 记录双击日志
                     LogManager.Instance.LogInfo($"双击了按钮: {btn.Content}");
 
@@ -1811,21 +1598,37 @@ namespace GB_NewCadPlus_IV
                         // 在双击处理数据库图元时，准备参数并调用统一插入方法
                         // 假设 fileStorage 包含 LocalPath、BlockName、LayerName、Scale 等属性
                         VariableDictionary.entityRotateAngle = 0;
-                        string localDwg = fileStorage.FilePath; // 确保存在，或先把数据库的 bytes 写入到此路径
+                        //string localDwg = fileStorage.FilePath; // 确保存在，或先把数据库的 bytes 写入到此路径
+                        string? localDwg = await EnsureLocalCachedFilePathAsync(fileStorage);///关键修复：双击时也确保本地缓存可用，避免直接使用可能不存在的路径
+                        if (string.IsNullOrWhiteSpace(localDwg) || !File.Exists(localDwg))
+                        {
+                            LogManager.Instance.LogWarning("双击插入失败：未找到可用图元文件。");
+                            MessageBox.Show("未找到可用图元文件，请先检查图元存储路径或重新替换。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+
                         VariableDictionary.btnFileName = fileStorage.FileName ?? fileStorage.DisplayName ?? System.IO.Path.GetFileNameWithoutExtension(localDwg);
                         VariableDictionary.btnFileName_blockName = fileStorage.BlockName; // 可选
                         VariableDictionary.btnBlockLayer = fileStorage.LayerName;
                         VariableDictionary.layerColorIndex = Convert.ToInt32(fileStorage.ColorIndex);
-                        var isTianzheng = fileStorage.IsTianZheng ; // 可选，视具体需求而定
+                        VariableDictionary.layerName = fileStorage.LayerName;
+                        var isTianzheng = fileStorage.IsTianZheng; // 可选，视具体需求而定
                         // 优先使用用户在TextBox_绘图比例中设置的比例值
-                        VariableDictionary.textBoxScale = VariableDictionary.textBoxScale;
-                        if (VariableDictionary.textBoxScale <= 0) // 如果获取失败，使用原有逻辑
+                        //VariableDictionary.wpfTextBoxScale = 0;
+                        if (VariableDictionary.wpfTextBoxScale <= 0) // 如果获取失败，使用原有逻辑
                         {
                             AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
-                            VariableDictionary.textBoxScale = VariableDictionary.blockScale;
+                            VariableDictionary.wpfTextBoxScale = VariableDictionary.blockScale;
                         }
-                        //string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
-                        //System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
+                        // 新增：Drag期间禁止再次触发，避免重入崩溃
+                        if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+                        {
+                            LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次双击触发。");
+                            return;
+                        }
+
+
                         // 调用统一插入方法（交互放置）
                         var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                         if (doc != null)
@@ -1833,14 +1636,25 @@ namespace GB_NewCadPlus_IV
                             // 在 document lock 内调用 CAD API，保证线程安全和锁定语义
                             using (doc.LockDocument())
                             {
-                                //Command.InsertBlockFromResource(localDwg, fileName, blockRecordName, layer, layerColorIndex, scale, interactive: true,isTianzheng);                                
-                                InsertGraphicHelper.CopyDwgAllFast(localDwg);
+                                // 统一走可重复命令入口，不再直接调用 CopyDwgAllFast
+                                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwg);
+                                //GB_NewCadPlus_III.FunctionalMethod.Command.CopyDwgAllFast(localDwg);
                             }
                         }
                         else
                         {
                             LogManager.Instance.LogWarning("未找到活动文档，无法插入图块。");
                         }
+                        var (ok, err) = await ExecuteInsertAndWaitResultAsync(localDwg);
+                        if (ok)
+                        {
+                            await CleanupLocalCadCacheAfterInsertAsync(localDwg);
+                        }
+                        else
+                        {
+                            LogManager.Instance.LogWarning($"双击插入失败，不清理缓存: {err}");
+                        }
+
                     }
                     // 资源模式或文件路径存储在 ButtonTagCommandInfo.FilePath
                     else if (btn.Tag is ButtonTagCommandInfo tagWithPath && !string.IsNullOrEmpty(tagWithPath.FilePath))
@@ -1854,7 +1668,7 @@ namespace GB_NewCadPlus_IV
                         LogManager.Instance.LogInfo($"双击了Resources图元按钮: {filePath}");
                         ShowPreviewImage(filePath, buttonName);
                         DisplayFileInfo(filePath);
-                        ClearFilePropertiesInDataGrid();
+                        ClearFilePropertiesInDataGrid();// 资源模式下双击也显示属性，但属性来源于文件路径（如果需要更复杂的属性，可以考虑在 Tag 中存储一个专门的属性对象）
                     }
                     // 资源模式直接把路径存在 Tag 为 string
                     else if (btn.Tag is string filePathString)
@@ -1884,102 +1698,92 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 鼠标移动：判定为拖拽并触发插入操作（交互式）
         /// </summary>
-        private void DynamicButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        private async void DynamicButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            // 拖拽判断（保持现有逻辑，仅在真正开始拖拽时触发插入）
             var btn = sender as Button;
             if (btn == null) return;
-            if (!_isButtonMouseDown) return;
 
-            var currentPos = e.GetPosition(null);
+            // 中文注释：未按下鼠标，或不是当前拖拽源，直接退出（悬停不触发）
+            if (!_isButtonMouseDown || _dragSourceButton != btn) return;
+
+            // 中文注释：必须保持左键按住，避免普通移动误触发
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                _isButtonMouseDown = false;
+                _isButtonDragging = false;
+                _dragSourceButton = null;
+                return;
+            }
+
+            var currentPos = e.GetPosition(null); // 与按下时同坐标系
             if (!_isButtonDragging)
             {
                 if (Math.Abs(currentPos.X - _buttonDragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
                     Math.Abs(currentPos.Y - _buttonDragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
                 {
-                    return;
+                    return; // 中文注释：未超过拖拽阈值，不触发命令
                 }
+
                 _isButtonDragging = true;
-                _dragSourceButton = btn;
             }
 
-            // 一旦拖拽被认定为开始，尝试从按钮 Tag 中获取要插入的 DWG 路径或字节并调用 CopyDwgAllFast
             try
             {
+                // 新增：Drag期间禁止再次触发，避免命令重入导致崩溃
+                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+                {
+                    LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次拖拽触发。");
+                    return;
+                }
+                // 中文注释：以下保持你原有插入逻辑
                 var tagInfo = btn.Tag as ButtonTagCommandInfo;
                 string? tempPath = null;
 
-                // 优先使用已有的文件路径
                 if (tagInfo != null)
                 {
-                    if (!string.IsNullOrEmpty(tagInfo.FilePath) && System.IO.File.Exists(tagInfo.FilePath))
+                    if (!string.IsNullOrEmpty(tagInfo.FilePath) && File.Exists(tagInfo.FilePath))
                     {
                         tempPath = tagInfo.FilePath;
                     }
-                    else if (tagInfo.fileStorage != null)
+                    else if (tagInfo.fileStorage != null && !string.IsNullOrEmpty(tagInfo.fileStorage.FilePath) && File.Exists(tagInfo.fileStorage.FilePath))
                     {
-                        // 如果 FileStorage 已包含物理路径，直接使用
-                        if (!string.IsNullOrEmpty(tagInfo.fileStorage.FilePath) && System.IO.File.Exists(tagInfo.fileStorage.FilePath))
-                        {
-                            tempPath = tagInfo.fileStorage.FilePath;
-                        }
-                        // 否则若有字节流（常见场景：资源以字节形式存储），写入临时文件
-                        else if (tagInfo.fileStorage is var fs && fs != null)
-                        {
-                            // 约定 FileStorage 可能包含字段/属性名为 FileBytes 或 Content（根据项目实际调整）
-                            // 下面尝试从 Parameters 或 fileStorage 的常见成员读取字节数组
-                            if (tagInfo.Parameters != null && tagInfo.Parameters.TryGetValue("resourcesFile", out object? obj) && obj is byte[] bytesFromParam)
-                            {
-                                tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{tagInfo.FileName ?? "tmp"}_{Guid.NewGuid():N}.dwg");
-                                System.IO.File.WriteAllBytes(tempPath, bytesFromParam);
-                            }
-                            else
-                            {
-                                // 兜底尝试：如果 FileStorage 有可访问的字节属性，尝试反射读取常见字段名
-                                var fileStorageType = fs.GetType();
-                                var prop = fileStorageType.GetProperty("FileBytes") ?? fileStorageType.GetProperty("Content") ?? fileStorageType.GetProperty("Bytes");
-                                if (prop != null)
-                                {
-                                    var val = prop.GetValue(fs) as byte[];
-                                    if (val != null && val.Length > 0)
-                                    {
-                                        tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{tagInfo.FileName ?? "tmp"}_{Guid.NewGuid():N}.dwg");
-                                        System.IO.File.WriteAllBytes(tempPath, val);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else if (tagInfo.Parameters != null && tagInfo.Parameters.TryGetValue("resourcesFile", out object? resObj) && resObj is byte[] resBytes)
-                    {
-                        tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{tagInfo.FileName ?? "tmp"}_{Guid.NewGuid():N}.dwg");
-                        System.IO.File.WriteAllBytes(tempPath, resBytes);
+                        tempPath = tagInfo.fileStorage.FilePath;
                     }
                 }
 
                 if (string.IsNullOrEmpty(tempPath))
-                {
-                    // 无法获取临时 DWG 文件，直接返回，不抛异常
                     return;
-                }
+                // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
+                VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
 
-                // 调用新的插入方法（此方法内部处理事务与文档加锁）
-                InsertGraphicHelper.CopyDwgAllFast(tempPath);
+                // 快速重复执行所有图纸复制操作
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+
+                var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);
+                if (ok)
+                {
+                    await CleanupLocalCadCacheAfterInsertAsync(tempPath);
+                }
+                else
+                {
+                    LogManager.Instance.LogWarning($"拖拽插入失败，不清理缓存: {err}");
+                }
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"插入图元失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"插入图元失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
-                // 拖拽完成后不自动重置鼠标按下状态，保持原有行为；若需要可在此处重置 _isButtonDragging/_isButtonMouseDown 等
+                // 中文注释：一次拖拽只触发一次命令，避免移动过程中重复触发
+                _isButtonMouseDown = false;
                 _isButtonDragging = false;
                 _dragSourceButton = null;
             }
         }
-
         /// <summary>
-        /// 鼠标抬起：清理拖拽标记
+        /// 鼠标抬起：清理拖拽状态
         /// </summary>
         private void DynamicButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
@@ -1994,7 +1798,7 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogError($"PreviewMouseLeftButtonUp 处理失败: {ex.Message}");
             }
         }
-               
+
         #endregion
 
 
@@ -2011,13 +1815,28 @@ namespace GB_NewCadPlus_IV
             {
                 LogManager.Instance.LogInfo("TabControl选择改变事件触发");
 
-                // 获取当前选中的TabItem
                 if (e.AddedItems.Count > 0 && e.AddedItems[0] is TabItem selectedTab)
                 {
-                    string header = selectedTab.Header.ToString().Trim();
+                    string header = (selectedTab.Header?.ToString() ?? string.Empty).Trim();
                     LogManager.Instance.LogInfo($"选中的TabItem: {header}");
 
-                    // 处理主分类TabItem（工艺、建筑、结构等）
+                    // 新增：计算数据表页签，按需懒加载
+                    if (string.Equals(header, "计算数据表", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if ((CalcDynamicHost?.Children.Count ?? 0) == 0)
+                        {
+                            try
+                            {
+                                ReloadCalcCsvTables(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                LogManager.Instance.LogWarning($"打开计算数据表时加载失败: {ex.Message}");
+                            }
+                        }
+                        return;
+                    }
+
                     if (header == "工艺" || header == "建筑" || header == "结构" ||
                         header == "电气" || header == "给排水" || header == "暖通" ||
                         header == "自控" || header == "总图" || header == "公共图")
@@ -2025,20 +1844,18 @@ namespace GB_NewCadPlus_IV
                         LogManager.Instance.LogInfo($"处理主分类TabItem: {header}");
                         LoadButtonsForMainCategoryTab(selectedTab, header);
 
-                        // 特殊处理工艺分类
                         if (header == "工艺")
                         {
                             LoadConditionButtons();
                         }
                     }
-                    // 处理嵌套的TabItem（图元集、图层管理等）
                     else if (header.Contains("图元集") || header.Contains("图层管理"))
                     {
                         LogManager.Instance.LogInfo($"处理嵌套TabItem: {header}");
                         TabItem parentTabItem = FindParentTabItem(selectedTab);
                         if (parentTabItem != null)
                         {
-                            string parentHeader = parentTabItem.Header.ToString().Trim();
+                            string parentHeader = (parentTabItem.Header?.ToString() ?? string.Empty).Trim();
                             LogManager.Instance.LogInfo($"父级TabItem: {parentHeader}");
                             LoadButtonsForMainCategoryTab(parentTabItem, parentHeader);
                         }
@@ -2048,7 +1865,6 @@ namespace GB_NewCadPlus_IV
             catch (Exception ex)
             {
                 LogManager.Instance.LogError($"处理TabControl选择改变时出错: {ex.Message}");
-                //LogManager.Instance.LogError($"堆栈跟踪: {ex.StackTrace}");
             }
         }
 
@@ -2369,12 +2185,21 @@ namespace GB_NewCadPlus_IV
             }
         }
 
-        private void 应用图元_Click(object sender, RoutedEventArgs e)
+        private async void 应用图元_Click(object sender, RoutedEventArgs e)
         {
             // 将“应用图元”按钮的行为统一为调用 CopyDwgAllFast，
             // 根据当前选中文件优先选择 _selectedFileStorage，然后是 _currentFileStorage，再是 _selectedFilePath
             try
             {
+                // 新增：Drag期间禁止再次触发，避免命令重入导致崩溃
+                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+                {
+                    MessageBox.Show("当前图元正在跟随插入，请先左键落点或按 Esc 结束当前插入。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
+                VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
                 string? tempPath = null;
 
                 // 优先：WPF 窗口中选中的 FileStorage（视实现而定）
@@ -2404,6 +2229,15 @@ namespace GB_NewCadPlus_IV
                 {
                     tempPath = _selectedFilePath;
                 }
+                var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);
+                if (ok)
+                {
+                    await CleanupLocalCadCacheAfterInsertAsync(tempPath);
+                }
+                else
+                {
+                    MessageBox.Show($"插入失败，已保留缓存用于排查：{err}", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
 
                 if (string.IsNullOrEmpty(tempPath))
                 {
@@ -2412,7 +2246,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 调用统一插入方法
-                InsertGraphicHelper.CopyDwgAllFast(tempPath);
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
             }
             catch (Exception ex)
             {
@@ -2478,20 +2312,59 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 显示文件信息
+        /// 统一写入文件信息面板（避免重复代码）
         /// </summary>
-        /// <param name="filePath"></param>
+        private void UpdateFileInfoPanel(
+            string? filePath,
+            string? displayName,
+            string? fileType,
+            long? fileSizeBytes,
+            string? previewPath,
+            bool formatDisplayName)
+        {
+            file_Path.Text = filePath ?? string.Empty;
+
+            var finalName = displayName ?? string.Empty;
+            if (formatDisplayName && !string.IsNullOrWhiteSpace(finalName))
+            {
+                finalName = FormatFileNameForDisplay(finalName);
+            }
+            File_Name.Text = finalName;
+
+            File_Size.Text = (fileSizeBytes.HasValue && fileSizeBytes.Value > 0)
+                ? $"{fileSizeBytes.Value / 1024.0:F2} KB"
+                : string.Empty;
+
+            File_Type.Text = fileType ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(File_Type.Text) && !string.IsNullOrWhiteSpace(filePath))
+            {
+                File_Type.Text = Path.GetExtension(filePath).ToLowerInvariant();
+            }
+
+            view_File_Path.Text = string.IsNullOrWhiteSpace(previewPath) ? "无预览图片" : previewPath;
+        }
+
+        /// <summary>
+        /// 显示文件信息（路径模式）
+        /// </summary>
         private void DisplayFileInfo(string filePath)
         {
             try
             {
-                var fileInfo = new FileInfo(filePath);
+                if (string.IsNullOrWhiteSpace(filePath))
+                {
+                    UpdateFileInfoPanel(string.Empty, string.Empty, string.Empty, null, string.Empty, false);
+                    return;
+                }
 
-                // 显示文件信息
-                file_Path.Text = filePath;
-                File_Name.Text = fileInfo.Name;
-                File_Size.Text = $"{fileInfo.Length / 1024.0:F2} KB";
-                File_Type.Text = fileInfo.Extension.ToLower();
+                var fileInfo = new FileInfo(filePath);
+                UpdateFileInfoPanel(
+                    filePath: filePath,
+                    displayName: fileInfo.Name,
+                    fileType: fileInfo.Extension.ToLowerInvariant(),
+                    fileSizeBytes: fileInfo.Exists ? fileInfo.Length : null,
+                    previewPath: view_File_Path.Text,
+                    formatDisplayName: false);
             }
             catch (Exception ex)
             {
@@ -2500,25 +2373,38 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 添加显示文件存储信息的方法
+        /// 显示文件信息（FileStorage模式）
         /// </summary>
-        /// <param name="fileStorage"></param>
         public void DisplayFileStorageInfo(FileStorage fileStorage)
         {
             try
             {
-                // 显示文件信息
-                file_Path.Text = fileStorage.FilePath ?? "";
-                File_Name.Text = fileStorage.DisplayName ?? fileStorage.FileName ?? "";
-                File_Name.Text = FormatFileNameForDisplay(fileStorage.DisplayName ?? fileStorage.FileName ?? "");
-                File_Size.Text = fileStorage.FileSize > 0 ? $"{fileStorage.FileSize / 1024.0:F2} KB" : "";
-                File_Type.Text = fileStorage.FileType ?? "";
-                view_File_Path.Text = fileStorage.PreviewImagePath ?? "无预览图片";
+                if (fileStorage == null)
+                {
+                    UpdateFileInfoPanel(string.Empty, string.Empty, string.Empty, null, string.Empty, false);
+                    return;
+                }
+
+                UpdateFileInfoPanel(
+                    filePath: fileStorage.FilePath,
+                    displayName: fileStorage.DisplayName ?? fileStorage.FileName,
+                    fileType: fileStorage.FileType,
+                    fileSizeBytes: fileStorage.FileSize,
+                    previewPath: fileStorage.PreviewImagePath,
+                    formatDisplayName: true);
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"显示文件信息失败: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// 显示文件基本信息（统一复用 DisplayFileStorageInfo）
+        /// </summary>
+        private void DisplayFileBasicInfo(FileStorage fileStorage)
+        {
+            DisplayFileStorageInfo(fileStorage);
         }
 
         /// <summary>
@@ -2560,29 +2446,6 @@ namespace GB_NewCadPlus_IV
             panel.Children.Add(noFilesText);
         }
 
-        /// <summary>
-        /// 清空文件上传界面
-        /// </summary>
-        private void ClearFileUploadInterface()
-        {
-            // 清空所有输入框和显示
-            file_Path.Text = "";
-            File_Name.Text = "";
-            File_Size.Text = "";
-            File_Type.Text = "";
-            view_File_Path.Text = "";
-            ViewImage.Source = null;
-
-            // 清空属性编辑网格
-            CategoryPropertiesDataGrid.ItemsSource = null;
-
-            // 重置字段
-            _selectedFilePath = null;
-            _selectedPreviewImagePath = null;
-            _currentFileStorage = null;
-            _currentFileAttribute = null;
-            _selectedCategoryNode = null;
-        }
 
         /// <summary>
         /// 查找TabItem的父级TabItem
@@ -3485,40 +3348,7 @@ namespace GB_NewCadPlus_IV
             }
         }
 
-        /// <summary>
-        /// 显示文件属性
-        /// </summary>
-        private async Task DisplayFilePropertiesAsync(FileStorage fileStorage)
-        {
-            try
-            {
-                LogManager.Instance.LogInfo($"显示文件属性: {fileStorage.DisplayName}");
 
-                if (_databaseManager == null)
-                {
-                    LogManager.Instance.LogWarning("数据库管理器为空");
-                    return;
-                }
-
-                // 获取文件属性
-                var fileAttribute = await _databaseManager.GetFileAttributeByGraphicIdAsync(fileStorage.Id);
-
-                // 准备显示数据
-                var displayData = PrepareFileDisplayData(fileStorage, fileAttribute);
-
-                // 更新显示（CAD图元界面）
-                if (PropertiesDataGrid != null)
-                {
-                    PropertiesDataGrid.ItemsSource = displayData;
-                }
-
-                LogManager.Instance.LogInfo("文件属性显示完成");
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogError($"显示文件属性时出错: {ex.Message}");
-            }
-        }
 
         /// <summary>
         /// 执行Resources图元按钮点击后的操作
@@ -4003,7 +3833,11 @@ namespace GB_NewCadPlus_IV
             row.ContextMenu = cm;
         }
 
-        // 替换菜单点击：优先用 CommandParameter 获取行对象，回退使用 DataContext
+        /// <summary>
+        /// 右键[替换图元]按键点击事件：优先用 CommandParameter 获取行对象，回退使用 DataContext
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private async void ReplaceFileMenuItem_Click(object? sender, RoutedEventArgs e)
         {
             try
@@ -4073,19 +3907,37 @@ namespace GB_NewCadPlus_IV
                         return;
                     }
 
-                    // 清理缓存与刷新
+                    // 清理预览缓存 + 本地 CAD 文件缓存 + 刷新按钮数据源
                     try
                     {
+                        // 原有预览缓存清理
                         var previewKey = GetStoragePreviewKey(storageObj);
                         if (!string.IsNullOrWhiteSpace(previewKey))
                         {
                             var cached = System.IO.Path.Combine(_previewCachePath ?? string.Empty, previewKey + ".png");
                             if (System.IO.File.Exists(cached)) System.IO.File.Delete(cached);
                         }
-                    }
-                    catch { }
 
-                    try { await RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode); } catch { }
+                        // 新增：删除本地 CadFiles 缓存（避免继续使用旧副本）
+                        await InvalidateLocalCadCacheAfterReplaceAsync(storageObj, localPath);
+                    }
+                    catch (Exception exCache)
+                    {
+                        LogManager.Instance.LogWarning($"替换后清理缓存失败: {exCache.Message}");
+                    }
+
+                    try
+                    {
+                        // 原有管理区刷新
+                        await RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode);
+
+                        // 新增：刷新按钮数据源（图元页签面板）
+                        await ReloadButtonsDataSourceAfterReplaceAsync();
+                    }
+                    catch (Exception exRefresh)
+                    {
+                        LogManager.Instance.LogWarning($"替换后刷新数据源失败: {exRefresh.Message}");
+                    }
 
                     System.Windows.MessageBox.Show("替换成功。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
@@ -4096,6 +3948,379 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+        // 2) 在 WpfMainWindow 类中新增这组辅助方法（建议放在 ReplaceFileMenuItem_Click 附近）
+
+        /// <summary>
+        /// 确保图元在本地 CadFiles 有可用副本：
+        /// - 优先使用现有 FilePath
+        /// - 失效时尝试从数据库回源恢复真实存储路径
+        /// - 再按项目规则缓存到本地并回写 fileStorage.FilePath
+        /// </summary>
+        private async Task<string?> EnsureLocalCachedFilePathAsync(FileStorage fileStorage)
+        {
+            if (fileStorage == null) return null;
+
+            try
+            {
+                string localDir = _cadStoragePath;
+                if (string.IsNullOrWhiteSpace(localDir))
+                {
+                    localDir = Path.Combine(AppPath, "CadFiles");
+                    _cadStoragePath = localDir;
+                }
+
+                if (!Directory.Exists(localDir))
+                    Directory.CreateDirectory(localDir);
+
+                string sourcePath = fileStorage.FilePath ?? string.Empty;
+
+                // 当前路径不可用：回源恢复
+                if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+                {
+                    string? recovered = await TryRecoverStorageSourcePathAsync(fileStorage);
+                    if (!string.IsNullOrWhiteSpace(recovered))
+                    {
+                        sourcePath = recovered;
+                        fileStorage.FilePath = recovered; // 暂存真实源路径
+                        LogManager.Instance.LogInfo($"已回源恢复图元路径: {recovered}");
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+                {
+                    LogManager.Instance.LogWarning($"无法找到源文件，未能缓存: {sourcePath}");
+                    return null;
+                }
+
+                string sourceExt = Path.GetExtension(sourcePath);
+                if (string.IsNullOrWhiteSpace(sourceExt)) sourceExt = ".dwg";
+
+                string realName = fileStorage.FileName ?? Path.GetFileNameWithoutExtension(sourcePath);
+                if (!realName.EndsWith(sourceExt, StringComparison.OrdinalIgnoreCase))
+                    realName = Path.GetFileNameWithoutExtension(realName) + sourceExt;
+
+                string localPath = Path.Combine(localDir, realName);
+
+                if (!File.Exists(localPath))
+                {
+                    File.Copy(sourcePath, localPath, true);
+                    LogManager.Instance.LogInfo($"已将图元缓存到本地: {localPath}");
+                }
+                else
+                {
+                    LogManager.Instance.LogInfo($"本地缓存已存在: {localPath}");
+                }
+
+                // 后续统一使用本地缓存路径（与原有逻辑一致）
+                fileStorage.FilePath = localPath;
+                return localPath;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"EnsureLocalCachedFilePathAsync 失败: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 当 storage.FilePath 失效时，尝试恢复真实源路径（优先数据库最新记录）
+        /// </summary>
+        private async Task<string?> TryRecoverStorageSourcePathAsync(FileStorage fileStorage)
+        {
+            if (fileStorage == null) return null;
+
+            // 1) 优先：根据 Id 查数据库最新记录
+            try
+            {
+                if (_databaseManager != null && fileStorage.Id > 0)
+                {
+                    var latest = await _databaseManager.GetFileByIdAsync(fileStorage.Id);
+                    if (latest != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(latest.FilePath) && File.Exists(latest.FilePath))
+                            return latest.FilePath;
+
+                        // 保留可用元数据，便于后续拼接路径
+                        if (string.IsNullOrWhiteSpace(fileStorage.FileStoredName))
+                            fileStorage.FileStoredName = latest.FileStoredName;
+                        if (string.IsNullOrWhiteSpace(fileStorage.CategoryType))
+                            fileStorage.CategoryType = latest.CategoryType;
+                        if (fileStorage.CategoryId <= 0)
+                            fileStorage.CategoryId = latest.CategoryId;
+                        if (string.IsNullOrWhiteSpace(fileStorage.FileName))
+                            fileStorage.FileName = latest.FileName;
+                    }
+                }
+            }
+            catch (Exception exDb)
+            {
+                LogManager.Instance.LogWarning($"按 Id 回源恢复失败: {exDb.Message}");
+            }
+
+            // 2) 兜底：按常见存储根 + categoryType/categoryId + fileStoredName 拼接
+            try
+            {
+                var roots = new List<string>();
+
+                if (!string.IsNullOrWhiteSpace(TextBox_Set_StoragePath?.Text))
+                    roots.Add(TextBox_Set_StoragePath.Text.Trim());
+
+                if (!string.IsNullOrWhiteSpace(VariableDictionary._storagePath))
+                    roots.Add(VariableDictionary._storagePath.Trim());
+
+                roots.Add(@"D:\GB_Tools\Cad_Sw_Library");
+                roots.Add(@"C:\GB_Tools\Cad_Sw_Library");
+
+                string categoryType = string.IsNullOrWhiteSpace(fileStorage.CategoryType) ? "sub" : fileStorage.CategoryType;
+                string categoryId = fileStorage.CategoryId.ToString();
+
+                var fileNames = new List<string>();
+                if (!string.IsNullOrWhiteSpace(fileStorage.FileStoredName)) fileNames.Add(fileStorage.FileStoredName);
+                if (!string.IsNullOrWhiteSpace(fileStorage.FileName)) fileNames.Add(fileStorage.FileName);
+
+                foreach (var root in roots.Where(r => !string.IsNullOrWhiteSpace(r)).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    foreach (var fn in fileNames.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        var candidate = Path.Combine(root, categoryType, categoryId, fn);
+                        if (File.Exists(candidate))
+                            return candidate;
+                    }
+                }
+            }
+            catch (Exception exPath)
+            {
+                LogManager.Instance.LogWarning($"按路径规则回源恢复失败: {exPath.Message}");
+            }
+
+            return null;
+        }
+
+
+
+        #region 清理本地 CAD 文件缓存的方法
+
+        /// <summary>
+        /// 仅清理“本次替换对应”的本地 CadFiles 缓存文件（按文件名精确定位）
+        /// 不做全量清理，避免影响其它按钮预热缓存。
+        /// </summary>
+        private async Task InvalidateLocalCadCacheAfterReplaceAsync(object storageObj, string localPath)
+        {
+            await Task.Run(() =>
+            {
+                try
+                {
+                    // 中文注释：CadFiles 根目录（与 DynamicButton_Click 缓存规则保持一致）
+                    string cacheRoot = string.IsNullOrWhiteSpace(_cadStoragePath)
+                        ? System.IO.Path.Combine(AppPath, "CadFiles")
+                        : _cadStoragePath;
+
+                    if (!System.IO.Directory.Exists(cacheRoot))
+                        return;
+
+                    // 中文注释：优先按 storage 计算缓存文件名（最精确）
+                    string storageFileName = GetStorageStringProperty(storageObj, "FileName");
+                    string storageFilePath = GetStorageStringProperty(storageObj, "FilePath");
+
+                    string? cachePath = BuildExactCadCachePath(cacheRoot, storageFileName, storageFilePath, localPath);
+
+                    if (string.IsNullOrWhiteSpace(cachePath))
+                    {
+                        LogManager.Instance.LogInfo("未能解析本次替换对应的本地缓存路径，跳过清理。");
+                        return;
+                    }
+
+                    if (System.IO.File.Exists(cachePath))
+                    {
+                        System.IO.File.Delete(cachePath);
+                        LogManager.Instance.LogInfo($"已精确删除本地缓存文件: {cachePath}");
+                    }
+                    else
+                    {
+                        LogManager.Instance.LogInfo($"本次替换对应缓存文件不存在，无需删除: {cachePath}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogWarning($"InvalidateLocalCadCacheAfterReplaceAsync 异常: {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// 按项目现有缓存命名规则构造“本次替换对应”的 CadFiles 缓存路径
+        /// 规则：realName = storage.FileName（无扩展则补扩展），扩展优先 FilePath，再回退 localPath。
+        /// </summary>
+        private string? BuildExactCadCachePath(string cacheRoot, string storageFileName, string storageFilePath, string localPath)
+        {
+            try
+            {
+                // 中文注释：优先从 storage.FilePath 取扩展名，其次用本地替换文件扩展名
+                string ext = System.IO.Path.GetExtension(storageFilePath);
+                if (string.IsNullOrWhiteSpace(ext))
+                    ext = System.IO.Path.GetExtension(localPath);
+
+                // 中文注释：文件名优先 storage.FileName；若缺失则回退 localPath 文件名
+                string realName = storageFileName;
+                if (string.IsNullOrWhiteSpace(realName))
+                    realName = System.IO.Path.GetFileNameWithoutExtension(localPath);
+
+                if (string.IsNullOrWhiteSpace(realName))
+                    return null;
+
+                // 中文注释：若 FileName 没有扩展名，按规则补上
+                if (string.IsNullOrWhiteSpace(System.IO.Path.GetExtension(realName)) && !string.IsNullOrWhiteSpace(ext))
+                {
+                    realName = System.IO.Path.GetFileNameWithoutExtension(realName) + ext;
+                }
+
+                return System.IO.Path.Combine(cacheRoot, realName);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 替换成功后刷新按钮数据源，确保按钮 Tag 使用最新文件记录
+        /// </summary>
+        private async Task ReloadButtonsDataSourceAfterReplaceAsync()
+        {
+            try
+            {
+                // 刷新当前分类右侧文件列表
+                await RefreshFilesForCurrentCategoryAsync();
+
+                // 刷新九大主分类按钮面板（数据库模式）
+                if (_useDatabaseMode && _databaseManager != null && _databaseManager.IsDatabaseAvailable)
+                {
+                    await RefreshAllCategoryPanelsAsync();
+                }
+
+                // 若当前正停在主分类页签，强制重载当前页签按钮
+                var selectedTab = MainTabControl?.SelectedItem as TabItem;
+                if (selectedTab != null)
+                {
+                    string header = (selectedTab.Header?.ToString() ?? string.Empty).Trim();
+                    if (header == "工艺" || header == "建筑" || header == "结构" ||
+                        header == "电气" || header == "给排水" || header == "暖通" ||
+                        header == "自控" || header == "总图" || header == "公共图")
+                    {
+                        LoadButtonsForMainCategoryTab(selectedTab, header);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"ReloadButtonsDataSourceAfterReplaceAsync 异常: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 反射读取 storage 上的字符串属性
+        /// </summary>
+        private string GetStorageStringProperty(object storageObj, string propName)
+        {
+            if (storageObj == null || string.IsNullOrWhiteSpace(propName))
+                return string.Empty;
+
+            try
+            {
+                var t = storageObj.GetType();
+                var p = t.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (p == null) return string.Empty;
+                var v = p.GetValue(storageObj);
+                return v?.ToString() ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+        /// <summary>
+        /// 等待命令端返回插入结果（成功/失败）
+        /// </summary>
+        private async Task<(bool success, string error)> ExecuteInsertAndWaitResultAsync(string sourcePath, int timeoutMs = 20000)
+        {
+            var tcs = new TaskCompletionSource<(bool success, string error)>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            void OnCompleted(bool success, string? error)
+            {
+                tcs.TrySetResult((success, error ?? string.Empty));
+            }
+
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted += OnCompleted;
+            try
+            {
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(sourcePath);
+
+                var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
+                if (completed != tcs.Task)
+                    return (false, "等待插入结果超时。");
+
+                return await tcs.Task;
+            }
+            finally
+            {
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted -= OnCompleted;
+            }
+        }
+
+        /// <summary>
+        /// 仅在插入成功后清理本次 CadFiles 缓存
+        /// </summary>
+        private async Task CleanupLocalCadCacheAfterInsertAsync(string? insertedPath)
+        {
+            if (string.IsNullOrWhiteSpace(insertedPath))
+                return;
+
+            try
+            {
+                string cacheRoot = string.IsNullOrWhiteSpace(_cadStoragePath)
+                    ? Path.Combine(AppPath, "CadFiles")
+                    : _cadStoragePath;
+
+                if (!Directory.Exists(cacheRoot))
+                    return;
+
+                string fullPath = Path.GetFullPath(insertedPath);
+                string fullCache = Path.GetFullPath(cacheRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+                // 只删 CadFiles 目录内文件，避免误删服务器源文件
+                if (!fullPath.StartsWith(fullCache, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                const int maxRetry = 8;
+                for (int i = 0; i < maxRetry; i++)
+                {
+                    try
+                    {
+                        if (File.Exists(fullPath))
+                        {
+                            File.Delete(fullPath);
+                            LogManager.Instance.LogInfo($"插入成功后已清理本地缓存: {fullPath}");
+                        }
+                        return;
+                    }
+                    catch (IOException)
+                    {
+                        await Task.Delay(200);
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        await Task.Delay(200);
+                    }
+                }
+
+                LogManager.Instance.LogWarning($"插入后缓存清理失败（可能仍被占用）: {fullPath}");
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"CleanupLocalCadCacheAfterInsertAsync 异常: {ex.Message}");
+            }
+        }
+        #endregion
 
         /// <summary>
         /// 添加文件名处理方法
@@ -4543,7 +4768,7 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 
+        /// 尝试异步调用替换API
         /// </summary>
         /// <param name="storageObj"></param>
         /// <param name="localPath"></param>
@@ -4625,7 +4850,7 @@ namespace GB_NewCadPlus_IV
             }
         }
 
-       
+
         #endregion
 
         /// <summary>
@@ -4658,145 +4883,145 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 通过Row索引查找Grid
         /// </summary>
-        private Grid FindGridByRow(DependencyObject parent, int targetRow)
-        {
-            LogManager.Instance.LogInfo($"开始查找Row={targetRow}的Grid");
+        //private Grid FindGridByRow(DependencyObject parent, int targetRow)
+        //{
+        //    LogManager.Instance.LogInfo($"开始查找Row={targetRow}的Grid");
 
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
+        //    for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        //    {
+        //        var child = VisualTreeHelper.GetChild(parent, i);
 
-                // 检查是否是Grid且有Grid.Row属性
-                if (child is Grid grid)
-                {
-                    var row = Grid.GetRow(grid);
-                    LogManager.Instance.LogInfo($"找到Grid，Row={row}");
-                    if (row == targetRow)
-                    {
-                        LogManager.Instance.LogInfo($"找到目标Grid，Row={targetRow}");
-                        return grid;
-                    }
-                }
+        //        // 检查是否是Grid且有Grid.Row属性
+        //        if (child is Grid grid)
+        //        {
+        //            var row = Grid.GetRow(grid);
+        //            LogManager.Instance.LogInfo($"找到Grid，Row={row}");
+        //            if (row == targetRow)
+        //            {
+        //                LogManager.Instance.LogInfo($"找到目标Grid，Row={targetRow}");
+        //                return grid;
+        //            }
+        //        }
 
-                // 递归查找子元素
-                var result = FindGridByRow(child, targetRow);
-                if (result != null)
-                {
-                    return result;
-                }
-            }
+        //        // 递归查找子元素
+        //        var result = FindGridByRow(child, targetRow);
+        //        if (result != null)
+        //        {
+        //            return result;
+        //        }
+        //    }
 
-            return null;
-        }
+        //    return null;
+        //}
 
         /// <summary>
         /// 加载CAD子分类（递归加载多级子分类）
         /// </summary>
-        private async Task LoadCadSubcategoriesAsync(int parentId, TreeViewItem parentItem, int level)
-        {
-            try
-            {
-                var subcategories = await _databaseManager.GetCadSubcategoriesByParentIdAsync(parentId);// 获取指定父级ID的子分类
-                foreach (var subcategory in subcategories)// 遍历子分类
-                {
-                    // 创建子分类节点
-                    string indent = new string(' ', level * 2); // 根据层级添加缩进
-                    TreeViewItem subcategoryItem = new TreeViewItem// 创建子分类节点
-                    {
-                        Header = $"{indent}{subcategory.DisplayName}",// 显示子分类名称
-                        Tag = new { Type = "Subcategory", Id = subcategory.Id, Object = subcategory }// 设置Tag属性
-                    };
-                    await LoadCadGraphicsAsync(subcategory.Id, subcategoryItem); // 加载图元
-                    await LoadCadSubcategoriesAsync(subcategory.Id, subcategoryItem, level + 1); // 递归加载子子分类
-                    parentItem.Items.Add(subcategoryItem);// 添加子分类节点到父分类节点
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"加载CAD子分类时出错: {ex.Message}");
-            }
-        }
+        //private async Task LoadCadSubcategoriesAsync(int parentId, TreeViewItem parentItem, int level)
+        //{
+        //    try
+        //    {
+        //        var subcategories = await _databaseManager.GetCadSubcategoriesByParentIdAsync(parentId);// 获取指定父级ID的子分类
+        //        foreach (var subcategory in subcategories)// 遍历子分类
+        //        {
+        //            // 创建子分类节点
+        //            string indent = new string(' ', level * 2); // 根据层级添加缩进
+        //            TreeViewItem subcategoryItem = new TreeViewItem// 创建子分类节点
+        //            {
+        //                Header = $"{indent}{subcategory.DisplayName}",// 显示子分类名称
+        //                Tag = new { Type = "Subcategory", Id = subcategory.Id, Object = subcategory }// 设置Tag属性
+        //            };
+        //            await LoadCadGraphicsAsync(subcategory.Id, subcategoryItem); // 加载图元
+        //            await LoadCadSubcategoriesAsync(subcategory.Id, subcategoryItem, level + 1); // 递归加载子子分类
+        //            parentItem.Items.Add(subcategoryItem);// 添加子分类节点到父分类节点
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"加载CAD子分类时出错: {ex.Message}");
+        //    }
+        //}
 
         /// <summary>
         /// 加载CAD图元
         /// </summary>
-        private async Task LoadCadGraphicsAsync(int subcategoryId, TreeViewItem parentItem)
-        {
-            try
-            {
-                var files = await _databaseManager.GetFileStorageBySubcategoryIdAsync(subcategoryId);
-                foreach (var file in files)
-                {
-                    TreeViewItem fileItem = new TreeViewItem
-                    {
-                        Header = $"    {file.LayerName}",
-                        Tag = new { Type = "Graphic", Id = file.Id, Object = file }
-                    };
-                    parentItem.Items.Add(fileItem);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"加载CAD图元时出错: {ex.Message}");
-            }
-        }
+        //private async Task LoadCadGraphicsAsync(int subcategoryId, TreeViewItem parentItem)
+        //{
+        //    try
+        //    {
+        //        var files = await _databaseManager.GetFileStorageBySubcategoryIdAsync(subcategoryId);
+        //        foreach (var file in files)
+        //        {
+        //            TreeViewItem fileItem = new TreeViewItem
+        //            {
+        //                Header = $"    {file.LayerName}",
+        //                Tag = new { Type = "Graphic", Id = file.Id, Object = file }
+        //            };
+        //            parentItem.Items.Add(fileItem);
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"加载CAD图元时出错: {ex.Message}");
+        //    }
+        //}
 
         /// <summary>
         /// 加载SW子分类（递归加载多级子分类）
         /// </summary>
-        private async Task LoadSwSubcategoriesAsync(int parentId, TreeViewItem parentItem, int level)
-        {
-            try
-            {
-                var subcategories = await _databaseManager.GetSwSubcategoriesByParentIdAsync(parentId);
-                foreach (var subcategory in subcategories)
-                {
-                    // 创建子分类节点
-                    string indent = new string(' ', level * 2); // 根据层级添加缩进
-                    TreeViewItem subcategoryItem = new TreeViewItem
-                    {
-                        Header = $"{indent}{subcategory.DisplayName}",
-                        Tag = new { Type = "Subcategory", Id = subcategory.Id, Object = subcategory }
-                    };
+        //private async Task LoadSwSubcategoriesAsync(int parentId, TreeViewItem parentItem, int level)
+        //{
+        //    try
+        //    {
+        //        var subcategories = await _databaseManager.GetSwSubcategoriesByParentIdAsync(parentId);
+        //        foreach (var subcategory in subcategories)
+        //        {
+        //            // 创建子分类节点
+        //            string indent = new string(' ', level * 2); // 根据层级添加缩进
+        //            TreeViewItem subcategoryItem = new TreeViewItem
+        //            {
+        //                Header = $"{indent}{subcategory.DisplayName}",
+        //                Tag = new { Type = "Subcategory", Id = subcategory.Id, Object = subcategory }
+        //            };
 
-                    // 加载图元
-                    await LoadSwGraphicsAsync(subcategory.Id, subcategoryItem);
+        //            // 加载图元
+        //            await LoadSwGraphicsAsync(subcategory.Id, subcategoryItem);
 
-                    // 递归加载子子分类
-                    await LoadSwSubcategoriesAsync(subcategory.Id, subcategoryItem, level + 1);
+        //            // 递归加载子子分类
+        //            await LoadSwSubcategoriesAsync(subcategory.Id, subcategoryItem, level + 1);
 
-                    parentItem.Items.Add(subcategoryItem);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"加载SW子分类时出错: {ex.Message}");
-            }
-        }
+        //            parentItem.Items.Add(subcategoryItem);
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"加载SW子分类时出错: {ex.Message}");
+        //    }
+        //}
 
         /// <summary>
         /// 加载SW图元
         /// </summary>
-        private async Task LoadSwGraphicsAsync(int subcategoryId, TreeViewItem parentItem)
-        {
-            try
-            {
-                var graphics = await _databaseManager.GetSwGraphicsBySubcategoryIdAsync(subcategoryId);
-                foreach (var graphic in graphics)
-                {
-                    TreeViewItem graphicItem = new TreeViewItem
-                    {
-                        Header = $"    {graphic.FileName}",
-                        Tag = new { Type = "Graphic", Id = graphic.Id, Object = graphic }
-                    };
-                    parentItem.Items.Add(graphicItem);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"加载SW图元时出错: {ex.Message}");
-            }
-        }
+        //private async Task LoadSwGraphicsAsync(int subcategoryId, TreeViewItem parentItem)
+        //{
+        //    try
+        //    {
+        //        var graphics = await _databaseManager.GetSwGraphicsBySubcategoryIdAsync(subcategoryId);
+        //        foreach (var graphic in graphics)
+        //        {
+        //            TreeViewItem graphicItem = new TreeViewItem
+        //            {
+        //                Header = $"    {graphic.FileName}",
+        //                Tag = new { Type = "Graphic", Id = graphic.Id, Object = graphic }
+        //            };
+        //            parentItem.Items.Add(graphicItem);
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"加载SW图元时出错: {ex.Message}");
+        //    }
+        //}
 
 
         #endregion
@@ -4835,7 +5060,8 @@ namespace GB_NewCadPlus_IV
 
                 // 刷新菜单项
                 var RefreshItem = new System.Windows.Controls.MenuItem { Header = "刷新" };
-                deleteItem.Click += 刷新文件列表按钮_Click;
+                //deleteItem.Click += 刷新文件列表按钮_Click;
+                RefreshItem.Click += 刷新文件列表按钮_Click;
                 contextMenu.Items.Add(RefreshItem);
 
                 treeView.ContextMenu = contextMenu;
@@ -5619,9 +5845,9 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                _currentOperation = ManagementOperationType.None;
-                InitializeCategoryPropertyGrid();
-                ClearFileUploadInterface();
+                _currentOperation = ManagementOperationType.None;// 重置当前操作状态
+                InitializeCategoryPropertyGrid();// 重置分类属性编辑界面
+                InitializeFileUploadInterface();// 重置文件上传界面
                 MessageBox.Show("操作已取消", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -5729,8 +5955,6 @@ namespace GB_NewCadPlus_IV
             }
         }
 
-
-
         public async Task UploadFileAndSaveToDatabase()
         {
             // 从 UI 状态构造 DTO，然后委托到核心方法
@@ -5786,174 +6010,6 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show($"上传失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
-
-
-        /// <summary>
-        /// 上传文件并保存到数据库
-        /// </summary>
-        /// <returns></returns>
-        /// <exception cref="Exception"></exception>
-        //public async Task UploadFileAndSaveToDatabase()
-        //{
-        //    List<string> uploadedFiles = new List<string>(); // 记录已上传的文件路径，用于回滚
-        //    FileStorage savedFileStorage = null; // 记录已保存的文件记录
-        //    FileAttribute savedFileAttribute = null; // 记录已保存的属性记录
-        //    bool transactionSuccess = false;
-
-        //    try
-        //    {
-        //        if (string.IsNullOrEmpty(_selectedFilePath) || _selectedCategoryNode == null)
-        //        {
-        //            throw new Exception("文件路径或分类节点为空");
-        //        }
-
-        //        // 1. 获取文件信息
-        //        var fileInfo = new FileInfo(_selectedFilePath);
-        //        string fileName = fileInfo.Name;
-        //        string displayName = Path.GetFileNameWithoutExtension(fileName);
-        //        string description = $"上传文件: {fileName}";
-        //        var fileStorage = new FileStorage();
-        //        // 2. 使用FileManager上传主文件到服务器指定路径
-        //        using (var fileStream = File.OpenRead(_selectedFilePath))
-        //        {
-        //            fileStorage = await _fileManager.UploadFileAsync(_databaseManager,
-        //                _selectedCategoryNode.Id,
-        //                _selectedCategoryNode.Level == 0 ? "main" : "sub",
-        //                fileName,
-        //                fileStream,
-        //                description,
-        //                Environment.UserName
-        //            );
-
-        //            // 保存上传后的文件信息
-        //            _currentFileStorage = fileStorage;
-        //            savedFileStorage = fileStorage;
-        //            uploadedFiles.Add(fileStorage.FilePath); // 记录已上传的文件路径
-        //        }
-
-        //        // 3. 如果有预览图片，上传预览图片
-        //        string previewStoredPath = null;
-        //        if (!string.IsNullOrEmpty(_selectedPreviewImagePath) && File.Exists(_selectedPreviewImagePath))
-        //        {
-        //            var previewInfo = new FileInfo(_selectedPreviewImagePath);
-        //            string previewFileName = $"{Path.GetFileNameWithoutExtension(_selectedPreviewImagePath)}_preview{previewInfo.Extension}";
-
-        //            using (var previewStream = File.OpenRead(_selectedPreviewImagePath))
-        //            {
-        //                // 生成预览文件存储路径
-        //                string previewStoredName = $"{Guid.NewGuid()}{previewInfo.Extension}";
-        //                previewStoredPath = Path.Combine(
-        //                    Path.GetDirectoryName(_currentFileStorage.FilePath),
-        //                    previewStoredName);
-
-        //                // 复制预览图片到同一目录
-        //                File.Copy(_selectedPreviewImagePath, previewStoredPath, true);
-
-        //                _currentFileStorage.PreviewImageName = previewStoredName;
-        //                _currentFileStorage.PreviewImagePath = previewStoredPath;
-        //                uploadedFiles.Add(previewStoredPath); // 记录预览文件路径
-        //            }
-        //        }
-
-        //        // 4. 创建文件属性对象
-        //        _currentFileAttribute = new FileAttribute
-        //        {
-        //            //FileStorageId = _currentFileStorage.Id,
-        //            FileName = _currentFileStorage.FileName,
-        //            CreatedAt = DateTime.Now,
-        //            UpdatedAt = DateTime.Now
-        //        };
-
-        //        // 5. 从属性编辑网格中获取属性值
-        //        var gridProperties = CategoryPropertiesDataGrid.ItemsSource as List<CategoryPropertyEditModel>;
-        //        if (gridProperties != null)
-        //        {
-        //            foreach (var property in gridProperties)
-        //            {
-        //                // 使用实例调用
-        //                SetFileAttributeProperty(_currentFileAttribute, property.PropertyName1, property.PropertyValue1);
-        //                SetFileAttributeProperty(_currentFileAttribute, property.PropertyName2, property.PropertyValue2);
-        //            }
-        //        }
-        //        if (_currentFileAttribute.FileName == null)
-        //        {
-        //            MessageBox.Show("请填写文件名称", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-        //            return;
-        //        }
-
-        //        // 6. 保存文件属性到数据库
-        //        int attributeResult = await _databaseManager.AddFileAttributeAsync(_currentFileAttribute);
-        //        if (attributeResult <= 0)
-        //        {
-        //            LogManager.Instance.LogInfo("保存文件属性失败");
-
-        //        }
-        //        else
-        //        {
-        //            LogManager.Instance.LogInfo("保存文件属性到数据库:成功");
-        //        }
-        //        //获取文件属性ID
-        //        _currentFileAttribute = await _databaseManager.GetFileAttributeAsync(_currentFileStorage.DisplayName);
-        //        if (_currentFileAttribute == null || _currentFileAttribute.Id == null)
-        //        {
-        //            LogManager.Instance.LogInfo("获取文件属性ID失败");
-        //            // 发生异常，需要回滚操作
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-        //            return;
-        //        }
-        //        _currentFileStorage.FileAttributeId = _currentFileAttribute.Id;
-
-        //        //新加文件到数据库中
-        //        var fileResult = await _databaseManager.AddFileStorageAsync(_currentFileStorage);
-        //        if (fileResult == 0)
-        //        {
-        //            LogManager.Instance.LogInfo("保存文件记录到数据库:失败");
-        //            // 发生异常，需要回滚操作
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-        //            return;
-        //        }
-        //        else
-        //        {
-        //            LogManager.Instance.LogInfo("保存文件记录到数据库:成功");
-        //        }
-        //        ;
-        //        _currentFileStorage = await _databaseManager.GetFileStorageAsync(_currentFileStorage.FileHash);//获取文件的基本信息
-        //        _currentFileAttribute.FileStorageId = _currentFileStorage.Id;//文件属性ID
-
-        //        await _databaseManager.UpdateFileAttributeAsync(_currentFileAttribute);//更新文件属性
-        //        // 8. 处理标签信息
-        //        // await FileManager.ProcessFileTags(_currentFileStorage.Id, properties);
-
-        //        // 9. 更新分类统计
-        //        var updateBool = await _databaseManager.UpdateCategoryStatisticsAsync(
-        //            _currentFileStorage.CategoryId,
-        //            _currentFileStorage.CategoryType);
-
-        //        // 如果所有操作都成功，标记事务成功
-        //        transactionSuccess = true;
-        //        // 11. 刷新分类树和界面显示
-        //        // 替换为：
-        //        //await RefreshCurrentCategoryFilesAsync();
-        //        await RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode);
-        //        MessageBox.Show($"文件已成功上传并保存到服务器指定路径\n文件路径: {_currentFileStorage.FilePath}",
-        //            "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        // 发生异常，需要回滚操作
-        //        await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-        //        throw new Exception($"文件上传和数据库保存失败: {ex.Message}", ex);
-        //    }
-        //    finally
-        //    {
-        //        // 如果事务失败，执行回滚
-        //        if (!transactionSuccess)
-        //        {
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-        //        }
-        //    }
-        //}
 
         public async Task UploadFileAndSaveToDatabase(ImportEntityDto dto)
         {
@@ -6028,7 +6084,7 @@ namespace GB_NewCadPlus_IV
                         LogManager.Instance.LogWarning($"复制预览图片失败（继续）：{exPreview.Message}");
                     }
                 }
-               
+
                 // 3) 准备 FileAttribute（确保时间与必要字段）
                 dto.FileAttribute.FileName = dto.FileStorage.FileName ?? dto.FileStorage.DisplayName ?? dto.FileStorage.FileStoredName;
                 dto.FileAttribute.CreatedAt = dto.FileAttribute.CreatedAt == default ? DateTime.Now : dto.FileAttribute.CreatedAt;
@@ -6097,160 +6153,6 @@ namespace GB_NewCadPlus_IV
                 _uploadSemaphore.Release();
             }
         }
-
-
-        /// <summary>
-        /// 上传文件并保存到数据库
-        /// </summary>
-        /// <returns></returns>
-        /// <exception cref="Exception"></exception>
-        //public async Task UploadFileAndSaveToDatabase(ImportEntityDto dto)
-        //{
-
-        //    await _uploadSemaphore.WaitAsync();
-        //    List<string> uploadedFiles = new List<string>(); // 上传成功的文件列表
-        //    bool transactionSuccess = false; // 事务成功标志
-
-        //    try
-        //    {
-        //        // 基本校验
-        //        if (dto == null || dto.FileStorage == null || string.IsNullOrEmpty(dto.FileStorage.FilePath))
-        //            throw new ArgumentException("ImportEntityDto 参数无效或文件路径为空");
-        //        if (_databaseManager == null)
-        //            throw new InvalidOperationException("数据库管理器未初始化");
-
-        //        // 1. 上传主文件
-        //        var fileInfo = new FileInfo(dto.FileStorage.FilePath);
-        //        string fileName = fileInfo.Name;
-        //        string description = dto.FileStorage.Description ?? $"上传文件: {fileName}";
-        //        using (var fileStream = File.OpenRead(dto.FileStorage.FilePath))
-        //        {
-        //            var uploadedStorage = await _fileManager.UploadFileAsync(
-        //                _databaseManager,
-        //                dto.FileStorage.CategoryId,
-        //                dto.FileStorage.CategoryType,
-        //                fileName,
-        //                fileStream,
-        //                description,
-        //                dto.FileStorage.CreatedBy ?? Environment.UserName
-        //            );
-
-        //            if (uploadedStorage == null)
-        //            {
-        //                await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute);
-        //                throw new Exception("上传文件失败：返回的上传信息为空。");
-        //            }
-
-        //            // 用上传后的路径和信息覆盖，但保留用户修改的 DisplayName 和 FileName
-        //            dto.FileStorage.FileStoredName = uploadedStorage.FileStoredName;
-        //            dto.FileStorage.FilePath = uploadedStorage.FilePath;
-        //            dto.FileStorage.FileSize = uploadedStorage.FileSize;
-        //            dto.FileStorage.FileType = uploadedStorage.FileType;
-        //            dto.FileStorage.FileHash = uploadedStorage.FileHash;
-        //            // 保留用户在界面上修改的 DisplayName 和 FileName，不要覆盖
-        //            // dto.FileStorage.DisplayName = Path.GetFileNameWithoutExtension(dto.FileStorage.FileName) ?? dto.FileStorage.DisplayName; // 已移除覆盖逻辑
-        //            // dto.FileStorage.FileName = fileName; // 保留原有的 FileName
-        //            uploadedFiles.Add(dto.FileStorage.FilePath);
-        //        }
-
-        //        // 2. 上传预览图片（如果有）
-        //        if (!string.IsNullOrEmpty(dto.PreviewImagePath) && File.Exists(dto.PreviewImagePath))
-        //        {
-        //            var previewInfo = new FileInfo(dto.PreviewImagePath);
-        //            string previewStoredName = $"{Guid.NewGuid()}{previewInfo.Extension}";
-        //            string previewStoredPath = Path.Combine(
-        //                Path.GetDirectoryName(dto.FileStorage.FilePath),
-        //                previewStoredName);
-
-        //            File.Copy(dto.PreviewImagePath, previewStoredPath, true);
-        //            dto.FileStorage.PreviewImageName = previewStoredName;
-        //            dto.FileStorage.PreviewImagePath = previewStoredPath;
-        //            uploadedFiles.Add(previewStoredPath);
-        //        }
-
-        //        // 3. 保存文件属性到数据库
-        //        dto.FileAttribute.FileName = dto.FileStorage.FileName;
-        //        dto.FileAttribute.CreatedAt = DateTime.Now;
-        //        dto.FileAttribute.UpdatedAt = DateTime.Now;
-        //        // 文件属性的 FileStorageId 需要在文件记录保存后才能关联，所以先保存属性获取 ID，再更新属性关联 FileStorageId
-        //        int attributeResult = await _databaseManager.AddFileAttributeAsync(dto.FileAttribute);
-        //        if (attributeResult <= 0)
-        //        {
-        //            LogManager.Instance.LogInfo("保存文件属性失败");
-        //            // 发生异常，需要回滚操作
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute);
-        //            return;
-        //        }
-        //        LogManager.Instance.LogInfo("保存文件属性到数据库:成功");
-
-        //        // 获取属性ID并关联（尽量使用返回的 ID，如果 DatabaseManager 提供返回ID的重载建议改为使用）
-        //        var dbAttribute = await _databaseManager.GetFileAttributeAsync(dto.FileStorage.DisplayName);
-        //        if (dbAttribute == null || dbAttribute.Id == null)
-        //        {
-        //            LogManager.Instance.LogInfo("获取文件属性ID失败");
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute);
-        //            return;
-        //        }
-        //        dto.FileAttribute.Id = dbAttribute.Id;
-        //        dto.FileStorage.FileAttributeId = dbAttribute.Id;
-
-        //        // 4. 保存文件记录到数据库
-        //        var fileResult = await _databaseManager.AddFileStorageAsync(dto.FileStorage);
-        //        if (fileResult == 0)
-        //        {
-        //            LogManager.Instance.LogInfo("保存文件记录到数据库:失败");
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute);
-        //            return;
-        //        }
-        //        LogManager.Instance.LogInfo("保存文件记录到数据库:成功");
-
-        //        // 5. 更新属性的FileStorageId (通过哈希查找有风险，但保持现有逻辑)
-        //        var dbStorage = await _databaseManager.GetFileStorageAsync(dto.FileStorage.FileHash);
-        //        if (dbStorage == null || dbStorage.Id == 0)
-        //        {
-        //            LogManager.Instance.LogInfo("获取存储记录失败");
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute);
-        //            return;
-        //        }
-        //        dto.FileAttribute.FileStorageId = dbStorage.Id;
-        //        await _databaseManager.UpdateFileAttributeAsync(dto.FileAttribute);
-
-        //        // 6. 更新分类统计
-        //        await _databaseManager.UpdateCategoryStatisticsAsync(dto.FileStorage.CategoryId, dto.FileStorage.CategoryType);
-
-        //        transactionSuccess = true;
-
-        //        // 7. 刷新界面（确保在 UI 线程）
-        //        await Dispatcher.InvokeAsync(async () =>
-        //        {
-        //            try
-        //            {
-        //                await RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode);
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                LogManager.Instance.LogError($"刷新分类显示失败: {ex.Message}");
-        //            }
-        //        });
-
-        //        MessageBox.Show($"文件已成功上传并保存到服务器指定路径\n文件路径: {dto.FileStorage.FilePath}",
-        //            "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute);
-        //        LogManager.Instance.LogError($"UploadFileAndSaveToDatabase 错误: {ex.Message}");
-        //        throw;
-        //    }
-        //    finally
-        //    {
-        //        if (!transactionSuccess)
-        //        {
-        //            await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute);
-        //        }
-        //        _uploadSemaphore.Release();
-        //    }
-        //}
 
         /// <summary>
         /// 在 PropertiesDataGrid 显示完毕后调用，保存一次快照用于后续比较
@@ -6580,6 +6482,7 @@ namespace GB_NewCadPlus_IV
             _selectedPreviewImagePath = null;
             _currentFileStorage = null;
             _currentFileAttribute = null;
+            _selectedCategoryNode = null;
         }
 
         /// <summary>
@@ -6642,31 +6545,40 @@ namespace GB_NewCadPlus_IV
                         attribute.StandardNumber = propertyValue;
                         break;
                     case "功率":
-                        attribute.Power = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal power))
+                            attribute.Power = power;
                         break;
                     case "容积":
-                        attribute.Volume = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal volume))
+                            attribute.Volume = volume;
                         break;
                     case "压力":
-                        attribute.Pressure = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal pressure))
+                            attribute.Pressure = pressure;
                         break;
                     case "温度":
-                        attribute.Temperature = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal temperature))
+                            attribute.Temperature = temperature;
                         break;
                     case "直径":
-                        attribute.Diameter = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal diameter))
+                            attribute.Diameter = diameter;
                         break;
                     case "外径":
-                        attribute.OuterDiameter = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal outerDiameter))
+                            attribute.OuterDiameter = outerDiameter;
                         break;
                     case "内径":
-                        attribute.InnerDiameter = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal innerDiameter))
+                            attribute.InnerDiameter = innerDiameter;
                         break;
                     case "厚度":
-                        attribute.Thickness = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal thickness))
+                            attribute.Thickness = thickness;
                         break;
                     case "重量":
-                        attribute.Weight = propertyValue;
+                        if (decimal.TryParse(propertyValue, out decimal weight))
+                            attribute.Weight = weight;
                         break;
                     case "型号":
                         attribute.Model = propertyValue;
@@ -6819,26 +6731,6 @@ namespace GB_NewCadPlus_IV
             {
                 LogManager.Instance.LogInfo($"处理文件选择时出错: {ex.Message}");
                 MessageBox.Show($"处理文件选择时出错: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        /// <summary>
-        /// 显示文件基本信息
-        /// </summary>
-        /// <param name="fileStorage"></param>
-        private void DisplayFileBasicInfo(FileStorage fileStorage)
-        {
-            try
-            {
-                file_Path.Text = fileStorage.FilePath ?? "";
-                File_Name.Text = fileStorage.DisplayName ?? fileStorage.FileName ?? "";
-                File_Size.Text = fileStorage.FileSize > 0 ? $"{fileStorage.FileSize / 1024.0:F2} KB" : "";
-                File_Type.Text = fileStorage.FileType ?? "";
-                view_File_Path.Text = fileStorage.PreviewImagePath ?? "无预览图片";
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"显示文件基本信息时出错: {ex.Message}");
             }
         }
 
@@ -8056,7 +7948,7 @@ namespace GB_NewCadPlus_IV
                 try
                 {
                     // 直接调用选择方法，这个方法内部应该处理好与CAD的交互，确保在正确的线程上执行
-                    dto = Helpers.SelectionImportHelper.PickAndReadEntity();
+                    dto = SelectionImportHelper.PickAndReadEntity();
                 }
                 catch (Exception exSel)
                 {
@@ -8078,7 +7970,7 @@ namespace GB_NewCadPlus_IV
                 ApplyAttributeTextToDto(dto);
                 // 在 UI 线程显示确认窗口（安全）
                 var owner = Window.GetWindow(this);
-                var confirmWindow = new Views.ImportConfirmWindow(dto, this);
+                var confirmWindow = new GB_NewCadPlus_IV.Views.ImportConfirmWindow(dto, this);
                 if (owner != null) confirmWindow.Owner = owner;
 
                 bool? dialogResult = null;
@@ -8381,7 +8273,7 @@ namespace GB_NewCadPlus_IV
         private void 加载Excel表_Click(object sender, RoutedEventArgs e)
         {
             Env.Document.SendStringToExecute("ImportTableFromExcel ", false, false, false);
-            
+
         }
 
         private void 属性同步_Click(object sender, RoutedEventArgs e)
@@ -8539,6 +8431,7 @@ namespace GB_NewCadPlus_IV
 
         private void 绘制进口管道_Click(object sender, RoutedEventArgs e)
         {
+            // 设置绘图比例到全局变量，供命令使用
             VariableDictionary.textBoxScale = GetDrawingScaleFromTextBox();
             Env.Document.SendStringToExecute("DrawInletPipeByClicks ", false, false, false);
             //Env.Document.SendStringToExecute("Draw_GD_PipeLine_DynamicBlock ", false, false, false);
@@ -8712,7 +8605,7 @@ namespace GB_NewCadPlus_IV
             {
                 _layerInfo = new List<LayerInfo>();
                 _workingDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                                               "GB_NewCadPlus_IV");
+                                               "GB_NewCadPlus_III");
                 if (!Directory.Exists(_workingDirectory))
                     Directory.CreateDirectory(_workingDirectory);
             }
@@ -9306,6 +9199,9 @@ namespace GB_NewCadPlus_IV
                     }
 
                     MessageBox.Show("临时管道表已插入当前空间。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+                    // 插入成功后立即删除该次临时文件，避免累积
+                    TryDeleteTempFile(_lastSavedPipeTablePath);
+                    _lastSavedPipeTablePath = string.Empty;
                 }
             }
             catch (Exception ex)
@@ -9368,7 +9264,7 @@ namespace GB_NewCadPlus_IV
 
         /// <summary>
         /// 将管道汇总表生成到一个临时 DWG 文件（ModelSpace，表放在原点）。
-        /// 文件名格式：{layerPart}_{yyyyMMdd_HHmmss}.dwg，保存在 %TEMP%\GB_NewCadPlus_IV 下。ParseLengthValueFromAttribute
+        /// 文件名格式：{layerPart}_{yyyyMMdd_HHmmss}.dwg，保存在 %TEMP%\GB_NewCadPlus_III 下。ParseLengthValueFromAttribute
         /// 生成后会把路径写入字段 `_lastSavedPipeTablePath` 并提示用户下一步操作。
         /// 列宽会根据表头与单元格内容自动计算（近似字符宽度）。
         /// </summary>
@@ -9392,7 +9288,7 @@ namespace GB_NewCadPlus_IV
                 catch { }
 
                 string buttonFolderName = "生成管道表";
-                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", buttonFolderName);
+                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", buttonFolderName);
                 if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
                 string firstLayer = summaries.FirstOrDefault()?.Name ?? "PipeTable";
@@ -11050,6 +10946,9 @@ namespace GB_NewCadPlus_IV
                     }
 
                     MessageBox.Show("临时管道表已插入当前空间。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+                    // 插入成功后立即删除该次临时文件，避免累积
+                    TryDeleteTempFile(_lastSavedPipeTablePath);
+                    _lastSavedPipeTablePath = string.Empty;
                 }
             }
             catch (Exception ex)
@@ -11089,7 +10988,7 @@ namespace GB_NewCadPlus_IV
             try
             {
                 /// 从 login 配置优先读取服务器/端口（与之前主界面约定一致）
-                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
+                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_III", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "3306";
                 if (System.IO.File.Exists(cfgPath))
@@ -11460,7 +11359,7 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 读取 login_config.json 或使用默认值初始化 _svc
-                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
+                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_III", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "3306";
 
@@ -11589,6 +11488,2646 @@ namespace GB_NewCadPlus_IV
 
             Env.Document.SendStringToExecute("AreaByPoints ", false, false, false);
         }
+
+
+        #region 总表计算模式
+
+        #region CSV表转换工具
+        /// <summary>
+        /// 公式合法性批量校验（增强版）：
+        /// - 归一化 OCR 噪声 token（IC16/lC16/|C16 -> C16）
+        /// - 归一化全角符号/异常引号
+        /// - 无法识别的脏 token 直接忽略，减少误报
+        /// </summary>
+        private List<string> ValidateCalcSectionsFormulaReferences(List<ExcelCalcSection> sections)
+        {
+            var errors = new List<string>();
+            if (sections == null || sections.Count == 0) return errors;
+
+            // Grid -> 地址集合
+            var cellMap = sections
+                .GroupBy(s => s.GridName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new HashSet<string>(
+                        g.SelectMany(x => x.Rows)
+                         .Where(r => !string.IsNullOrWhiteSpace(r.Address))
+                         .Select(r => (r.Address ?? string.Empty).Trim().ToUpperInvariant()),
+                        StringComparer.OrdinalIgnoreCase),
+                    StringComparer.OrdinalIgnoreCase);
+
+            // 地址 -> 所属 Grid 列表（用于“本表找不到时，尝试全局唯一归属”）
+            var addressOwners = sections
+                .SelectMany(s => s.Rows.Select(r => new { s.GridName, Address = (r.Address ?? string.Empty).Trim().ToUpperInvariant() }))
+                .Where(x => !string.IsNullOrWhiteSpace(x.Address))
+                .GroupBy(x => x.Address, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(x => x.GridName).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            foreach (var section in sections)
+            {
+                foreach (var row in section.Rows.Where(r => !string.IsNullOrWhiteSpace(r.Formula)))
+                {
+                    string formula = NormalizeFormulaForValidation((row.Formula ?? string.Empty).Trim());
+                    if (formula.StartsWith("="))
+                        formula = formula.Substring(1);
+
+                    string rowTag = $"{row.GridName}!{row.Address} ({row.ParameterName})";
+
+                    // 1) 校验跨表引用：Grid!Addr
+                    var crossRefs = Regex.Matches(
+                        formula,
+                        @"(?<grid>[^\s\+\-\*/\(\),!]+)\s*!\s*(?<addr>[A-Z\|IL]*C\d+|[A-Z]+\d+)",
+                        RegexOptions.IgnoreCase);
+
+                    foreach (Match m in crossRefs)
+                    {
+                        string gridRaw = (m.Groups["grid"].Value ?? string.Empty).Trim().Trim('\'', '"', '“', '”', '‘', '’');
+                        string gridToken = gridRaw.Replace(" ", "_");
+
+                        if (gridToken.StartsWith("DataGrid", StringComparison.OrdinalIgnoreCase) &&
+                            !gridToken.StartsWith("DataGrid_", StringComparison.OrdinalIgnoreCase))
+                        {
+                            gridToken = "DataGrid_" + gridToken.Substring("DataGrid".Length).TrimStart('_');
+                        }
+
+                        string grid = NormalizeCalcGridNameToken(gridToken);
+                        if (string.IsNullOrWhiteSpace(grid)) grid = gridToken;
+
+                        string rawAddr = (m.Groups["addr"].Value ?? string.Empty).Trim();
+                        if (!TryNormalizeCellAddressToken(rawAddr, out string addr))
+                            continue; // 脏 token 忽略
+
+                        if (!cellMap.TryGetValue(grid, out var addrSet))
+                        {
+                            errors.Add($"[{rowTag}] 引用了不存在的表：{gridRaw} -> {grid}");
+                            continue;
+                        }
+
+                        if (!addrSet.Contains(addr))
+                        {
+                            errors.Add($"[{rowTag}] 引用了不存在的单元格：{grid}!{addr}");
+                        }
+                    }
+
+                    // 2) 本表引用校验：先去掉跨表引用，再检查本地地址
+                    string localExpr = Regex.Replace(
+                        formula,
+                        @"(?<grid>[^\s\+\-\*/\(\),!]+)\s*!\s*(?<addr>[A-Z\|IL]*C\d+|[A-Z]+\d+)",
+                        "0",
+                        RegexOptions.IgnoreCase);
+
+                    var localRawRefs = Regex.Matches(localExpr, @"\b([A-Z\|IL]*C\d+|[A-Z]+\d+)\b", RegexOptions.IgnoreCase)
+                        .Cast<Match>()
+                        .Select(x => x.Value)
+                        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                    var localRefs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var raw in localRawRefs)
+                    {
+                        if (TryNormalizeCellAddressToken(raw, out string normalized))
+                            localRefs.Add(normalized);
+                    }
+
+                    if (!cellMap.TryGetValue(row.GridName, out var currentGridCells))
+                    {
+                        errors.Add($"[{rowTag}] 当前表不存在：{row.GridName}");
+                        continue;
+                    }
+
+                    foreach (var addr in localRefs)
+                    {
+                        // 当前表存在，OK
+                        if (currentGridCells.Contains(addr))
+                            continue;
+
+                        // 当前表不存在，尝试全局唯一归属（同一 Excel 按行号拆段时常见）
+                        if (addressOwners.TryGetValue(addr, out var owners) && owners.Count == 1)
+                            continue;
+
+                        if (addressOwners.TryGetValue(addr, out owners) && owners.Count > 1)
+                        {
+                            errors.Add($"[{rowTag}] 本表引用地址歧义：{addr}（出现在多个表：{string.Join(" / ", owners)}）");
+                            continue;
+                        }
+
+                        errors.Add($"[{rowTag}] 本表引用不存在单元格：{row.GridName}!{addr}");
+                    }
+                }
+            }
+
+            return errors
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        /// <summary>
+        /// 归一化公式字符串（用于校验，不改原公式）
+        ///— 主要处理全角符号、中文引号、OCR 产生的异形符号
+        /// </summary>
+        private static string NormalizeFormulaForValidation(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+            string s = text
+                .Replace('（', '(').Replace('）', ')')
+                .Replace('【', '[').Replace('】', ']')
+                .Replace('〔', '[').Replace('〕', ']')
+                .Replace('，', ',').Replace('。', '.')
+                .Replace('！', '!')
+                .Replace('“', '"').Replace('”', '"')
+                .Replace('‘', '\'').Replace('’', '\'')
+                .Trim();
+
+            // 去空白，避免 OCR 把 token 打断
+            s = Regex.Replace(s, @"\s+", string.Empty);
+
+            // DataGridxxxIC16 / DataGrid动态3IC96 -> DataGridxxx!IC16
+            s = Regex.Replace(
+                s,
+                @"(?<grid>DataGrid[^+\-*/\(\),!]+?)(?<addr>[IL\|]*C\d+)(?=$|[+\-*/\),])",
+                m => $"{m.Groups["grid"].Value}!{m.Groups["addr"].Value}",
+                RegexOptions.IgnoreCase);
+
+            return s;
+        }
+        /// <summary>
+        /// 归一化地址 token：IC16/lC16/|C16 -> C16
+        /// 仅接受最终形态 C+数字；无法识别返回 false（表示脏 token，忽略）
+        /// </summary>
+        private static bool TryNormalizeCellAddressToken(string raw, out string normalized)
+        {
+            normalized = string.Empty;
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+
+            string s = raw.Trim().ToUpperInvariant();
+            s = s.Trim('\'', '"', '[', ']', '(', ')', '{', '}');
+
+            // OCR: IC16 / LC16 / |C16 / IIC16 -> C16
+            s = Regex.Replace(s, @"^[IL\|]+C", "C", RegexOptions.IgnoreCase);
+
+            if (Regex.IsMatch(s, @"^C\d+$", RegexOptions.IgnoreCase))
+            {
+                normalized = s;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 存储计算单元地址标准化
+        /// </summary>
+        /// <param name="rawAddress"> </param>
+        /// <returns></returns>
+        private static string NormalizeCalcCellAddressForStorage(string? rawAddress)
+        {
+            string raw = (rawAddress ?? string.Empty).Trim();
+            if (TryNormalizeCellAddressToken(raw, out string normalized))
+                return normalized;
+            return raw.ToUpperInvariant();
+        }
+
+        /// <summary>
+        /// CSV 字段转义：包含逗号/引号/换行时自动加引号并转义
+        /// </summary>
+        private static string EscapeCsv(string text)
+        {
+            if (text == null) return string.Empty;
+
+            bool needQuote = text.Contains(",") || text.Contains("\"") || text.Contains("\r") || text.Contains("\n");
+            if (!needQuote) return text;
+
+            return "\"" + text.Replace("\"", "\"\"") + "\"";
+        }
+        #endregion
+
+        #region
+
+        private sealed class ExcelCalcSection
+        {
+            public string DeviceName { get; set; } = string.Empty;
+            public string GridName { get; set; } = string.Empty;
+            public string GroupHeader { get; set; } = string.Empty;
+            public List<CalcCsvTableRow> Rows { get; set; } = new List<CalcCsvTableRow>();
+        }
+
+        /// <summary>
+        /// 从总表 Excel 动态加载页面，并导出总 CSV
+        /// </summary>
+        private void LoadFromMasterExcelAndBuildUi(string excelPath, bool exportCsv = true)
+        {
+            var sections = ParseMasterExcelSections(excelPath);
+
+            var formulaErrors = ValidateCalcSectionsFormulaReferences(sections);
+            if (formulaErrors.Count > 0)
+            {
+                string preview = string.Join("\n", formulaErrors.Take(40));
+                if (formulaErrors.Count > 40)
+                    preview += $"\n... 其余 {formulaErrors.Count - 40} 条省略";
+
+                MessageBox.Show(
+                    "公式校验未通过，请先修正 Excel：\n\n" + preview,
+                    "公式校验失败",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            BuildDynamicCalcGrids(sections);
+
+            if (exportCsv)
+            {
+                string csvPath = ExportSectionsToMasterCsv(sections);
+                LogManager.Instance.LogInfo($"Excel 转总CSV完成: {csvPath}");
+            }
+
+            RecalculateAllCalcCsvTables();
+        }
+
+        /// <summary>
+        /// 解析 Excel 分段：空行分隔，第一列设备名可合并
+        /// 列定义：A设备 B参数名称 C参数 D单位 E值类型
+        /// </summary>
+        private List<ExcelCalcSection> ParseMasterExcelSections(string excelPath)
+        {
+            if (!File.Exists(excelPath))
+                throw new FileNotFoundException("Excel 文件不存在", excelPath);
+
+            var result = new List<ExcelCalcSection>();
+
+            using (var package = new ExcelPackage(new FileInfo(excelPath)))
+            {
+                var ws = package.Workbook.Worksheets.FirstOrDefault();
+                if (ws == null || ws.Dimension == null)
+                    return result;
+
+                int headerRow = 1;
+                int rowStart = 2;
+                int rowEnd = ws.Dimension.End.Row;
+
+                int colDevice = FindExcelColumn(ws, headerRow, "设备", 1);
+                int colParamName = FindExcelColumn(ws, headerRow, "参数名称", 2);
+                int colValue = FindExcelColumn(ws, headerRow, "参数", 3);
+                int colUnit = FindExcelColumn(ws, headerRow, "单位", 4);
+                int colValueType = FindExcelColumn(ws, headerRow, "值类型", 5);
+                int colFormula = FindExcelColumn(ws, headerRow, "公式", 6);
+
+                string currentDevice = string.Empty;
+                ExcelCalcSection? currentSection = null;
+                int dynamicIndex = 1;
+
+                for (int r = rowStart; r <= rowEnd; r++)
+                {
+                    string cDevice = (ws.Cells[r, colDevice].Text ?? string.Empty).Trim();
+                    string cParamName = (ws.Cells[r, colParamName].Text ?? string.Empty).Trim();
+                    string cValue = (ws.Cells[r, colValue].Text ?? string.Empty).Trim();
+                    string cUnit = (ws.Cells[r, colUnit].Text ?? string.Empty).Trim();
+                    string cValueType = (ws.Cells[r, colValueType].Text ?? string.Empty).Trim();
+                    string cFormula = (ws.Cells[r, colFormula].Text ?? string.Empty).Trim();
+                    string cValueExcelFormula = (ws.Cells[r, colValue].Formula ?? string.Empty).Trim();
+
+                    bool isBlankRow =
+                        string.IsNullOrWhiteSpace(cDevice) &&
+                        string.IsNullOrWhiteSpace(cParamName) &&
+                        string.IsNullOrWhiteSpace(cValue) &&
+                        string.IsNullOrWhiteSpace(cUnit) &&
+                        string.IsNullOrWhiteSpace(cValueType) &&
+                        string.IsNullOrWhiteSpace(cFormula) &&
+                        string.IsNullOrWhiteSpace(cValueExcelFormula);
+
+                    if (isBlankRow)
+                    {
+                        if (currentSection != null && currentSection.Rows.Count > 0)
+                        {
+                            result.Add(currentSection);
+                            currentSection = null;
+                        }
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(cDevice))
+                        currentDevice = cDevice;
+
+                    if (string.IsNullOrWhiteSpace(currentDevice))
+                        continue;
+
+                    if (currentSection == null)
+                    {
+                        string gridName = NormalizeCalcGridNameToken(currentDevice);
+                        if (string.IsNullOrWhiteSpace(gridName) || !gridName.StartsWith("DataGrid_", StringComparison.OrdinalIgnoreCase))
+                            gridName = $"DataGrid_动态_{dynamicIndex++}";
+
+                        currentSection = new ExcelCalcSection
+                        {
+                            DeviceName = currentDevice,
+                            GridName = gridName,
+                            GroupHeader = currentDevice
+                        };
+                    }
+
+                    if (string.IsNullOrWhiteSpace(cParamName))
+                        continue;
+
+                    // 关键：地址/序号使用 Excel 原始行号，保证 C52/C76 这类引用正确
+                    int seq = r;
+                    string address = "C" + r;
+
+                    string valueType = NormalizeValueType(cValueType);
+
+                    // 公式优先：公式列 > 参数列自身公式
+                    string formulaRaw = !string.IsNullOrWhiteSpace(cFormula)
+                        ? cFormula
+                        : (!string.IsNullOrWhiteSpace(cValueExcelFormula) ? "=" + cValueExcelFormula : string.Empty);
+
+                    string normalizedFormula = NormalizeExcelFormulaToInternal(formulaRaw, currentSection.GridName);
+
+                    // 有公式强制 Calc
+                    if (!string.IsNullOrWhiteSpace(normalizedFormula))
+                        valueType = "Calc";
+
+                    // MultiSelect 选项
+                    var options = ParseMultiSelectOptions(cValue, valueType);
+                    string valueText = cValue;
+
+                    if (string.Equals(valueType, "MultiSelect", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (options.Count > 0 && !options.Contains(valueText, StringComparer.OrdinalIgnoreCase))
+                            valueText = options[0];
+
+                        normalizedFormula = string.Empty;
+                    }
+
+                    currentSection.Rows.Add(new CalcCsvTableRow
+                    {
+                        GridName = currentSection.GridName,
+                        Address = address,
+                        Sequence = seq,
+                        ParameterName = cParamName,
+                        ValueType = valueType,
+                        Formula = normalizedFormula,
+                        ValueText = valueText,
+                        Unit = cUnit,
+                        Description = "Excel导入",
+                        OptionValues = new ObservableCollection<string>(options)
+                    });
+                }
+
+                if (currentSection != null && currentSection.Rows.Count > 0)
+                    result.Add(currentSection);
+            }
+
+            return result;
+        }
+        /// <summary>
+        /// excel列查找：根据列标题查找列号，未找到时返回 fallback（默认按顺序查找，兼容旧模板）
+        /// </summary>
+        /// <param name="ws">Excel 工作表对象</param>
+        /// <param name="headerRow">标题行号</param>
+        /// <param name="headerName">列标题名称</param>
+        /// <param name="fallback">未找到时的默认列号</param>
+        /// <returns>列号</returns>
+        private static int FindExcelColumn(ExcelWorksheet ws, int headerRow, string headerName, int fallback)
+        {
+            int endCol = ws.Dimension?.End.Column ?? fallback;
+            for (int c = 1; c <= endCol; c++)
+            {
+                string t = (ws.Cells[headerRow, c].Text ?? string.Empty).Trim();
+                if (string.Equals(t, headerName, StringComparison.OrdinalIgnoreCase))
+                    return c;
+            }
+            return fallback;
+        }
+        /// <summary>
+        /// 标准化值类型 输入，兼容用户输入的各种变体：
+        /// </summary>
+        /// <param name="raw">原始值类型字符串</param>
+        /// <returns>标准化后的值类型字符串</returns>
+        private static string NormalizeValueType(string raw)
+        {
+            string s = (raw ?? string.Empty).Trim();
+            if (s.Equals("Calc", StringComparison.OrdinalIgnoreCase)) return "Calc";
+            if (s.Equals("MultiSelect", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("MultiplEselect", StringComparison.OrdinalIgnoreCase)) return "MultiSelect";
+            return "Input";
+        }
+        /// <summary>
+        /// excel 公式识别增强版：除了等号前缀，还支持常见函数、运算符、单元格引用等特征，减少误判
+        /// </summary>
+        /// <param name="raw">原始公式字符串</param>
+        /// <returns>是否可能是 Excel 公式</returns>
+        private static bool IsLikelyExcelFormula(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+            string s = raw.Trim();
+
+            if (s == "输入值" || s == "计算值" || s == "可选值")
+                return false;
+
+            if (s.StartsWith("=")) return true;
+            if (Regex.IsMatch(s, @"\b(SQRT|IF|ROUND|MIN|MAX|SUM)\s*\(", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(s, @"[+\-*/^()]")) return true;
+            if (Regex.IsMatch(s, @"[A-Za-z]+\d+", RegexOptions.IgnoreCase)) return true;
+
+            return false;
+        }
+        /// <summary>
+        /// 下拉选项解析：支持斜杠分隔的多选（泵前\泵后\其它）和百分比范围（10%~100%）
+        /// </summary>
+        /// <param name="rawValue">原始下拉选项字符串</param>
+        /// <param name="valueType">值类型</param>
+        /// <returns>解析后的下拉选项列表</returns>
+        private static List<string> ParseMultiSelectOptions(string rawValue, string valueType)
+        {
+            var list = new List<string>();
+            if (!string.Equals(valueType, "MultiSelect", StringComparison.OrdinalIgnoreCase))
+                return list;
+
+            string s = (rawValue ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(s)) return list;
+
+            // 泵前\泵后\其它
+            if (s.Contains("\\"))
+            {
+                return s.Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(x => x.Trim())
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+            }
+
+            // 90% -> 10%~100%
+            if (Regex.IsMatch(s, @"^\d{1,3}\s*%$"))
+            {
+                for (int i = 10; i <= 100; i += 10)
+                    list.Add(i + "%");
+                return list;
+            }
+
+            list.Add(s);
+            return list;
+        }
+
+        /// <summary>
+        /// 将 Excel 公式转换为内部公式格式：
+        /// 1) 统一补 '=' 前缀
+        /// 2) 跨表引用中的“设备名/组名”转换为 DataGrid 名称
+        /// 3) 清理引号与全角符号
+        /// </summary>
+        private string NormalizeExcelFormulaToInternal(string rawFormula, string currentGridName)
+        {
+            if (!IsLikelyExcelFormula(rawFormula))
+                return string.Empty;
+
+            string expr = rawFormula.Trim();
+
+            expr = expr.Replace('，', ',')
+                       .Replace('（', '(')
+                       .Replace('）', ')')
+                       .Replace('！', '!');
+
+            if (!expr.StartsWith("="))
+                expr = "=" + expr;
+
+            expr = Regex.Replace(
+                expr,
+                @"'?(?<grid>[^'!]+)'?\s*!\s*(?<addr>[A-Za-z]+\d+)",
+                m =>
+                {
+                    string gridToken = (m.Groups["grid"].Value ?? string.Empty).Trim();
+                    string addr = (m.Groups["addr"].Value ?? string.Empty).Trim().ToUpperInvariant();
+                    string normalizedGrid = NormalizeCalcGridNameToken(gridToken);
+                    if (string.IsNullOrWhiteSpace(normalizedGrid))
+                        normalizedGrid = currentGridName;
+                    return $"{normalizedGrid}!{addr}";
+                },
+                RegexOptions.IgnoreCase);
+
+            return expr;
+        }
+        /// <summary>
+        /// 根据解析结果动态生成 GroupBox + DataGrid，并绑定数据源
+        /// </summary>
+        private void BuildDynamicCalcGrids(List<ExcelCalcSection> sections)
+        {
+            if (CalcDynamicHost == null)
+                throw new InvalidOperationException("未找到动态容器 CalcDynamicHost。");
+
+            CalcDynamicHost.Children.Clear();
+            _calcCsvTableSources.Clear();
+
+            int index = 1;
+            foreach (var s in sections)
+            {
+                var group = new System.Windows.Controls.GroupBox
+                {
+                    Header = $"{index},{s.GroupHeader}",
+                    Margin = new Thickness(0, 3, 0, 0),
+                    Padding = new Thickness(0, 3, 0, 0),
+                    FontFamily = new FontFamily("Microsoft YaHei UI")
+                };
+
+                var dg = CreateCalcCsvDataGrid(s.GridName);
+                var source = new ObservableCollection<CalcCsvTableRow>(s.Rows.OrderBy(x => x.Sequence));
+
+                _calcCsvTableSources[s.GridName] = source;
+                dg.ItemsSource = source;
+
+                group.Content = dg;
+                CalcDynamicHost.Children.Add(group);
+
+                index++;
+            }
+        }
+
+        /// <summary>
+        /// 导出为总 CSV（GridName 模板）
+        /// </summary>
+        private string ExportSectionsToMasterCsv(List<ExcelCalcSection> sections)
+        {
+            string outputPath = Path.Combine(GetCalcCsvExternalDirectory(), CalcCsvMasterFileName);
+
+            var allRows = sections
+                .SelectMany(s => s.Rows)
+                .OrderBy(r => r.GridName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.Sequence)
+                .ToList();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("GridName,Address,Sequence,ParameterName,ValueType,Formula,Value,Unit,Description,Options");
+
+            foreach (var r in allRows)
+            {
+                sb.AppendLine(string.Join(",",
+                    EscapeCsv(r.GridName),
+                    EscapeCsv(r.Address),
+                    EscapeCsv(r.Sequence.ToString()),
+                    EscapeCsv(r.ParameterName),
+                    EscapeCsv(string.IsNullOrWhiteSpace(r.ValueType) ? "Input" : r.ValueType),
+                    EscapeCsv(r.Formula ?? string.Empty),
+                    EscapeCsv(r.ValueText ?? string.Empty),
+                    EscapeCsv(r.Unit ?? string.Empty),
+                    EscapeCsv(r.Description ?? string.Empty),
+                    EscapeCsv(string.Join("|", r.OptionValues ?? new ObservableCollection<string>()))
+                ));
+            }
+
+            File.WriteAllText(outputPath, sb.ToString(), new UTF8Encoding(true));
+            return outputPath;
+        }
+
+        #endregion
+
+
+        /// <summary>
+        /// 将总表中的 GridName/段名 归一化到真正的 DataGrid 名称
+        /// 支持：
+        /// 1) 直接写 DataGrid_XXX
+        /// 2) 写 GroupBox 名（如“循环泵选型”）
+        /// 3) 写带序号或括号的段名（如“1,脱硫系统计算(单台)”）
+        /// </summary>
+        private string NormalizeCalcGridNameToken(string rawToken)
+        {
+            string token = (rawToken ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(token))
+                return string.Empty;
+
+            // 去掉前缀序号，如 "1,xxx" / "1.xxx" / "1、xxx"
+            token = Regex.Replace(token, @"^\s*\d+\s*[,，.、]\s*", string.Empty);
+
+            // 去掉括号内容，如 "(单台)" / "（单台）"
+            token = Regex.Replace(token, @"[\(（].*?[\)）]", string.Empty).Trim();
+
+            // 1) 已经是 DataGrid 名称
+            if (_calcCsvTableDefinitions.Values.Any(d =>
+                string.Equals(d.DataGridName, token, StringComparison.OrdinalIgnoreCase)))
+            {
+                return _calcCsvTableDefinitions.Values
+                    .First(d => string.Equals(d.DataGridName, token, StringComparison.OrdinalIgnoreCase))
+                    .DataGridName;
+            }
+
+            // 2) GroupBox 名匹配
+            var byGroup = _calcCsvTableDefinitions.Values.FirstOrDefault(d =>
+                string.Equals(d.GroupBoxName, token, StringComparison.OrdinalIgnoreCase));
+            if (byGroup != null)
+                return byGroup.DataGridName;
+
+            // 3) 包含匹配（更宽松）
+            var fuzzy = _calcCsvTableDefinitions.Values.FirstOrDefault(d =>
+                d.GroupBoxName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                token.IndexOf(d.GroupBoxName, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (fuzzy != null)
+                return fuzzy.DataGridName;
+
+            return rawToken.Trim();
+        }
+
+        // ====== 放在 CalcCsv 相关字段区域 ======
+        private const string CalcCsvMasterFileName = "_00_计算总表_公式导出.csv";
+
+        private static string BuildScopedAddress(string gridName, string address)
+        {
+            return $"{(gridName ?? string.Empty).Trim()}|{(address ?? string.Empty).Trim().ToUpperInvariant()}";
+        }
+
+
+        /// <summary>
+        /// 重载所有 CSV 表（优先总表）
+        /// </summary>
+        private void ReloadCalcCsvTables(bool showMessage)
+        {
+            if (_calcCsvIsReloading)
+                return;
+
+            _calcCsvIsReloading = true;
+
+            try
+            {
+                string masterPath = ResolveCalcCsvPath(CalcCsvMasterFileName);
+
+                if (File.Exists(masterPath))
+                {
+                    ReloadFromMasterCalcCsv(masterPath);
+                    LogManager.Instance.LogInfo($"已按总表模式加载计算数据：{masterPath}");
+                }
+                else
+                {
+                    foreach (var definition in _calcCsvTableDefinitions.Values)
+                    {
+                        ReloadSingleCalcCsvTable(definition);
+                    }
+                    LogManager.Instance.LogInfo("未找到总表，已按旧模式逐文件加载。");
+                }
+
+                // 统一做一次全局重算（支持跨表联动）
+                RecalculateAllCalcCsvTables();
+
+                if (showMessage)
+                {
+                    MessageBox.Show(
+                        $"CSV 已重载。\n外部附件目录：{GetCalcCsvExternalDirectory()}",
+                        "提示",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            }
+            finally
+            {
+                _calcCsvIsReloading = false;
+            }
+        }
+
+        private void ReloadFromMasterCalcCsv(string masterPath)
+        {
+            var allRows = LoadCalcCsvRows(masterPath, string.Empty);
+
+            var grouped = allRows
+                .Where(r => !string.IsNullOrWhiteSpace(r.GridName))
+                .GroupBy(r => r.GridName, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(g => g.Min(x => x.Sequence))
+                .ToList();
+
+            var sections = grouped.Select(g => new ExcelCalcSection
+            {
+                DeviceName = "计算数据表",
+                GridName = g.Key,
+                GroupHeader = GetCalcGroupHeaderByGridName(g.Key),
+                Rows = g.OrderBy(x => x.Sequence).ToList()
+            }).ToList();
+
+            // 关键：总表模式使用动态UI，不再走旧的 GroupBox 查找逻辑
+            BuildDynamicCalcGrids(sections);
+        }
+
+        private static string GetCalcGroupHeaderByGridName(string gridName)
+        {
+            string name = (gridName ?? string.Empty).Trim();
+            if (name.StartsWith("DataGrid_", StringComparison.OrdinalIgnoreCase))
+                name = name.Substring("DataGrid_".Length);
+            else if (name.StartsWith("DataGrid", StringComparison.OrdinalIgnoreCase))
+                name = name.Substring("DataGrid".Length).TrimStart('_');
+
+            return string.IsNullOrWhiteSpace(name) ? gridName : name.Replace("_", " ");
+        }
+
+        /// <summary>
+        /// 重载单个 CSV 表（旧模式）
+        /// </summary>
+        private void ReloadSingleCalcCsvTable(CalcCsvTableDefinition definition)
+        {
+            string csvPath = ResolveCalcCsvPath(definition.FileName);
+            LogManager.Instance.LogInfo($"重载 CSV: {definition.FileName} -> {csvPath}");
+
+            if (!File.Exists(csvPath))
+            {
+                LogManager.Instance.LogInfo($"未找到 CSV 文件: {csvPath}");
+                return;
+            }
+
+            var dataGrid = EnsureCalcCsvDataGrid(definition);
+            var rows = LoadCalcCsvRows(csvPath, definition.DataGridName);
+
+            if (!_calcCsvTableSources.ContainsKey(definition.DataGridName))
+            {
+                _calcCsvTableSources[definition.DataGridName] = new ObservableCollection<CalcCsvTableRow>();
+            }
+
+            _calcCsvTableSources[definition.DataGridName].Clear();
+            foreach (var row in rows.OrderBy(r => r.Sequence))
+            {
+                _calcCsvTableSources[definition.DataGridName].Add(row);
+            }
+
+            dataGrid.ItemsSource = _calcCsvTableSources[definition.DataGridName];
+            // 注意：这里不再单表重算，统一由 ReloadCalcCsvTables 末尾全局重算
+        }
+
+        /// <summary>
+        /// 读取新模板格式 CSV
+        /// targetGridName 为空时：读取全部 GridName（总表模式）
+        /// targetGridName 非空时：只读取目标 GridName（旧模式）
+        /// </summary>
+        private List<CalcCsvTableRow> LoadCalcCsvRowsFromTemplate(string[] lines, string targetGridName)
+        {
+            var rows = new List<CalcCsvTableRow>();
+            bool hasTarget = !string.IsNullOrWhiteSpace(targetGridName);
+
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                var cols = SplitCsvLine(line);
+                if (cols.Count < 9)
+                    continue;
+
+                string gridName = NormalizeCalcGridNameToken(cols[0].Trim());
+                string addressRaw = cols[1].Trim();
+                string address = NormalizeCalcCellAddressForStorage(addressRaw); // 关键
+                string sequenceText = cols[2].Trim();
+                string parameterName = cols[3].Trim();
+                string valueType = cols[4].Trim();
+                string formula = cols[5].Trim();
+                string value = cols[6].Trim();
+                string unit = cols[7].Trim();
+                string description = cols[8].Trim();
+                string options = cols.Count > 9 ? cols[9].Trim() : string.Empty;
+
+                if (hasTarget)
+                {
+                    if (!string.IsNullOrWhiteSpace(gridName) &&
+                        !string.Equals(gridName, targetGridName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    gridName = targetGridName;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(gridName))
+                        continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(parameterName))
+                    continue;
+
+                int sequence = 0;
+                int.TryParse(sequenceText, out sequence);
+                if (sequence <= 0)
+                    sequence = GetRowNumberFromAddress(address);
+
+                var optionValues = new ObservableCollection<string>(
+                    (options ?? string.Empty)
+                    .Split(new[] { '|', ';', '\\' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+                // ===== 新增：针对“纯度 C64”补齐百分比下拉并默认 90% =====
+                if (string.Equals(valueType, "MultiSelect", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(gridName, "DataGrid_石灰石浆液泵选型", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(address, "C64", StringComparison.OrdinalIgnoreCase))
+                {
+                    // 固定下拉：10%~100%
+                    optionValues = new ObservableCollection<string>(
+                        Enumerable.Range(1, 10).Select(i => (i * 10).ToString() + "%"));
+
+                    // 默认值固定为 90%
+                    value = "90%";
+                }
+
+                rows.Add(new CalcCsvTableRow
+                {
+                    GridName = gridName,
+                    Address = address, // 用规范化地址
+                    Sequence = sequence,
+                    ParameterName = parameterName,
+                    ValueType = string.IsNullOrWhiteSpace(valueType) ? "Input" : valueType,
+                    Formula = formula,
+                    ValueText = value,
+                    Unit = unit,
+                    Description = description,
+                    OptionValues = optionValues
+                });
+            }
+
+            return rows;
+        }
+
+        /// <summary>
+        /// 编辑结束后执行全局联动重算
+        /// </summary>
+        private void DataGrid_计算表自动联动重算_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+        {
+            if (!(e.Row.Item is CalcCsvTableRow row))
+                return;
+
+            if (!row.IsEditable)
+                return;
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // 1) 下拉类型不做数字校验，直接重算
+                if (row.IsMultiSelect)
+                {
+                    RecalculateAllCalcCsvTables();
+                    return;
+                }
+
+                // 2) TemplateColumn 场景下，以绑定后的 ValueText 为准
+                string committedText = (row.ValueText ?? string.Empty).Trim();
+                string oldText = (_calcCsvEditingOldValue ?? string.Empty).Trim();
+
+                // 3) 未改值：不提示，直接退出（避免“没输入也报错”）
+                if (string.Equals(committedText, oldText, StringComparison.Ordinal))
+                    return;
+
+                // 4) 允许空输入回退旧值，不弹错误
+                if (string.IsNullOrWhiteSpace(committedText))
+                {
+                    row.ValueText = _calcCsvEditingOldValue;
+                    return;
+                }
+
+                // 5) Input 类型必须是数字
+                if (!TryParseCalcCsvDouble(committedText, out double parsedValue))
+                {
+                    row.ValueText = _calcCsvEditingOldValue;
+                    MessageBox.Show(
+                        $"参数“{row.ParameterName}”请输入有效数字。",
+                        "提示",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                row.ValueText = FormatCalcCsvNumber(parsedValue);
+                try
+                {
+                    RecalculateAllCalcCsvTables();
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogWarning($"联动重算失败: {ex.Message}");
+                    MessageBox.Show($"联动重算失败：{ex.Message}", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// 兼容旧调用：转到全局重算
+        /// </summary>
+        private void RecalculateCalcCsvTable(string dataGridName)
+        {
+            RecalculateAllCalcCsvTables();
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        private readonly Dictionary<string, double> _calcCsvLastKnownInputValues =
+    new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+
+        /// <summary>
+        /// 全局重算：支持跨表联动
+        /// 跨表引用格式：DataGrid_脱硫系统!C12
+        /// 表内引用格式：C12（默认当前 Grid）
+        /// </summary>
+        private void RecalculateAllCalcCsvTables()
+        {
+            var allRows = _calcCsvTableSources.Values.SelectMany(v => v).ToList();
+            if (allRows.Count == 0)
+                return;
+
+            var cellValues = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in allRows)
+            {
+                if (string.IsNullOrWhiteSpace(row.Address) || string.IsNullOrWhiteSpace(row.GridName))
+                    continue;
+
+                string normalizedAddress = NormalizeCalcCellAddressForStorage(row.Address);
+                string key = BuildScopedAddress(row.GridName, normalizedAddress);
+
+                // 1) 先按当前值解析
+                if (TryParseCalcCsvDouble(row.ValueText, out double parsed))
+                {
+                    cellValues[key] = parsed;
+                    if (row.IsEditable)
+                        _calcCsvLastKnownInputValues[key] = parsed;
+                    continue;
+                }
+
+                // 2) MultiSelect 兜底：若当前值不可解析，尝试候选项首个可解析值（例如 90.0%）
+                if (row.IsEditable && row.IsMultiSelect && row.OptionValues != null)
+                {
+                    var fallbackText = row.OptionValues.FirstOrDefault(v => TryParseCalcCsvDouble(v, out _));
+                    if (!string.IsNullOrWhiteSpace(fallbackText) && TryParseCalcCsvDouble(fallbackText, out double parsedFallback))
+                    {
+                        row.ValueText = fallbackText; // 回写，保证界面与计算一致
+                        cellValues[key] = parsedFallback;
+                        _calcCsvLastKnownInputValues[key] = parsedFallback;
+                        continue;
+                    }
+                }
+
+                // 3) 可编辑项继续使用“最后一次有效值”
+                if (row.IsEditable && _calcCsvLastKnownInputValues.TryGetValue(key, out double last))
+                {
+                    cellValues[key] = last;
+                }
+            }
+
+            // 下面其余代码保持原样...
+            var calcRows = allRows
+                .Where(r => !r.IsEditable && !string.IsNullOrWhiteSpace(r.Formula))
+                .OrderBy(r => r.Sequence)
+                .ToList();
+
+            var pendingRows = new List<CalcCsvTableRow>(calcRows);
+            Exception? lastException = null;
+
+            for (int pass = 0; pass < calcRows.Count * 2; pass++)
+            {
+                if (pendingRows.Count == 0)
+                    return;
+
+                bool anyProgress = false;
+                var nextPendingRows = new List<CalcCsvTableRow>();
+
+                foreach (var row in pendingRows)
+                {
+                    try
+                    {
+                        double value = EvaluateCalcCsvFormula(row.Formula, row.GridName, cellValues);
+
+                        if (double.IsNaN(value) || double.IsInfinity(value))
+                            throw new InvalidOperationException("结果不是有效数字。");
+
+                        row.ValueText = FormatCalcCsvNumber(value);
+
+                        string normalizedAddress = NormalizeCalcCellAddressForStorage(row.Address);
+                        cellValues[BuildScopedAddress(row.GridName, normalizedAddress)] = value;
+
+                        anyProgress = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastException = ex;
+                        nextPendingRows.Add(row);
+                    }
+                }
+
+                if (!anyProgress)
+                {
+                    var details = nextPendingRows
+                        .Take(8)
+                        .Select(r => $"{r.GridName}!{r.Address} {r.ParameterName} -> {r.Formula}");
+                    throw new InvalidOperationException("计算表存在未解依赖或非法公式：\n" + string.Join("\n", details), lastException);
+                }
+
+                pendingRows = nextPendingRows;
+            }
+
+            if (pendingRows.Count > 0)
+            {
+                var failed = pendingRows.First();
+                throw new InvalidOperationException(
+                    $"计算参数“{failed.ParameterName}”失败，公式：{failed.Formula}",
+                    lastException);
+            }
+        }
+
+        /// <summary>
+        /// 计算公式（支持跨表）
+        /// 跨表：GridName!C7
+        /// 本表：C7
+        /// </summary>
+        private double EvaluateCalcCsvFormula(string formula, string currentGridName, IDictionary<string, double> cellValues)
+        {
+            if (string.IsNullOrWhiteSpace(formula))
+                return 0.0;
+
+            string expression = NormalizeFormulaForValidation(formula.Trim());
+
+            // 兼容 "V=(...)" / "-V=(...)" / "xxx=..."
+            if (!expression.StartsWith("=") && expression.Contains("="))
+            {
+                int eq = expression.LastIndexOf('=');
+                if (eq >= 0 && eq < expression.Length - 1)
+                    expression = expression.Substring(eq + 1);
+            }
+
+            if (expression.StartsWith("="))
+                expression = expression.Substring(1);
+
+            // 跨表引用
+            expression = Regex.Replace(
+                expression,
+                @"(?<grid>[^\s\+\-\*/\(\),!]+)\s*!\s*(?<addr>[A-Z\|IL]*C\d+|[A-Z]+\d+)",
+                m =>
+                {
+                    string gridRaw = (m.Groups["grid"].Value ?? string.Empty).Trim().Trim('\'', '"', '“', '”', '‘', '’');
+                    string gridToken = gridRaw.Replace(" ", "_");
+
+                    if (gridToken.StartsWith("DataGrid", StringComparison.OrdinalIgnoreCase) &&
+                        !gridToken.StartsWith("DataGrid_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        gridToken = "DataGrid_" + gridToken.Substring("DataGrid".Length).TrimStart('_');
+                    }
+
+                    string grid = NormalizeCalcGridNameToken(gridToken);
+                    if (string.IsNullOrWhiteSpace(grid)) grid = gridToken;
+
+                    if (!TryNormalizeCellAddressToken(m.Groups["addr"].Value, out string addr))
+                        throw new InvalidOperationException($"公式地址无法识别：{gridRaw}!{m.Groups["addr"].Value}");
+
+                    string key = BuildScopedAddress(grid, addr);
+                    if (!cellValues.TryGetValue(key, out double v))
+                        throw new InvalidOperationException($"公式引用未计算完成：{grid}!{addr}");
+
+                    return ToCalcCsvDoubleLiteral(v);
+                },
+                RegexOptions.IgnoreCase);
+
+            // 本地地址
+            expression = Regex.Replace(
+                expression,
+                @"\b([A-Z\|IL]*C\d+|[A-Z]+\d+)\b",
+                m =>
+                {
+                    if (!TryNormalizeCellAddressToken(m.Value, out string addr))
+                        return m.Value;
+
+                    if (!TryResolveScopedAddressKey(currentGridName, addr, cellValues, out string resolvedKey))
+                        throw new InvalidOperationException($"公式引用未计算完成：{currentGridName}!{addr}");
+
+                    return ToCalcCsvDoubleLiteral(cellValues[resolvedKey]);
+                },
+                RegexOptions.IgnoreCase);
+
+            expression = NormalizeCalcCsvExpression(expression);
+            expression = ResolveCalcCsvExcelFunctions(expression); // 新增：Excel函数
+            expression = ResolveCalcCsvSqrt(expression);
+
+            return EvaluatePlainExpression(expression);
+        }
+        /// <summary>
+        /// 解析计算 Csv Excel函数
+        /// </summary>
+        /// <param name="expression">要解析的表达式</param>
+        /// <returns>解析后的表达式</returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        private string ResolveCalcCsvExcelFunctions(string expression)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+                return "0.0";
+
+            while (true)
+            {
+                int fnIndex = expression.IndexOf("CEILING(", StringComparison.OrdinalIgnoreCase);
+                if (fnIndex < 0) break;
+
+                int openIndex = fnIndex + "CEILING".Length;
+                int closeIndex = FindCalcCsvMatchingParenthesis(expression, openIndex);
+
+                string inner = expression.Substring(openIndex + 1, closeIndex - openIndex - 1);
+                var args = SplitCalcCsvFunctionArgs(inner);
+                if (args.Count == 0)
+                    throw new InvalidOperationException("CEILING 参数为空。");
+
+                double number = EvaluatePlainExpression(NormalizeCalcCsvExpression(args[0]));
+                double significance = 1.0;
+                if (args.Count > 1)
+                    significance = EvaluatePlainExpression(NormalizeCalcCsvExpression(args[1]));
+
+                if (Math.Abs(significance) < 1e-12)
+                    throw new InvalidOperationException("CEILING 的 significance 不能为 0。");
+
+                double result = Math.Ceiling(number / significance) * significance;
+                string replacement = ToCalcCsvDoubleLiteral(result);
+
+                expression = expression.Substring(0, fnIndex) + replacement + expression.Substring(closeIndex + 1);
+            }
+
+            return expression;
+        }
+        /// <summary>
+        ///  拆分计算CSV函数参数
+        /// </summary>
+        /// <param name="text">函数参数字符串</param>
+        /// <returns>参数列表</returns>
+        private static List<string> SplitCalcCsvFunctionArgs(string text)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrWhiteSpace(text)) return list;
+
+            int depth = 0;
+            var sb = new StringBuilder();
+
+            foreach (char ch in text)
+            {
+                if (ch == '(') { depth++; sb.Append(ch); continue; }
+                if (ch == ')') { depth--; sb.Append(ch); continue; }
+
+                if (ch == ',' && depth == 0)
+                {
+                    list.Add(sb.ToString().Trim());
+                    sb.Clear();
+                    continue;
+                }
+
+                sb.Append(ch);
+            }
+
+            if (sb.Length > 0) list.Add(sb.ToString().Trim());
+            return list;
+        }
+        // 新增辅助方法：放在 EvaluateCalcCsvFormula 附近
+        private bool TryResolveScopedAddressKey(string currentGridName, string address, IDictionary<string, double> cellValues, out string resolvedKey)
+        {
+            resolvedKey = BuildScopedAddress(currentGridName, address);
+
+            // 1) 先找当前表
+            if (cellValues.ContainsKey(resolvedKey))
+                return true;
+
+            // 2) 当前表找不到，尝试全局唯一地址（同一 Excel 按行号拆段常见）
+            string suffix = "|" + address.ToUpperInvariant();
+            var matches = cellValues.Keys
+                .Where(k => k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (matches.Count == 1)
+            {
+                resolvedKey = matches[0];
+                return true;
+            }
+
+            return false;
+        }
+        #endregion
+
+
+
+
+        #region CSV驱动计算表
+
+        /// <summary>
+        /// 单个 CSV 文件与界面区域的映射定义
+        /// </summary>
+        private sealed class CalcCsvTableDefinition
+        {
+            /// <summary>
+            /// CSV 文件名
+            /// </summary>
+            public string FileName { get; set; } = string.Empty;
+
+            /// <summary>
+            /// 目标 GroupBox 名称
+            /// </summary>
+            public string GroupBoxName { get; set; } = string.Empty;
+
+            /// <summary>
+            /// 目标 DataGrid 名称
+            /// </summary>
+            public string DataGridName { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// 计算表行模型
+        /// </summary>
+        private sealed class CalcCsvTableRow : INotifyPropertyChanged
+        {
+            private string _valueText = string.Empty;
+
+            /// <summary>
+            /// 序号
+            /// </summary>
+            public int Sequence { get; set; }
+
+            /// <summary>
+            /// 参数名称
+            /// </summary>
+            public string ParameterName { get; set; } = string.Empty;
+
+            /// <summary>
+            /// 公式单元格地址，例如 C7
+            /// </summary>
+            public string Address { get; set; } = string.Empty;
+
+            /// <summary>
+            /// 对应 DataGrid 名称
+            /// </summary>
+            public string GridName { get; set; } = string.Empty;
+
+            /// <summary>
+            /// 值类型：Input / Calc
+            /// </summary>
+            public string ValueType { get; set; } = "Input";
+
+            /// <summary>
+            /// 公式
+            /// </summary>
+            public string Formula { get; set; } = string.Empty;
+
+            /// <summary>
+            /// 单位
+            /// </summary>
+            public string Unit { get; set; } = string.Empty;
+
+            /// <summary>
+            /// 说明
+            /// </summary>
+            public string Description { get; set; } = string.Empty;
+
+            // 新增：下拉候选值（MultiSelect 专用）
+            public ObservableCollection<string> OptionValues { get; set; } = new ObservableCollection<string>();
+
+            public bool IsMultiSelect =>
+                string.Equals(ValueType, "MultiSelect", StringComparison.OrdinalIgnoreCase);
+
+            /// <summary>
+            /// 当前显示值
+            /// </summary>
+            public string ValueText
+            {
+                get => _valueText;
+                set
+                {
+                    if (_valueText == value) return;
+                    _valueText = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ValueText)));
+                }
+            }
+
+            /// <summary>
+            /// 是否可编辑
+            /// </summary>
+            // Input / MultiSelect 可编辑；Calc 不可编辑
+            public bool IsEditable =>
+                string.Equals(ValueType, "Input", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ValueType, "MultiSelect", StringComparison.OrdinalIgnoreCase);
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+        }
+
+        /// <summary>
+        /// 文件名与目标表的映射表
+        /// 后续新增 CSV，只需要在这里补一条即可
+        /// </summary>
+        private readonly Dictionary<string, CalcCsvTableDefinition> _calcCsvTableDefinitions =
+            new Dictionary<string, CalcCsvTableDefinition>(StringComparer.OrdinalIgnoreCase)
+            {
+        {
+            "_1_脱硫系统计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_1_脱硫系统计算_公式导出.csv",
+                GroupBoxName = "脱硫系统计算",
+                DataGridName = "DataGrid_脱硫系统"
+            }
+        },
+        {
+            "_2_循环泵选型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_2_循环泵选型计算_公式导出.csv",
+                GroupBoxName = "循环泵选型",
+                DataGridName = "DataGrid_循环泵选型计算"
+            }
+        },
+        {
+            "_3_进_口管道尺寸计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_3_进_口管道尺寸计算_公式导出.csv",
+                GroupBoxName = "进口管道尺寸",
+                DataGridName = "DataGrid_进口管道尺寸"
+            }
+        },
+        {
+            "_4_出_口管道尺寸计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_4_出_口管道尺寸计算_公式导出.csv",
+                GroupBoxName = "出口管道尺寸",
+                DataGridName = "DataGrid_出口管道尺寸"
+            }
+        },
+        {
+            "_5_氧化风机选型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_5_氧化风机选型计算_公式导出.csv",
+                GroupBoxName = "氧化风机选型",
+                DataGridName = "DataGrid_氧化风机选型"
+            }
+        },
+        {
+            "_6_氧化风机后出口管道尺寸计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_6_氧化风机后出口管道尺寸计算_公式导出.csv",
+                GroupBoxName = "氧化风机后出口管道尺寸",
+                DataGridName = "DataGrid_氧化风机后出口管道尺寸"
+            }
+        },
+        {
+            "_7_石灰石浆液泵选1远型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_7_石灰石浆液泵选1远型计算_公式导出.csv",
+                GroupBoxName = "石灰石浆液泵选型",
+                DataGridName = "DataGrid_石灰石浆液泵选型"
+            }
+        },
+        {
+            "_8_石灰石浆液泵选2近型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_8_石灰石浆液泵选2近型计算_公式导出.csv",
+                GroupBoxName = "石灰石浆液泵选2近型计算",
+                DataGridName = "DataGrid_石灰石浆液泵选2近型计算"
+            }
+        },
+        {
+            "_9_石膏排出泵选1远型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_9_石膏排出泵选1远型计算_公式导出.csv",
+                GroupBoxName = "石膏排出泵选1远型计算",
+                DataGridName = "DataGrid_石膏排出泵选1远型计算"
+            }
+        },
+        {
+            "_10_石膏排出泵选2近型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_10_石膏排出泵选2近型计算_公式导出.csv",
+                GroupBoxName = "石膏排出泵选2近型计算",
+                DataGridName = "DataGrid_石膏排出泵选2近型计算"
+            }
+        },
+        {
+            "_11_缓冲泵选型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_11_缓冲泵选型计算_公式导出.csv",
+                GroupBoxName = "缓冲泵选型计算",
+                DataGridName = "DataGrid_缓冲泵选型计算"
+            }
+        },
+        {
+            "_12_滤液水泵选1远型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_12_滤液水泵选1远型计算_公式导出.csv",
+                GroupBoxName = "滤液水泵选1远型计算",
+                DataGridName = "DataGrid_滤液水泵选1远型计算"
+            }
+        },
+        {
+            "_13_滤液水泵选2近型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_13_滤液水泵选2近型计算_公式导出.csv",
+                GroupBoxName = "滤液水泵选2近型计算",
+                DataGridName = "DataGrid_滤液水泵选2近型计算"
+            }
+        },
+        {
+            "_14_事故泵选1远型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_14_事故泵选1远型计算_公式导出.csv",
+                GroupBoxName = "事故泵选1远型计算",
+                DataGridName = "DataGrid_事故泵选1远型计算"
+            }
+        },
+        {
+            "_15_事故泵选2近型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_15_事故泵选2近型计算_公式导出.csv",
+                GroupBoxName = "事故泵选2近型计算",
+                DataGridName = "DataGrid_事故泵选2近型计算"
+            }
+        },
+        {
+            "_16_地坑泵选型计算_公式导出.csv",
+            new CalcCsvTableDefinition
+            {
+                FileName = "_16_地坑泵选型计算_公式导出.csv",
+                GroupBoxName = "地坑泵选型计算",
+                DataGridName = "DataGrid_地坑泵选型计算"
+            }
+        }
+            };
+
+
+
+        /// <summary>
+        /// 每个 DataGrid 对应一份数据源
+        /// Key = DataGrid 名称
+        /// </summary>
+        private readonly Dictionary<string, ObservableCollection<CalcCsvTableRow>> _calcCsvTableSources =
+            new Dictionary<string, ObservableCollection<CalcCsvTableRow>>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 编辑前的旧值，用于非法输入回退
+        /// </summary>
+        private string _calcCsvEditingOldValue = string.Empty;
+
+        /// <summary>
+        /// 防止重算时递归触发
+        /// </summary>
+        private bool _calcCsvIsReloading = false;
+
+        /// <summary>
+        /// 初始化所有 CSV 驱动表
+        /// </summary>
+        private void InitializeCalcCsvTables()
+        {
+            try
+            {
+                ReloadCalcCsvTables(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"初始化 CSV 计算表失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 获取外部 CSV 附件目录
+        /// 这里放在本地用户目录，便于线下替换
+        /// </summary>
+        private string GetCalcCsvExternalDirectory()
+        {
+            string directory = System.IO.Path.Combine(AppPath, "CalcCsvTemplates");
+            if (!System.IO.Directory.Exists(directory))
+            {
+                System.IO.Directory.CreateDirectory(directory);
+            }
+            return directory;
+        }
+
+        /// <summary>
+        /// 获取最终加载的 CSV 文件路径
+        /// 优先级：外部附件目录 > 程序 Resources 目录 > 开发目录 Resources
+        /// </summary>
+        private string ResolveCalcCsvPath(string fileName)
+        {
+            string externalPath = System.IO.Path.Combine(GetCalcCsvExternalDirectory(), fileName);
+
+            // 1) 本地已有，直接用本地
+            if (System.IO.File.Exists(externalPath))
+                return externalPath;
+
+            // 2) 运行目录 Resources 作为种子
+            string runtimeResourcePath = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Resources",
+                fileName);
+
+            if (TrySeedCalcCsvToExternal(runtimeResourcePath, externalPath, out string resolvedFromRuntime))
+                return resolvedFromRuntime;
+
+            // 3) 开发目录 Resources 作为种子（调试兜底）
+            string devResourcePath = System.IO.Path.Combine(
+                @"C:\Users\ShiGu\source\repos\GB_NewCadPlus_III\Resources",
+                fileName);
+
+            if (TrySeedCalcCsvToExternal(devResourcePath, externalPath, out string resolvedFromDev))
+                return resolvedFromDev;
+
+            // 4) 最后尝试从 Resources.resx 导出到本地外部目录
+            if (TryExportCalcCsvFromResx(fileName, externalPath, out string exportedPath))
+                return exportedPath;
+
+            // 找不到时返回本地目标路径，便于日志提示
+            return externalPath;
+        }
+        /// <summary>
+        /// 用种子文件初始化本地外部 CSV。
+        /// 成功时优先返回本地 externalPath；若复制失败则回退返回 seedPath（保证仍可读取）
+        /// </summary>
+        private bool TrySeedCalcCsvToExternal(string seedPath, string externalPath, out string resolvedPath)
+        {
+            resolvedPath = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(seedPath) || !System.IO.File.Exists(seedPath))
+                return false;
+
+            try
+            {
+                string? directory = System.IO.Path.GetDirectoryName(externalPath);
+                if (!string.IsNullOrWhiteSpace(directory) && !System.IO.Directory.Exists(directory))
+                {
+                    System.IO.Directory.CreateDirectory(directory);
+                }
+
+                if (!System.IO.File.Exists(externalPath))
+                {
+                    System.IO.File.Copy(seedPath, externalPath, false);
+                    LogManager.Instance.LogInfo($"已用种子公式文件初始化本地模板：{externalPath}");
+                }
+
+                resolvedPath = externalPath;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"种子公式文件复制到本地失败，改为直接加载种子文件：{ex.Message}");
+                resolvedPath = seedPath;
+                return true;
+            }
+        }
+        /// <summary>
+        /// 尝试从 Resources.resx 中导出 CSV 到外部附件目录
+        /// </summary>
+        private bool TryExportCalcCsvFromResx(string fileName, string targetPath, out string exportedPath)
+        {
+            exportedPath = string.Empty;
+
+            foreach (string resourceKey in GetCalcCsvResourceCandidateKeys(fileName))
+            {
+                try
+                {
+                    object? resourceObject = global::GB_NewCadPlus_IV.Resources.ResourceManager.GetObject(
+                        resourceKey,
+                        global::GB_NewCadPlus_IV.Resources.Culture);
+
+                    if (!(resourceObject is byte[] bytes) || bytes.Length == 0)
+                        continue;
+
+                    string? directory = System.IO.Path.GetDirectoryName(targetPath);
+                    if (!string.IsNullOrWhiteSpace(directory) && !System.IO.Directory.Exists(directory))
+                    {
+                        System.IO.Directory.CreateDirectory(directory);
+                    }
+
+                    System.IO.File.WriteAllBytes(targetPath, bytes);
+                    exportedPath = targetPath;
+
+                    LogManager.Instance.LogInfo(
+                        $"已从 Resources.resx 导出 CSV：资源键={resourceKey}，目标文件={targetPath}");
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogWarning(
+                        $"从 Resources.resx 导出 CSV 失败：资源键={resourceKey}，错误={ex.Message}");
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 根据 CSV 文件名生成可能的 Resources.resx 资源键
+        /// 兼容：
+        /// 1. 文件名去掉 .csv 后直接匹配
+        /// 2. 远型 / 近型 在 resx 中被转成 _远_型 / _近_型 的情况
+        /// 3. 中英文括号被转成下划线的情况
+        /// </summary>
+        private IEnumerable<string> GetCalcCsvResourceCandidateKeys(string fileName)
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void AddKey(string? key)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                    keys.Add(key.Trim());
+            }
+
+            string baseName = System.IO.Path.GetFileNameWithoutExtension(fileName).Trim();
+
+            AddKey(baseName);
+            AddKey(baseName.Replace("远型", "_远_型").Replace("近型", "_近_型"));
+            AddKey(baseName.Replace("(远)", "_远_").Replace("(近)", "_近_"));
+            AddKey(baseName.Replace("（远）", "_远_").Replace("（近）", "_近_"));
+            AddKey(
+                baseName
+                    .Replace("(远)", "_远_")
+                    .Replace("(近)", "_近_")
+                    .Replace("（远）", "_远_")
+                    .Replace("（近）", "_近_")
+                    .Replace("远型", "_远_型")
+                    .Replace("近型", "_近_型"));
+
+            return keys;
+        }
+
+        /// <summary>
+        /// 重载所有 CSV 表
+        /// </summary>
+        //private void ReloadCalcCsvTables(bool showMessage)
+        //{
+        //    if (_calcCsvIsReloading)
+        //        return;
+
+        //    _calcCsvIsReloading = true;
+
+        //    try
+        //    {
+        //        foreach (var definition in _calcCsvTableDefinitions.Values)
+        //        {
+        //            ReloadSingleCalcCsvTable(definition);
+        //        }
+
+        //        if (showMessage)
+        //        {
+        //            MessageBox.Show(
+        //                $"CSV 已重载。\n外部附件目录：{GetCalcCsvExternalDirectory()}",
+        //                "提示",
+        //                MessageBoxButton.OK,
+        //                MessageBoxImage.Information);
+        //        }
+        //    }
+        //    finally
+        //    {
+        //        _calcCsvIsReloading = false;
+        //    }
+        //}
+
+        /// <summary>
+        /// 重载单个 CSV 表
+        /// </summary>
+        //private void ReloadSingleCalcCsvTable(CalcCsvTableDefinition definition)
+        //{
+        //    string csvPath = ResolveCalcCsvPath(definition.FileName);
+        //    LogManager.Instance.LogInfo($"重载 CSV: {definition.FileName} -> {csvPath}");
+
+        //    if (!System.IO.File.Exists(csvPath))
+        //    {
+        //        LogManager.Instance.LogInfo($"未找到 CSV 文件: {csvPath}");
+        //        return;
+        //    }
+
+        //    var dataGrid = EnsureCalcCsvDataGrid(definition);
+        //    var rows = LoadCalcCsvRows(csvPath, definition.DataGridName);
+
+        //    if (!_calcCsvTableSources.ContainsKey(definition.DataGridName))
+        //    {
+        //        _calcCsvTableSources[definition.DataGridName] = new ObservableCollection<CalcCsvTableRow>();
+        //    }
+
+        //    _calcCsvTableSources[definition.DataGridName].Clear();
+        //    foreach (var row in rows.OrderBy(r => r.Sequence))
+        //    {
+        //        _calcCsvTableSources[definition.DataGridName].Add(row);
+        //    }
+
+        //    dataGrid.ItemsSource = _calcCsvTableSources[definition.DataGridName];
+        //    RecalculateCalcCsvTable(definition.DataGridName);
+        //}
+
+        /// <summary>
+        /// 确保目标 GroupBox 中存在 DataGrid
+        /// 已有则直接用；没有则动态创建
+        /// </summary>
+        private DataGrid EnsureCalcCsvDataGrid(CalcCsvTableDefinition definition)
+        {
+            // 先尝试找 XAML 中已存在的 DataGrid
+            var existedDataGrid = FindName(definition.DataGridName) as DataGrid;
+            if (existedDataGrid != null)
+                return existedDataGrid;
+
+            var groupBox = FindName(definition.GroupBoxName) as System.Windows.Controls.GroupBox;
+            if (groupBox == null)
+                throw new InvalidOperationException($"未找到 GroupBox：{definition.GroupBoxName}");
+
+            var dataGrid = CreateCalcCsvDataGrid(definition.DataGridName);
+
+            // 如果 GroupBox 内容本来就是一个 Grid，则清空后放入 DataGrid
+            if (groupBox.Content is Grid hostGrid)
+            {
+                hostGrid.Children.Clear();
+                hostGrid.Children.Add(dataGrid);
+            }
+            else
+            {
+                // 否则直接替换 GroupBox 内容
+                groupBox.Content = dataGrid;
+            }
+
+            try
+            {
+                RegisterName(definition.DataGridName, dataGrid);
+            }
+            catch
+            {
+                // 运行时重复注册名称时忽略即可
+            }
+
+            return dataGrid;
+        }
+
+        /// <summary>
+        /// 运行时动态创建计算表 DataGrid
+        /// </summary>
+        private DataGrid CreateCalcCsvDataGrid(string dataGridName)
+        {
+            var dataGrid = new DataGrid
+            {
+                Name = dataGridName,
+                Margin = new Thickness(0),
+                AutoGenerateColumns = false,
+                CanUserAddRows = false,
+                CanUserDeleteRows = false,
+                GridLinesVisibility = DataGridGridLinesVisibility.All,
+                HeadersVisibility = DataGridHeadersVisibility.Column,
+                IsReadOnly = false
+            };
+
+            dataGrid.Columns.Add(new DataGridTextColumn
+            {
+                Width = 38,
+                Header = "序号",
+                Binding = new Binding("Sequence"),
+                IsReadOnly = true
+            });
+
+            dataGrid.Columns.Add(new DataGridTextColumn
+            {
+                Width = 130,
+                Header = "参数名称",
+                Binding = new Binding("ParameterName"),
+                IsReadOnly = true
+            });
+
+            dataGrid.Columns.Add(new DataGridTemplateColumn
+            {
+                Width = 60,
+                Header = "值",
+                CellTemplate = BuildCalcValueCellTemplate(),
+                CellEditingTemplate = BuildCalcValueEditingTemplate()
+            });
+
+            dataGrid.Columns.Add(new DataGridTextColumn
+            {
+                Width = 45,
+                Header = "单位",
+                Binding = new Binding("Unit"),
+                IsReadOnly = true
+            });
+
+            var rowStyle = new Style(typeof(DataGridRow));
+            var trigger = new DataTrigger
+            {
+                Binding = new Binding("IsEditable"),
+                Value = false
+            };
+            trigger.Setters.Add(new Setter(
+                DataGridRow.BackgroundProperty,
+                new SolidColorBrush(global::System.Windows.Media.Color.FromRgb(244, 244, 244))));
+            trigger.Setters.Add(new Setter(DataGridRow.ToolTipProperty, new Binding("Formula")));
+            rowStyle.Triggers.Add(trigger);
+            dataGrid.RowStyle = rowStyle;
+
+            dataGrid.BeginningEdit += DataGrid_计算表输入项_BeginningEdit;
+            dataGrid.CellEditEnding += DataGrid_计算表自动联动重算_CellEditEnding;
+
+            return dataGrid;
+        }
+        /// <summary>
+        ///  构建计算值单元格模板
+        /// </summary>
+        /// <returns> </returns>
+        private DataTemplate BuildCalcValueCellTemplate()
+        {
+            var template = new DataTemplate();
+            var grid = new FrameworkElementFactory(typeof(Grid));
+
+            var txt = new FrameworkElementFactory(typeof(TextBlock));
+            txt.SetBinding(TextBlock.TextProperty, new Binding("ValueText"));
+            txt.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+            var txtStyle = new Style(typeof(TextBlock));
+            txtStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Visible));
+            txtStyle.Triggers.Add(new DataTrigger
+            {
+                Binding = new Binding("IsMultiSelect"),
+                Value = true,
+                Setters = { new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Collapsed) }
+            });
+            txt.SetValue(TextBlock.StyleProperty, txtStyle);
+
+            var combo = new FrameworkElementFactory(typeof(ComboBox));
+            combo.SetBinding(ComboBox.ItemsSourceProperty, new Binding("OptionValues"));
+            combo.SetBinding(ComboBox.SelectedItemProperty, new Binding("ValueText")
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
+            });
+            combo.SetValue(ComboBox.IsEditableProperty, false);
+            combo.SetValue(FrameworkElement.MarginProperty, new Thickness(0));
+
+            var comboStyle = new Style(typeof(ComboBox));
+            comboStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Collapsed));
+            comboStyle.Triggers.Add(new DataTrigger
+            {
+                Binding = new Binding("IsMultiSelect"),
+                Value = true,
+                Setters = { new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Visible) }
+            });
+            combo.SetValue(ComboBox.StyleProperty, comboStyle);
+
+            grid.AppendChild(txt);
+            grid.AppendChild(combo);
+            template.VisualTree = grid;
+            return template;
+        }
+        /// <summary>
+        /// 构建计算值编辑模板
+        /// </summary>
+        /// <returns></returns>
+        private DataTemplate BuildCalcValueEditingTemplate()
+        {
+            var template = new DataTemplate();
+            var grid = new FrameworkElementFactory(typeof(Grid));
+
+            var tb = new FrameworkElementFactory(typeof(TextBox));
+            tb.SetBinding(TextBox.TextProperty, new Binding("ValueText")
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
+            });
+
+            var tbStyle = new Style(typeof(TextBox));
+            tbStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Visible));
+            tbStyle.Triggers.Add(new DataTrigger
+            {
+                Binding = new Binding("IsMultiSelect"),
+                Value = true,
+                Setters = { new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Collapsed) }
+            });
+            tb.SetValue(TextBox.StyleProperty, tbStyle);
+
+            var combo = new FrameworkElementFactory(typeof(ComboBox));
+            combo.SetBinding(ComboBox.ItemsSourceProperty, new Binding("OptionValues"));
+            combo.SetBinding(ComboBox.SelectedItemProperty, new Binding("ValueText")
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
+            });
+            combo.SetValue(ComboBox.IsEditableProperty, false);
+
+            var comboStyle = new Style(typeof(ComboBox));
+            comboStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Collapsed));
+            comboStyle.Triggers.Add(new DataTrigger
+            {
+                Binding = new Binding("IsMultiSelect"),
+                Value = true,
+                Setters = { new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Visible) }
+            });
+            combo.SetValue(ComboBox.StyleProperty, comboStyle);
+
+            grid.AppendChild(tb);
+            grid.AppendChild(combo);
+            template.VisualTree = grid;
+            return template;
+        }
+
+        /// <summary>
+        /// 读取 CSV 行
+        /// 同时兼容：
+        /// 1. 新模板 CSV
+        /// 2. 旧版 Address/Formula/Value 结构 CSV
+        /// </summary>
+        private List<CalcCsvTableRow> LoadCalcCsvRows(string csvPath, string targetGridName)
+        {
+            string[] lines = System.IO.File.ReadAllLines(csvPath, Encoding.UTF8);
+            if (lines.Length == 0)
+                return new List<CalcCsvTableRow>();
+
+            string header = (lines[0] ?? string.Empty).Trim();
+
+            // 新模板格式
+            if (header.IndexOf("GridName", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                header.IndexOf("ParameterName", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return LoadCalcCsvRowsFromTemplate(lines, targetGridName);
+            }
+
+            // 兼容旧格式：Address,Formula,Value
+            if (header.StartsWith("Address", StringComparison.OrdinalIgnoreCase))
+            {
+                return LoadCalcCsvRowsFromLegacy(lines, targetGridName);
+            }
+
+            throw new InvalidOperationException($"无法识别的 CSV 格式：{csvPath}");
+        }
+
+        /// <summary>
+        /// 读取新模板格式 CSV
+        /// </summary>
+        //private List<CalcCsvTableRow> LoadCalcCsvRowsFromTemplate(string[] lines, string targetGridName)
+        //{
+        //    var rows = new List<CalcCsvTableRow>();
+
+        //    for (int i = 1; i < lines.Length; i++)
+        //    {
+        //        string line = lines[i];
+        //        if (string.IsNullOrWhiteSpace(line))
+        //            continue;
+
+        //        var cols = SplitCsvLine(line);
+        //        if (cols.Count < 9)
+        //            continue;
+
+        //        string gridName = cols[0].Trim();
+        //        string address = cols[1].Trim();
+        //        string sequenceText = cols[2].Trim();
+        //        string parameterName = cols[3].Trim();
+        //        string valueType = cols[4].Trim();
+        //        string formula = cols[5].Trim();
+        //        string value = cols[6].Trim();
+        //        string unit = cols[7].Trim();
+        //        string description = cols[8].Trim();
+
+        //        // 文件名已决定目标表，这里 GridName 主要用于自说明
+        //        // 若模板里写了别的 GridName，则跳过
+        //        if (!string.IsNullOrWhiteSpace(gridName) &&
+        //            !string.Equals(gridName, targetGridName, StringComparison.OrdinalIgnoreCase))
+        //        {
+        //            continue;
+        //        }
+
+        //        if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(parameterName))
+        //            continue;
+
+        //        int sequence = 0;
+        //        int.TryParse(sequenceText, out sequence);
+        //        if (sequence <= 0)
+        //            sequence = GetRowNumberFromAddress(address);
+
+        //        rows.Add(new CalcCsvTableRow
+        //        {
+        //            GridName = targetGridName,
+        //            Address = address,
+        //            Sequence = sequence,
+        //            ParameterName = parameterName,
+        //            ValueType = string.IsNullOrWhiteSpace(valueType) ? "Input" : valueType,
+        //            Formula = formula,
+        //            ValueText = value,
+        //            Unit = unit,
+        //            Description = description
+        //        });
+        //    }
+
+        //    return rows;
+        //}
+
+        /// <summary>
+        /// 兼容旧版 CSV：
+        /// Address,Formula,Value
+        /// A/B/C/D 四列拆开的结构
+        /// </summary>
+        private List<CalcCsvTableRow> LoadCalcCsvRowsFromLegacy(string[] lines, string targetGridName)
+        {
+            var cellMap = new Dictionary<string, LegacyCsvCell>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                var cols = SplitCsvLine(line);
+                if (cols.Count < 3)
+                    continue;
+
+                string address = cols[0].Trim();
+                if (string.IsNullOrWhiteSpace(address))
+                    continue;
+
+                cellMap[address] = new LegacyCsvCell
+                {
+                    Formula = cols.Count > 1 ? cols[1].Trim() : string.Empty,
+                    Value = cols.Count > 2 ? cols[2].Trim() : string.Empty
+                };
+            }
+
+            var rows = new List<CalcCsvTableRow>();
+
+            // 旧格式里真正参与计算和值显示的核心列是 C 列
+            // 因此按 C* 提取行号，而不是按 B*
+            var rowNumbers = cellMap.Keys
+                .Where(k => k.StartsWith("C", StringComparison.OrdinalIgnoreCase))
+                .Select(GetRowNumberFromAddress)
+                .Where(n => n >= 2)
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+
+            foreach (int rowNumber in rowNumbers)
+            {
+                string address = "C" + rowNumber;
+                string formula = GetLegacyCellFormula(cellMap, address);
+                string value = GetLegacyCellValue(cellMap, address);
+                string unit = GetLegacyCellValue(cellMap, "D" + rowNumber);
+
+                // 参数名优先取 B 列；若为空，再回退 A 列；还为空则用地址兜底
+                string parameterName = GetLegacyCellValue(cellMap, "B" + rowNumber);
+                if (string.IsNullOrWhiteSpace(parameterName))
+                    parameterName = GetLegacyCellValue(cellMap, "A" + rowNumber);
+                if (string.IsNullOrWhiteSpace(parameterName))
+                    parameterName = address;
+
+                // 若该行既没有值也没有公式也没有单位/标题，则跳过纯空行
+                if (string.IsNullOrWhiteSpace(parameterName) &&
+                    string.IsNullOrWhiteSpace(formula) &&
+                    string.IsNullOrWhiteSpace(value) &&
+                    string.IsNullOrWhiteSpace(unit))
+                {
+                    continue;
+                }
+
+                rows.Add(new CalcCsvTableRow
+                {
+                    GridName = targetGridName,
+                    Address = address,
+                    Sequence = rowNumber,
+                    ParameterName = parameterName,
+                    ValueType = string.IsNullOrWhiteSpace(formula) ? "Input" : "Calc",
+                    Formula = formula,
+                    ValueText = value,
+                    Unit = unit,
+                    Description = string.IsNullOrWhiteSpace(formula) ? "输入值" : "计算值"
+                });
+            }
+
+            return rows;
+        }
+
+        /// <summary>
+        /// 处理 SQRT(...) 函数
+        /// </summary>
+        private string ResolveCalcCsvSqrt(string expression)
+        {
+            while (true)
+            {
+                int sqrtIndex = expression.IndexOf("SQRT(", StringComparison.OrdinalIgnoreCase);
+                if (sqrtIndex < 0)
+                    return expression;
+
+                int openIndex = sqrtIndex + 4;
+                int closeIndex = FindCalcCsvMatchingParenthesis(expression, openIndex);
+
+                string innerExpression = expression.Substring(openIndex + 1, closeIndex - openIndex - 1);
+                double innerValue = EvaluatePlainExpression(innerExpression);
+                double sqrtValue = Math.Sqrt(innerValue);
+
+                string replacement = ToCalcCsvDoubleLiteral(sqrtValue);
+                expression = expression.Substring(0, sqrtIndex) + replacement + expression.Substring(closeIndex + 1);
+            }
+        }
+
+        /// <summary>
+        /// 计算普通表达式
+        /// </summary>
+        private static double EvaluatePlainExpression(string expression)
+        {
+            string normalizedExpression = NormalizeCalcCsvExpression(expression);
+
+            var table = new DataTable
+            {
+                Locale = System.Globalization.CultureInfo.InvariantCulture
+            };
+
+            object result = table.Compute(normalizedExpression, string.Empty);
+            return Convert.ToDouble(result, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 把表达式中的整数字面量统一转换为双精度字面量，避免 DataTable.Compute 走 Int32 计算
+        /// 例如：101325 -> 101325.0
+        /// 注意：这里只处理“独立的整数”，不会破坏已有小数，也不会处理单元格引用
+        /// </summary>
+        private static string NormalizeCalcCsvExpression(string expression)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+                return "0.0";
+
+            return Regex.Replace(
+                expression,
+                @"(?<![\w.])\d+(?![\w.])",
+                m => m.Value + ".0");
+        }
+        /// <summary>
+        /// 把 double 转成适合公式计算的文本
+        /// 要求：必须带小数点，避免被 DataTable.Compute 当成 Int32
+        /// </summary>
+        private static string ToCalcCsvDoubleLiteral(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                return "0.0";
+
+            string text = value.ToString("0.###############", System.Globalization.CultureInfo.InvariantCulture);
+            return text.Contains(".") ? text : text + ".0";
+        }
+
+        /// <summary>
+        /// 找到匹配的右括号
+        /// </summary>
+        private static int FindCalcCsvMatchingParenthesis(string text, int openIndex)
+        {
+            int depth = 0;
+
+            for (int i = openIndex; i < text.Length; i++)
+            {
+                if (text[i] == '(')
+                    depth++;
+                else if (text[i] == ')')
+                {
+                    depth--;
+                    if (depth == 0)
+                        return i;
+                }
+            }
+
+            throw new InvalidOperationException("公式括号不匹配。");
+        }
+
+        /// <summary>
+        /// 计算表编辑开始事件
+        /// 只允许编辑输入项
+        /// </summary>
+        private void DataGrid_计算表输入项_BeginningEdit(object sender, DataGridBeginningEditEventArgs e)
+        {
+            if (!(e.Row.Item is CalcCsvTableRow row))
+                return;
+
+            if (!row.IsEditable)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            _calcCsvEditingOldValue = row.ValueText;
+        }
+
+        /// <summary>
+        /// 计算表编辑结束事件
+        /// 输入新值后，自动联动重算
+        /// </summary>
+        //private void DataGrid_计算表自动联动重算_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+        //{
+        //    if (!(e.Row.Item is CalcCsvTableRow row))
+        //        return;
+
+        //    if (!row.IsEditable)
+        //        return;
+
+        //    var textBox = e.EditingElement as TextBox;
+        //    string newText = textBox?.Text?.Trim() ?? string.Empty;
+        //    string dataGridName = (sender as DataGrid)?.Name ?? row.GridName;
+
+        //    Dispatcher.BeginInvoke(new Action(() =>
+        //    {
+        //        if (!TryParseCalcCsvDouble(newText, out double parsedValue))
+        //        {
+        //            row.ValueText = _calcCsvEditingOldValue;
+        //            MessageBox.Show(
+        //                $"参数“{row.ParameterName}”请输入有效数字。",
+        //                "提示",
+        //                MessageBoxButton.OK,
+        //                MessageBoxImage.Warning);
+        //            return;
+        //        }
+
+        //        row.ValueText = FormatCalcCsvNumber(parsedValue);
+        //        RecalculateCalcCsvTable(dataGridName);
+        //    }), System.Windows.Threading.DispatcherPriority.Background);
+        //}
+
+        /// <summary>
+        /// 点击“重载CSV”按钮
+        /// </summary>
+        private void 重载CSV按钮_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ReloadCalcCsvTables(true);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"重载 CSV 失败: {ex.Message}");
+                MessageBox.Show(
+                    $"重载 CSV 失败：{ex.Message}",
+                    "错误",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 尝试解析数值
+        /// </summary>
+        private static bool TryParseCalcCsvDouble(string? text, out double value)
+        {
+            value = 0.0;
+            string raw = (text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(raw))
+                return false;
+
+            // 统一全角符号/空格
+            raw = raw.Replace('％', '%')
+                     .Replace('，', ',')
+                     .Replace('\u3000', ' ')
+                     .Trim();
+
+            // 百分比优先处理：90% -> 0.9
+            bool isPercent = raw.EndsWith("%", StringComparison.Ordinal);
+            if (isPercent)
+            {
+                raw = raw.Substring(0, raw.Length - 1).Trim();
+            }
+
+            // 兼容多种小数格式
+            bool ok =
+                double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value) ||
+                double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value) ||
+                double.TryParse(raw.Replace(",", "."), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value);
+
+            if (!ok)
+                return false;
+
+            if (isPercent)
+                value /= 100.0;
+
+            return true;
+        }
+
+        /// <summary>
+        /// 统一格式化显示
+        /// </summary>
+        private static string FormatCalcCsvNumber(double value)
+        {
+            return value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 解析 CSV 行，兼容双引号
+        /// </summary>
+        private static List<string> SplitCsvLine(string line)
+        {
+            var result = new List<string>();
+            var current = new StringBuilder();
+            bool inQuotes = false;
+
+            foreach (char ch in line)
+            {
+                if (ch == '"')
+                {
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (ch == ',' && !inQuotes)
+                {
+                    result.Add(current.ToString());
+                    current.Clear();
+                    continue;
+                }
+
+                current.Append(ch);
+            }
+
+            result.Add(current.ToString());
+            return result;
+        }
+
+        /// <summary>
+        /// 从地址中提取行号，例如 C21 -> 21
+        /// </summary>
+        private static int GetRowNumberFromAddress(string address)
+        {
+            var match = Regex.Match(address ?? string.Empty, @"\d+");
+            return match.Success ? int.Parse(match.Value) : 0;
+        }
+
+        /// <summary>
+        /// 旧格式 CSV 单元格模型
+        /// </summary>
+        private sealed class LegacyCsvCell
+        {
+            public string Formula { get; set; } = string.Empty;
+            public string Value { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// 读取旧格式单元格值
+        /// </summary>
+        private static string GetLegacyCellValue(Dictionary<string, LegacyCsvCell> cellMap, string address)
+        {
+            return cellMap.TryGetValue(address, out var cell) ? (cell.Value ?? string.Empty).Trim() : string.Empty;
+        }
+
+        /// <summary>
+        /// 读取旧格式单元格公式
+        /// </summary>
+        private static string GetLegacyCellFormula(Dictionary<string, LegacyCsvCell> cellMap, string address)
+        {
+            return cellMap.TryGetValue(address, out var cell) ? (cell.Formula ?? string.Empty).Trim() : string.Empty;
+        }
+
+        #endregion
+
+        #region 计算数据表相关代码
+
+        #endregion
+
+        private void 转换CSV按钮_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var ofd = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "选择总表Excel",
+                    Filter = "Excel 文件 (*.xlsx)|*.xlsx",
+                    FileName = "_00_脱硫系统计算_总表.xlsx",
+                    InitialDirectory = @"D:\03-客户文件\沈阳铝镁院\模板"
+                };
+
+                if (ofd.ShowDialog() != true)
+                    return;
+
+                LoadFromMasterExcelAndBuildUi(ofd.FileName, exportCsv: true);
+
+                MessageBox.Show("已按Excel动态生成页面并导出总CSV。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"按Excel转换失败: {ex.Message}");
+                MessageBox.Show($"转换失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        #region 计算表插入到图纸空间中的相关代码
+
+
+        /// <summary>
+        /// 生成“计算表整体”临时DWG并返回（文件路径, 块名）
+        /// </summary>
+        private (string dwgPath, string blockName) BuildCalcTablesTempDwg()
+        {
+            // 1) 收集当前所有计算表数据（优先按界面顺序）
+            var sections = new List<(string GridName, string Header, List<CalcCsvTableRow> Rows)>();
+
+            try
+            {
+                // 若动态容器已有内容，按 GroupBox 顺序收集，保证插入顺序与界面一致
+                if (CalcDynamicHost != null && CalcDynamicHost.Children.Count > 0)
+                {
+                    foreach (var child in CalcDynamicHost.Children)
+                    {
+                        if (child is System.Windows.Controls.GroupBox gb && gb.Content is DataGrid dg && dg.ItemsSource is IEnumerable<CalcCsvTableRow> src)
+                        {
+                            string header = (gb.Header?.ToString() ?? string.Empty).Trim();
+                            string gridName = (dg.Name ?? string.Empty).Trim();
+                            var rows = src.OrderBy(r => r.Sequence).ToList();
+
+                            if (!string.IsNullOrWhiteSpace(gridName) && rows.Count > 0)
+                            {
+                                sections.Add((gridName, header, rows));
+                            }
+                        }
+                    }
+                }
+
+                // 容器为空时，回退到内存数据源
+                if (sections.Count == 0 && _calcCsvTableSources != null)
+                {
+                    foreach (var kv in _calcCsvTableSources.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        var rows = kv.Value?.OrderBy(r => r.Sequence).ToList() ?? new List<CalcCsvTableRow>();
+                        if (rows.Count == 0) continue;
+
+                        string header = GetCalcGroupHeaderByGridName(kv.Key);
+                        sections.Add((kv.Key, header, rows));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"收集计算表数据失败: {ex.Message}");
+            }
+
+            if (sections.Count == 0)
+                throw new InvalidOperationException("当前没有可插入的计算表数据。");
+
+            // 2) 创建临时DWG路径
+            string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", "CalcTables");
+            if (!Directory.Exists(tempDir))
+                Directory.CreateDirectory(tempDir);
+
+            string fileName = $"CalcTables_{DateTime.Now:yyyyMMdd_HHmmss}.dwg";
+            string fullPath = Path.Combine(tempDir, fileName);
+            string blockName = Path.GetFileNameWithoutExtension(fileName);
+
+            // 3) 在临时数据库中创建一个块，块内纵向排布多个 AutoCAD Table
+            using (var tempDb = new Autodesk.AutoCAD.DatabaseServices.Database(true, true))
+            {
+                using (var tr = tempDb.TransactionManager.StartTransaction())
+                {
+                    // 确保图层存在
+                    const string calcLayer = "TJ(计算表)";
+                    var lt = (Autodesk.AutoCAD.DatabaseServices.LayerTable)tr.GetObject(
+                        tempDb.LayerTableId, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForWrite);
+
+                    if (!lt.Has(calcLayer))
+                    {
+                        var ltr = new Autodesk.AutoCAD.DatabaseServices.LayerTableRecord { Name = calcLayer };
+                        lt.Add(ltr);
+                        tr.AddNewlyCreatedDBObject(ltr, true);
+                    }
+
+                    // 创建块定义
+                    var bt = (Autodesk.AutoCAD.DatabaseServices.BlockTable)tr.GetObject(
+                        tempDb.BlockTableId, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForWrite);
+
+                    var btr = new Autodesk.AutoCAD.DatabaseServices.BlockTableRecord
+                    {
+                        Name = blockName
+                    };
+                    bt.Add(btr);
+                    tr.AddNewlyCreatedDBObject(btr, true);
+
+                    // 版式参数（单位按你项目当前常用值，和管道表逻辑一致的数量级）
+                    double rowHeight = 300.0;
+                    double gap = 600.0;
+                    double[] colWidths = { 700.0, 4200.0, 2000.0, 1200.0 }; // 序号/参数名称/值/单位
+
+                    // Y 方向累计偏移（向下堆叠）
+                    double yOffset = 0.0;
+
+                    foreach (var sec in sections)
+                    {
+                        int dataCount = sec.Rows.Count;
+                        if (dataCount <= 0) continue;
+
+                        // 每个分表：标题行 + 列头行 + 数据行
+                        int rows = dataCount + 2;
+                        int cols = 4;
+
+                        var table = new Autodesk.AutoCAD.DatabaseServices.Table();
+                        table.SetDatabaseDefaults(tempDb);
+                        table.Layer = calcLayer;
+                        table.SetSize(rows, cols);
+                        table.Position = new Autodesk.AutoCAD.Geometry.Point3d(0.0, -yOffset, 0.0);
+
+                        // 行高、列宽
+                        table.SetRowHeight(rowHeight);
+                        for (int c = 0; c < cols; c++)
+                            table.SetColumnWidth(c, colWidths[c]);
+
+                        // 标题行（不做合并，避免不同版本API差异）
+                        table.Cells[0, 0].TextString = string.IsNullOrWhiteSpace(sec.Header) ? sec.GridName : sec.Header;
+                        table.Cells[0, 1].TextString = "";
+                        table.Cells[0, 2].TextString = "";
+                        table.Cells[0, 3].TextString = "";
+
+                        // 列头
+                        table.Cells[1, 0].TextString = "序号";
+                        table.Cells[1, 1].TextString = "参数名称";
+                        table.Cells[1, 2].TextString = "值";
+                        table.Cells[1, 3].TextString = "单位";
+
+                        // 数据
+                        for (int i = 0; i < sec.Rows.Count; i++)
+                        {
+                            int r = i + 2;
+                            var row = sec.Rows[i];
+
+                            table.Cells[r, 0].TextString = row.Sequence.ToString();
+                            table.Cells[r, 1].TextString = row.ParameterName ?? string.Empty;
+                            table.Cells[r, 2].TextString = row.ValueText ?? string.Empty;
+                            table.Cells[r, 3].TextString = row.Unit ?? string.Empty;
+                        }
+
+                        // 对齐
+                        for (int r = 0; r < rows; r++)
+                        {
+                            for (int c = 0; c < cols; c++)
+                            {
+                                try
+                                {
+                                    table.Cells[r, c].Alignment = Autodesk.AutoCAD.DatabaseServices.CellAlignment.MiddleCenter;
+                                }
+                                catch { /* 忽略单格设置失败 */ }
+                            }
+                        }
+
+                        // 加入块定义
+                        btr.AppendEntity(table);
+                        tr.AddNewlyCreatedDBObject(table, true);
+
+                        // 计算下一个分表偏移
+                        yOffset += rows * rowHeight + gap;
+                    }
+
+                    tr.Commit();
+                }
+
+                tempDb.SaveAs(fullPath, Autodesk.AutoCAD.DatabaseServices.DwgVersion.Current);
+            }
+
+            return (fullPath, blockName);
+        }
+
+        /// <summary>
+        /// 插入计算表：将当前“计算数据表”整体生成临时DWG并插入当前图纸空间
+        /// </summary>
+        private void 插入计算表_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 先确保当前数据已完成一次联动重算，避免插入旧值
+                try { RecalculateAllCalcCsvTables(); } catch { /* 若重算失败，后续按当前值继续 */ }
+
+                // 1) 生成临时DWG
+                var (dwgPath, blockName) = BuildCalcTablesTempDwg();
+
+                if (string.IsNullOrWhiteSpace(dwgPath) || !File.Exists(dwgPath))
+                {
+                    MessageBox.Show("生成临时计算表文件失败。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // 2) 获取插入点（在当前活动文档中交互拾取）
+                var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+                if (doc == null)
+                {
+                    MessageBox.Show("未找到活动的 AutoCAD 文档。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                Autodesk.AutoCAD.Geometry.Point3d insertPoint;
+                using (doc.LockDocument())
+                {
+                    var ppr = doc.Editor.GetPoint("\n请选择“计算表整体”插入点：");
+                    if (ppr.Status != Autodesk.AutoCAD.EditorInput.PromptStatus.OK)
+                        return;
+
+                    insertPoint = ppr.Value;
+                }
+
+                // 3) 插入到当前空间（复用现有统一插入能力）
+                var insertedId = AutoCadHelper.InsertBlockFromExternalDwg(dwgPath, blockName, insertPoint);
+                if (insertedId == Autodesk.AutoCAD.DatabaseServices.ObjectId.Null)
+                {
+                    MessageBox.Show("插入失败：未能将计算表导入当前图纸。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                MessageBox.Show("计算表已整体插入当前图纸空间。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+                try
+                {
+                    // ... 现有插入逻辑成功后
+                    TryDeleteTempFile(dwgPath);
+                }
+                catch
+                {
+                    // 忽略清理异常，不影响主流程
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"插入计算表失败: {ex.Message}");
+                MessageBox.Show($"插入计算表失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        #endregion
+
     }
     /// <summary>
     /// DataGrid 绑定使用的行模型（用于 LayerDictionary_DataGrid）
