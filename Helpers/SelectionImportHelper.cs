@@ -23,21 +23,29 @@ namespace GB_NewCadPlus_IV.Helpers
     public class ImportEntityDto
     {
         /// <summary>
-        /// 文件存储信息（对应 cad_file_storages 表）
+        /// 文件存储信息（对应 cad_file_storage 表）
         /// </summary>
         public FileStorage FileStorage { get; set; } = new FileStorage();
+
         /// <summary>
-        /// 文件属性信息（对应 cad_file_attributes 表）
+        /// 文件属性信息（旧模型，过渡期保留，不再作为上传写库主入口）
         /// </summary>
         public FileAttribute FileAttribute { get; set; } = new FileAttribute();
+
         /// <summary>
-        /// 属性业务ID（对应 cad_file_attributes.file_attribute_id）
+        /// 属性业务ID（兼容字段）
         /// </summary>
         public string? FileAttributeId { get; set; }
+
         /// <summary>
-        /// 预览图版路径（相对于某个预设目录，或绝对路径，视具体实现而定）
+        /// 预览图路径
         /// </summary>
         public string? PreviewImagePath { get; set; }
+
+        /// <summary>
+        /// JSON属性字典（新上传入口使用）
+        /// </summary>
+        public Dictionary<string, string> AttributesJson { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

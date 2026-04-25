@@ -34,10 +34,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// 是否使用D盘
         /// </summary>
         private readonly bool _useDPath;
-        /// <summary>
-        /// 当前选择的文件属性
-        /// </summary>
+        // 中文注释：新方案主字段——当前选中的 JSON 属性字典
+        private Dictionary<string, string> _selectedAttributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // 中文注释：兼容字段（旧代码还可能用到），逐步退役
+        [Obsolete("过渡字段：请逐步改用 _selectedAttributes")]
         private FileAttribute _selectedFileAttribute;
+               
         /// <summary>
         /// 分类管理器
         /// </summary>
@@ -673,189 +676,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
-        /// <summary>
-        /// 上传文件并保存到数据库
-        /// </summary>
-        /// <returns></returns>
-        /// <exception cref="Exception"></exception>
-        public async Task UploadFileAndSaveToDatabase(
-            string _selectedFilePath,
-            FileStorage _currentFileStorage,
-            FileAttribute _currentFileAttribute,
-            int categoryId,
-            string categoryType,
-            string filePath,
-            string previewImagePath,
-            CategoryTreeNode _selectedCategoryNode,
-            string _selectedPreviewImagePath,
-            List<CategoryPropertyEditModel> properties,
-            string createdBy,
-            ItemsControl categoryPropertiesDataGrid, // 新增参数
-            WpfMainWindow wpfMainWindow // 新增参数
-        )
-        {
-            List<string> uploadedFiles = new List<string>(); // 记录已上传的文件路径，用于回滚
-            FileStorage? savedFileStorage = null; // 记录已保存的文件记录
-            FileAttribute? savedFileAttribute = null; // 记录已保存的属性记录
-            bool transactionSuccess = false;
-
-            try
-            {
-                if (string.IsNullOrEmpty(_selectedFilePath) || _selectedCategoryNode == null)
-                {
-                    throw new Exception("文件路径或分类节点为空");
-                }
-
-                // 1. 获取文件信息
-                var fileInfo = new FileInfo(_selectedFilePath);
-                string fileName = fileInfo.Name;
-                string displayName = Path.GetFileNameWithoutExtension(fileName);
-                string description = $"上传文件: {fileName}";
-                var fileStorage = new FileStorage();
-                // 2. 使用FileManager上传主文件到服务器指定路径
-                using (var fileStream = File.OpenRead(_selectedFilePath))
-                {
-                    fileStorage = await UploadFileAsync(_databaseManager,
-                        categoryId,
-                        _selectedCategoryNode.Level == 0 ? "main" : "sub",
-                        fileName,
-                        fileStream,
-                        description,
-                        Environment.UserName
-                    );
-
-                    // 保存上传后的文件信息
-                    _currentFileStorage = fileStorage;
-                    savedFileStorage = fileStorage;
-                    uploadedFiles.Add(fileStorage.FilePath); // 记录已上传的文件路径
-                }
-
-                // 3. 如果有预览图片，上传预览图片
-                string previewStoredPath = null;
-                if (!string.IsNullOrEmpty(_selectedPreviewImagePath) && File.Exists(_selectedPreviewImagePath))
-                {
-                    var previewInfo = new FileInfo(_selectedPreviewImagePath);
-                    string previewFileName = $"{Path.GetFileNameWithoutExtension(_selectedPreviewImagePath)}_preview{previewInfo.Extension}";
-
-                    using (var previewStream = File.OpenRead(_selectedPreviewImagePath))
-                    {
-                        // 生成预览文件存储路径
-                        string previewStoredName = $"{Guid.NewGuid()}{previewInfo.Extension}";
-                        previewStoredPath = Path.Combine(
-                            Path.GetDirectoryName(_currentFileStorage.FilePath),
-                            previewStoredName);
-
-                        // 复制预览图片到同一目录
-                        File.Copy(_selectedPreviewImagePath, previewStoredPath, true);
-
-                        _currentFileStorage.PreviewImageName = previewStoredName;
-                        _currentFileStorage.PreviewImagePath = previewStoredPath;
-                        uploadedFiles.Add(previewStoredPath); // 记录预览文件路径
-                    }
-                }
-
-                // 4. 创建文件属性对象
-                _currentFileAttribute = new FileAttribute
-                {
-                    //FileStorageId = _currentFileStorage.Id,
-                    FileName = _currentFileStorage.FileName,
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-
-                // 5. 从属性编辑网格中获取属性值
-                var gridProperties = categoryPropertiesDataGrid.ItemsSource as List<CategoryPropertyEditModel>;
-                if (gridProperties != null)
-                {
-                    foreach (var property in gridProperties)
-                    {
-                        // 使用实例调用
-                        wpfMainWindow.SetFileAttributeProperty(_currentFileAttribute, property.PropertyName1, property.PropertyValue1);
-                        wpfMainWindow.SetFileAttributeProperty(_currentFileAttribute, property.PropertyName2, property.PropertyValue2);
-                    }
-                }
-                if (_currentFileAttribute.FileName == null)
-                {
-                    MessageBox.Show("请填写文件名称", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                // 6. 保存文件属性到数据库
-                int attributeResult = await _databaseManager.AddFileAttributeAsync(_currentFileAttribute);
-                if (attributeResult <= 0)
-                {
-                    LogManager.Instance.LogInfo("保存文件属性失败");
-
-                }
-                else
-                {
-                    LogManager.Instance.LogInfo("保存文件属性到数据库:成功");
-                }
-                //获取文件属性ID
-                _currentFileAttribute = await _databaseManager.GetFileAttributeAsync(_currentFileStorage.DisplayName);
-                if (_currentFileAttribute == null || _currentFileAttribute.Id == null)
-                {
-                    LogManager.Instance.LogInfo("获取文件属性ID失败");
-                    // 发生异常，需要回滚操作
-                    await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-                    return;
-                }
-                // FileAttribute.Id 是 long，FileStorage.FileAttributeId 在模型中为 string（业务ID），
-                // 这里转换为字符串以避免类型不匹配
-                _currentFileStorage.FileAttributeId = _currentFileAttribute.Id.ToString();
-
-                //新加文件到数据库中
-                var fileResult = await _databaseManager.AddFileStorageAsync(_currentFileStorage);
-                if (fileResult == 0)
-                {
-                    LogManager.Instance.LogInfo("保存文件记录到数据库:失败");
-                    // 发生异常，需要回滚操作
-                    await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-                    return;
-                }
-                else
-                {
-                    LogManager.Instance.LogInfo("保存文件记录到数据库:成功");
-                }
-                ;
-                _currentFileStorage = await _databaseManager.GetFileStorageAsync(_currentFileStorage.FileHash);//获取文件的基本信息
-                _currentFileAttribute.FileStorageId = _currentFileStorage.Id;//文件属性ID
-
-                await _databaseManager.UpdateFileAttributeAsync(_currentFileAttribute);//更新文件属性
-                // 8. 处理标签信息
-                await ProcessFileTags(_currentFileStorage.Id, properties);
-
-                // 9. 更新分类统计
-                // UpdateCategoryStatisticsAsync 可能返回 Task 或 Task<bool>，此处不需要赋值，直接 await
-                await _databaseManager.UpdateCategoryStatisticsAsync(
-                    _currentFileStorage.CategoryId,
-                    _currentFileStorage.CategoryType);
-
-                // 如果所有操作都成功，标记事务成功
-                transactionSuccess = true;
-                // 11. 刷新分类树和界面显示
-                // 替换为：
-                //await RefreshCurrentCategoryFilesAsync();
-                await wpfMainWindow.RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode);
-                MessageBox.Show($"文件已成功上传并保存到服务器指定路径\n文件路径: {_currentFileStorage.FilePath}",
-                    "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                // 发生异常，需要回滚操作
-                await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-                throw new Exception($"文件上传和数据库保存失败: {ex.Message}", ex);
-            }
-            finally
-            {
-                // 如果事务失败，执行回滚
-                if (!transactionSuccess)
-                {
-                    await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, _currentFileStorage, _currentFileAttribute);
-                }
-            }
-        }
-
 
         /// <summary>
         /// 更新选中文件
@@ -1034,127 +854,259 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
-        
+        /// <summary>
+        /// 上传文件并保存到数据库（JSON属性新方案）
+        /// </summary>
+        public async Task UploadFileAndSaveToDatabase(
+            string _selectedFilePath,
+            FileStorage _currentFileStorage,
+            FileAttribute _currentFileAttribute,
+            int categoryId,
+            string categoryType,
+            string filePath,
+            string previewImagePath,
+            CategoryTreeNode _selectedCategoryNode,
+            string _selectedPreviewImagePath,
+            List<CategoryPropertyEditModel> properties,
+            string createdBy,
+            ItemsControl categoryPropertiesDataGrid,
+            WpfMainWindow wpfMainWindow
+        )
+        {
+            // 中文注释：记录已上传文件路径，用于异常时回滚物理文件
+            List<string> uploadedFiles = new List<string>();
+            // 中文注释：记录新插入的主表ID，用于异常时回滚数据库
+            int savedStorageId = 0;
+            // 中文注释：标记是否全流程成功
+            bool transactionSuccess = false;
+
+            try
+            {
+                // 中文注释：参数校验，避免空路径或空分类导致后续异常
+                if (string.IsNullOrWhiteSpace(_selectedFilePath) || _selectedCategoryNode == null)
+                    throw new Exception("文件路径或分类节点为空");
+
+                // 中文注释：上传主文件到目标目录并生成 FileStorage 基础对象（仅内存）
+                var fileInfo = new FileInfo(_selectedFilePath);
+                string fileName = fileInfo.Name;
+                string description = $"上传文件: {fileName}";
+
+                using (var fileStream = File.OpenRead(_selectedFilePath))
+                {
+                    _currentFileStorage = await UploadFileAsync(
+                        _databaseManager,
+                        categoryId,
+                        _selectedCategoryNode.Level == 0 ? "main" : "sub",
+                        fileName,
+                        fileStream,
+                        description,
+                        Environment.UserName
+                    );
+
+                    // 中文注释：记录已上传主文件，供回滚使用
+                    if (!string.IsNullOrWhiteSpace(_currentFileStorage?.FilePath))
+                        uploadedFiles.Add(_currentFileStorage.FilePath);
+                }
+
+                // 中文注释：如果用户选择了预览图，则复制到与主文件同目录
+                if (!string.IsNullOrWhiteSpace(_selectedPreviewImagePath) && File.Exists(_selectedPreviewImagePath))
+                {
+                    var previewInfo = new FileInfo(_selectedPreviewImagePath);
+                    string previewStoredName = $"{Guid.NewGuid()}{previewInfo.Extension}";
+                    string previewStoredPath = Path.Combine(
+                        Path.GetDirectoryName(_currentFileStorage.FilePath) ?? string.Empty,
+                        previewStoredName);
+
+                    File.Copy(_selectedPreviewImagePath, previewStoredPath, true);
+
+                    _currentFileStorage.PreviewImageName = previewStoredName;
+                    _currentFileStorage.PreviewImagePath = previewStoredPath;
+
+                    // 中文注释：记录已上传预览图，供回滚使用
+                    uploadedFiles.Add(previewStoredPath);
+                }
+
+                // 中文注释：从属性编辑网格构建 JSON 属性字典
+                var attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                // 中文注释：局部函数：属性名和值都非空时才写入字典
+                void AddAttr(string key, string value)
+                {
+                    if (string.IsNullOrWhiteSpace(key)) return;
+                    if (string.IsNullOrWhiteSpace(value)) return;
+                    attrs[key.Trim()] = value.Trim();
+                }
+
+                // 中文注释：把分类属性编辑器中的双列属性写入 JSON 字典
+                var gridProperties = categoryPropertiesDataGrid.ItemsSource as List<CategoryPropertyEditModel>;
+                if (gridProperties != null)
+                {
+                    foreach (var p in gridProperties)
+                    {
+                        AddAttr(p.PropertyName1, p.PropertyValue1);
+                        AddAttr(p.PropertyName2, p.PropertyValue2);
+                    }
+                }
+
+                // 中文注释：补充基础元数据，便于后续查询和排查
+                AddAttr("FileName", _currentFileStorage.FileName);
+                AddAttr("DisplayName", _currentFileStorage.DisplayName);
+                AddAttr("BlockName", _currentFileStorage.BlockName);
+                AddAttr("LayerName", _currentFileStorage.LayerName);
+                AddAttr("CreatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                AddAttr("UpdatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+
+                // 中文注释：调用新方法，一次性写入主表 + JSON属性表（事务）
+                var (storageId, attrId) = await _databaseManager.AddFileStorageAndAttributesJsonAsync(
+                    _currentFileStorage,
+                    attrs,
+                    "default");
+
+                // 中文注释：校验插入结果
+                if (storageId <= 0 || attrId <= 0)
+                    throw new Exception("保存文件与JSON属性失败");
+
+                // 中文注释：记录已保存主键，后续失败可级联回滚
+                savedStorageId = storageId;
+                _currentFileStorage.Id = storageId;
+
+                // 中文注释：回读主记录，确保界面层拿到数据库最新值
+                var dbStorage = await _databaseManager.GetFileStorageAsync(_currentFileStorage.FileHash);
+                if (dbStorage != null)
+                    _currentFileStorage = dbStorage;
+
+                // 中文注释：处理标签数据（沿用原有逻辑）
+                await ProcessFileTags(_currentFileStorage.Id, properties);
+
+                // 中文注释：刷新分类统计（沿用原有逻辑）
+                await _databaseManager.UpdateCategoryStatisticsAsync(
+                    _currentFileStorage.CategoryId,
+                    _currentFileStorage.CategoryType);
+
+                // 中文注释：刷新界面显示
+                await wpfMainWindow.RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode);
+
+                // 中文注释：标记成功
+                transactionSuccess = true;
+
+                MessageBox.Show(
+                    $"文件已成功上传并保存\n文件路径: {_currentFileStorage.FilePath}",
+                    "成功",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                // 中文注释：如果数据库记录已落地，则优先级联回滚数据库+文件
+                if (savedStorageId > 0)
+                {
+                    try
+                    {
+                        await _databaseManager.DeleteCadGraphicCascadeAsync(savedStorageId, true);
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        LogManager.Instance.LogError($"数据库级联回滚失败: {rollbackEx.Message}");
+                    }
+                }
+                else
+                {
+                    // 中文注释：若数据库尚未落地，则仅删除已上传的物理文件
+                    foreach (var f in uploadedFiles)
+                    {
+                        try
+                        {
+                            if (!string.IsNullOrWhiteSpace(f) && File.Exists(f))
+                                File.Delete(f);
+                        }
+                        catch (Exception delEx)
+                        {
+                            LogManager.Instance.LogError($"回滚删除文件失败: {delEx.Message}");
+                        }
+                    }
+                }
+
+                throw new Exception($"文件上传和数据库保存失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 中文注释：兜底日志，便于排查流程状态
+                if (!transactionSuccess)
+                    LogManager.Instance.LogWarning("UploadFileAndSaveToDatabase 未成功完成，已执行回滚逻辑。");
+            }
+        }
 
         /// <summary>
-        /// 批量导入图元
+        /// 批量导入图元（JSON属性新链路）
         /// </summary>
-        public async Task BatchImportGraphicsAsync(string excelFilePath , CategoryTreeNode _selectedCategoryNode,ItemsControl _categoryTreeView, List<CategoryTreeNode> _categoryTreeNodes)
+        public async Task BatchImportGraphicsAsync(string excelFilePath, CategoryTreeNode _selectedCategoryNode, ItemsControl _categoryTreeView, List<CategoryTreeNode> _categoryTreeNodes)
         {
             try
             {
+                // 中文注释：记录开始日志
                 LogManager.Instance.LogInfo($"开始批量导入图元: {excelFilePath}");
 
-                // 读取Excel文件
+                // 中文注释：读取Excel数据
                 DataTable dataTable = ReadExcelToDataTable(excelFilePath);
 
+                // 中文注释：空数据直接返回
                 if (dataTable == null || dataTable.Rows.Count == 0)
                 {
                     MessageBox.Show("Excel文件中没有数据", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
+                // 中文注释：成功失败计数
                 int successCount = 0;
                 int failCount = 0;
 
-                // 遍历每一行数据
+                // 中文注释：逐行导入
                 foreach (DataRow row in dataTable.Rows)
                 {
                     try
                     {
-                        // 创建FileStorage对象
+                        // 中文注释：创建主表对象
                         var fileStorage = CreateFileStorageFromRow(row);
-
-                        if (fileStorage != null)
+                        if (fileStorage == null)
                         {
-                            #region 原有代码
-                            // 保存到数据库
-                            //int fileId = await _databaseManager.AddFileStorageAsync(fileStorage);
+                            failCount++;
+                            LogManager.Instance.LogWarning("创建FileStorage对象失败");
+                            continue;
+                        }
 
-                            //if (fileId > 0)
-                            //{
-                            //    // 创建FileAttribute对象
-                            //    var fileAttribute = CreateFileAttributeFromRow(row, fileId);
+                        // 中文注释：创建JSON属性字典
+                        var attrs = CreateFileAttributeFromRow(row, 0) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                            //    if (fileAttribute != null)
-                            //    {
-                            //        // 保存文件属性
-                            //        await _databaseManager.AddFileAttributeAsync(fileAttribute);
-                            //    }
+                        // 中文注释：事务写入主表+JSON属性表
+                        var (storageId, attrId) = await _databaseManager.AddFileStorageAndAttributesJsonAsync(fileStorage, attrs, "default");
 
-                            //    successCount++;
-                            //    LogManager.Instance.LogInfo($"成功导入图元: {fileStorage.DisplayName}");
-                            //}
-                            //else
-                            //{
-                            //    failCount++;
-                            //    LogManager.Instance.LogWarning($"导入图元失败: {fileStorage?.DisplayName}");
-                            //}
-                            #endregion
-                            // 再插入 attribute，并检查 attribute 返回值；仅两者都成功时记为成功。
-                            int fileId = await _databaseManager.AddFileStorageAsync(fileStorage);
-
-                            if (fileId > 0)
-                            {
-                                var fileAttribute = CreateFileAttributeFromRow(row, fileId);
-
-                                int attrId = 0;
-                                if (fileAttribute != null)
-                                {
-                                    attrId = await _databaseManager.AddFileAttributeAsync(fileAttribute);
-                                }
-
-                                if (attrId > 0)
-                                {
-                                    successCount++;
-                                    LogManager.Instance.LogInfo($"成功导入图元: {fileStorage.DisplayName} (Id={fileId}, AttrId={attrId})");
-                                }
-                                else
-                                {
-                                    // 属性插入失败：标记失败并记录日志。可选：删除已插入的 storage（避免孤立数据）
-                                    failCount++;
-                                    LogManager.Instance.LogWarning($"导入图元失败（属性写入失败）: {fileStorage?.DisplayName} (StorageId={fileId})");
-                                    try
-                                    {
-                                        // 尝试清理孤立 storage
-                                        if (fileId > 0)
-                                        {
-                                            await _databaseManager.DeleteFileStorageAsync(fileId);
-                                            LogManager.Instance.LogInfo($"已删除孤立的 cad_file_storage Id={fileId}");
-                                        }
-                                    }
-                                    catch (Exception cleanupEx)
-                                    {
-                                        LogManager.Instance.LogInfo($"清理孤立 cad_file_storage 失败: {cleanupEx.Message}");
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                failCount++;
-                                LogManager.Instance.LogWarning($"导入图元失败: {fileStorage?.DisplayName}");
-                            }
+                        // 中文注释：结果判断
+                        if (storageId > 0 && attrId > 0)
+                        {
+                            successCount++;
+                            LogManager.Instance.LogInfo($"成功导入图元: {fileStorage.DisplayName} (StorageId={storageId}, AttrId={attrId})");
                         }
                         else
                         {
                             failCount++;
-                            LogManager.Instance.LogWarning("创建FileStorage对象失败");
+                            LogManager.Instance.LogWarning($"导入图元失败: {fileStorage.DisplayName}");
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception exRow)
                     {
+                        // 中文注释：单行失败不影响整体
                         failCount++;
-                        LogManager.Instance.LogError($"导入单个图元时出错: {ex.Message}");
+                        LogManager.Instance.LogError($"导入单个图元时出错: {exRow.Message}");
                     }
                 }
 
-                // 显示结果
+                // 中文注释：显示导入结果
                 MessageBox.Show($"批量导入完成\n成功: {successCount} 个\n失败: {failCount} 个",
                     "完成", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 LogManager.Instance.LogInfo($"批量导入完成 - 成功: {successCount}, 失败: {failCount}");
 
-                // 刷新分类树
+                // 中文注释：刷新分类树
                 await _categoryManager.RefreshCategoryTreeAsync(_selectedCategoryNode, _categoryTreeView, _categoryTreeNodes, _databaseManager);
             }
             catch (Exception ex)
@@ -1172,31 +1124,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 var fileStorage = new FileStorage
-                {
-                    /*
-                        CategoryId("分类ID", typeof(int));
-                        CategoryType("分类类型", typeof(string));
-                       FileName ("文件名", typeof(string));
-                       DisplayName ("显示名称", typeof(string));
-                        FilePath("文件路径", typeof(string));
-                        FileType("文件类型", typeof(string));
-                        FileSize("文件大小", typeof(long));
-                        ElementBlockName("元素块名", typeof(string));
-                        LayerName("图层名称", typeof(string));
-                        ColorIndex("颜色索引", typeof(int));
-                        PreviewImageName("预览图片名称", typeof(string));
-                        PreviewImagePath("预览图片路径", typeof(string));
-                        IsPreview("是否预览", typeof(int));
-                        CreatedBy("创建者", typeof(string));
-                        Title("标题", typeof(string));
-                        Keywords("关键字", typeof(string));
-                        UpdatedBy("更新者", typeof(string));
-                        Version("版本号", typeof(int));
-                        IsActive("是否激活", typeof(int));
-                        IsPublic("是否公开", typeof(int));
-                        Description("描述", typeof(string));
-       
-                     */
+                {                    
                     CategoryId = GetIntValue(row, "分类ID"),
                     CategoryType = "sub", // 默认为主分类
                     FileName = GetStringValue(row, "文件名"),
@@ -1231,79 +1159,128 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         }
 
         /// <summary>
-        /// 从Excel行数据创建FileAttribute对象
+        /// 从Excel行数据创建 JSON 属性字典（新方案）
         /// </summary>
-        private FileAttribute CreateFileAttributeFromRow(DataRow row, int storageFileId)
+        private Dictionary<string, string> CreateFileAttributeFromRow(DataRow row, int storageFileId)
         {
+            // 中文注释：始终返回非空字典，避免上层空引用
+            var attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
             try
             {
-                var fileAttribute = new FileAttribute
+                // 中文注释：防御式检查，避免传入空行导致异常
+                if (row == null || row.Table == null)
                 {
-                    /*
-                      { "FileStorageId", "存储文件ID" },
-                      { "Length", "长度" },
-                      { "Width", "宽度" },
-                      { "Height", "高度" },
-                      { "Angle", "角度" },
-                      { "BasePointX", "基点X" },
-                      { "BasePointY", "基点Y" },
-                      { "BasePointZ", "基点Z" },
-                      { "MediumName", "介质" },
-                      { "Specifications", "规格" },
-                      { "Material", "材质" },
-                      { "StandardNumber", "标准编号" },
-                      { "Power", "功率" },
-                      { "Volume", "容积" },
-                      { "Pressure", "压力" },
-                      { "Temperature", "温度" },
-                      { "Diameter", "直径" },
-                      { "OuterDiameter", "外径" },
-                      { "InnerDiameter", "内径" },
-                      { "Thickness", "厚度" },
-                      { "Weight", "重量" },
-                      { "Model", "型号" },
-                      { "Remarks", "备注" },
-                      { "Customize1", "自定义1" },
-                      { "Customize2", "自定义2" },
-                      { "Customize3", "自定义3" }
-                     */
-                    FileStorageId = storageFileId,
-                    Width = (decimal?)GetDoubleValue(row, "宽度"),
-                    Height = (decimal?)GetDoubleValue(row, "高度"),
-                    Length = (decimal?)GetDoubleValue(row, "长度"),
-                    Angle = (decimal?)GetDoubleValue(row, "角度"),
-                    BasePointX = (decimal?)GetDoubleValue(row, "基点X"),
-                    BasePointZ = (decimal?)GetDoubleValue(row, "基点Y"),
-                    BasePointY = (decimal?)GetDoubleValue(row, "基点Z"),
-                    MediumName = GetStringValue(row, "介质"),
-                    Specifications = GetStringValue(row, "规格"),
-                    Material = GetStringValue(row, "材质"),
-                    StandardNumber = GetStringValue(row, "标准编号"),
-                    Power = (decimal?)GetDoubleValue(row, "功率"),
-                    Volume = (decimal?)GetDoubleValue(row, "容积"),
-                    Pressure = (decimal?)GetDoubleValue(row, "压力"),
-                    Temperature = (decimal?)GetDoubleValue(row, "温度"),
-                    Diameter = (decimal?)GetDoubleValue(row, "直径"),
-                    OuterDiameter = (decimal?)GetDoubleValue(row, "外径"),
-                    InnerDiameter = (decimal?)GetDoubleValue(row, "内径"),
-                    Thickness = (decimal?)GetDoubleValue(row, "厚度"),
-                    Weight = (decimal?)GetDoubleValue(row, "重量"),
-                    Model = GetStringValue(row, "型号"),
-                    Remarks = GetStringValue(row, "备注"),
-                    Customize1 = GetStringValue(row, "自定义1"),
-                    Customize2 = GetStringValue(row, "自定义2"),
-                    Customize3 = GetStringValue(row, "自定义3"),
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
+                    return attrs;
+                }
 
-                return fileAttribute;
+                // 中文注释：写入关联主键（字符串形式，便于JSON统一）
+                attrs["FileStorageId"] = storageFileId.ToString();
+
+                // 中文注释：局部函数，字符串有值才写入
+                void AddIfNotEmpty(string key, string value)
+                {
+                    if (!string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(value))
+                    {
+                        attrs[key.Trim()] = value.Trim();
+                    }
+                }
+
+                // 中文注释：局部函数，数值有效才写入，统一用英文小数点
+                void AddIfNumber(string key, double value)
+                {
+                    if (Math.Abs(value) > 1e-12)
+                    {
+                        attrs[key] = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                }
+
+                // 中文注释：按你原有字段映射写入
+                AddIfNumber("Width", GetDoubleValue(row, "宽度"));
+                AddIfNumber("Height", GetDoubleValue(row, "高度"));
+                AddIfNumber("Length", GetDoubleValue(row, "长度"));
+                AddIfNumber("Angle", GetDoubleValue(row, "角度"));
+                AddIfNumber("BasePointX", GetDoubleValue(row, "基点X"));
+                AddIfNumber("BasePointY", GetDoubleValue(row, "基点Y"));
+                AddIfNumber("BasePointZ", GetDoubleValue(row, "基点Z"));
+
+                AddIfNotEmpty("MediumName", GetStringValue(row, "介质"));
+                AddIfNotEmpty("Specifications", GetStringValue(row, "规格"));
+                AddIfNotEmpty("Material", GetStringValue(row, "材质"));
+                AddIfNotEmpty("StandardNumber", GetStringValue(row, "标准编号"));
+
+                AddIfNumber("Power", GetDoubleValue(row, "功率"));
+                AddIfNumber("Volume", GetDoubleValue(row, "容积"));
+                AddIfNumber("Pressure", GetDoubleValue(row, "压力"));
+                AddIfNumber("Temperature", GetDoubleValue(row, "温度"));
+                AddIfNumber("Diameter", GetDoubleValue(row, "直径"));
+                AddIfNumber("OuterDiameter", GetDoubleValue(row, "外径"));
+                AddIfNumber("InnerDiameter", GetDoubleValue(row, "内径"));
+                AddIfNumber("Thickness", GetDoubleValue(row, "厚度"));
+                AddIfNumber("Weight", GetDoubleValue(row, "重量"));
+
+                AddIfNotEmpty("Model", GetStringValue(row, "型号"));
+                AddIfNotEmpty("Remarks", GetStringValue(row, "备注"));
+                AddIfNotEmpty("Customize1", GetStringValue(row, "自定义1"));
+                AddIfNotEmpty("Customize2", GetStringValue(row, "自定义2"));
+                AddIfNotEmpty("Customize3", GetStringValue(row, "自定义3"));
+
+                // 中文注释：写入时间戳，便于后续追踪
+                attrs["CreatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                attrs["UpdatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+                return attrs;
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogError($"创建FileAttribute对象时出错: {ex.Message}");
-                return null;
+                // 中文注释：记录日志并返回当前已收集到的字典（不抛出，防止批量导入中断）
+                LogManager.Instance.LogError($"创建JSON属性字典时出错: {ex.Message}");
+                return attrs;
             }
+        }
+
+        /// <summary>
+        /// 将旧 FileAttribute 转为 JSON 字典（过渡桥接）
+        /// </summary>
+        private Dictionary<string, string> ConvertFileAttributeToDictionary(FileAttribute fileAttribute)
+        {
+            // 中文注释：创建不区分大小写字典
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // 中文注释：空对象直接返回空字典
+            if (fileAttribute == null) return dict;
+
+            // 中文注释：通过反射遍历旧模型属性，自动收集非空值
+            foreach (var p in typeof(FileAttribute).GetProperties())
+            {
+                // 中文注释：只读取可读属性
+                if (!p.CanRead) continue;
+
+                // 中文注释：过滤技术字段（可按需扩展）
+                if (string.Equals(p.Name, "Id", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(p.Name, "CreatedAt", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(p.Name, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                // 中文注释：获取属性值
+                var v = p.GetValue(fileAttribute);
+
+                // 中文注释：空值跳过
+                if (v == null) continue;
+
+                // 中文注释：转换字符串
+                var s = Convert.ToString(v);
+
+                // 中文注释：空字符串跳过
+                if (string.IsNullOrWhiteSpace(s)) continue;
+
+                // 中文注释：写入字典
+                dict[p.Name] = s.Trim();
+            }
+
+            return dict;
         }
 
         /// <summary>

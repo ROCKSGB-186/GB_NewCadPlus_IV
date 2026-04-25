@@ -5957,22 +5957,24 @@ namespace GB_NewCadPlus_IV
 
         public async Task UploadFileAndSaveToDatabase()
         {
-            // 从 UI 状态构造 DTO，然后委托到核心方法
+            // 中文注释：从 UI 状态构造 DTO，然后委托到核心方法
             try
             {
+                // 中文注释：校验分类是否已选择
                 if (_selectedCategoryNode == null)
                 {
                     MessageBox.Show("请先在分类树中选择目标分类。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
+                // 中文注释：校验文件是否已选择
                 if (string.IsNullOrEmpty(_selectedFilePath) || !File.Exists(_selectedFilePath))
                 {
                     MessageBox.Show("请选择并缓存要上传的文件。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                // 构造基础 DTO（只包含必要字段，保留 UI 可能编辑的字段）
+                // 中文注释：初始化 DTO（只保留 FileStorage + AttributesJson 作为上传主数据）
                 var dto = new ImportEntityDto
                 {
                     FileStorage = new FileStorage
@@ -5985,23 +5987,39 @@ namespace GB_NewCadPlus_IV
                         Description = _currentFileStorage?.Description,
                         CreatedBy = Environment.UserName
                     },
-                    FileAttribute = _currentFileAttribute ?? new FileAttribute()
+                    PreviewImagePath = _selectedPreviewImagePath
                 };
 
-                // 把用户在属性网格中填写的属性应用到 dto.FileAttribute / dto.FileStorage
+                // 中文注释：读取属性网格，分别写入 FileStorage 字段和 JSON 字典
                 var gridProps = CategoryPropertiesDataGrid?.ItemsSource as List<CategoryPropertyEditModel>;
                 if (gridProps != null)
                 {
+                    // 中文注释：局部函数，属性名和值都有效时写入字典
+                    void AddAttr(string key, string value)
+                    {
+                        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return;
+                        dto.AttributesJson[key.Trim()] = value.Trim();
+                    }
+
                     foreach (var p in gridProps)
                     {
-                        // 两列都尝试设置
-                        SetFileAttributeProperty(dto.FileAttribute, p.PropertyName1 ?? string.Empty, p.PropertyValue1 ?? string.Empty);
-                        SetFileAttributeProperty(dto.FileAttribute, p.PropertyName2 ?? string.Empty, p.PropertyValue2 ?? string.Empty);
+                        // 中文注释：先让 FileStorage 吃掉其认识的系统字段（如图层、标题、描述等）
                         SetFileStorageProperty(dto.FileStorage, p.PropertyName1 ?? string.Empty, p.PropertyValue1 ?? string.Empty);
                         SetFileStorageProperty(dto.FileStorage, p.PropertyName2 ?? string.Empty, p.PropertyValue2 ?? string.Empty);
+
+                        // 中文注释：再把所有网格项写入 JSON 字典（动态属性主入口）
+                        AddAttr(p.PropertyName1 ?? string.Empty, p.PropertyValue1 ?? string.Empty);
+                        AddAttr(p.PropertyName2 ?? string.Empty, p.PropertyValue2 ?? string.Empty);
                     }
                 }
 
+                // 中文注释：补充基础元数据到 JSON
+                dto.AttributesJson["FileName"] = dto.FileStorage.FileName ?? string.Empty;
+                dto.AttributesJson["DisplayName"] = dto.FileStorage.DisplayName ?? string.Empty;
+                dto.AttributesJson["CreatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                dto.AttributesJson["UpdatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+                // 中文注释：进入统一上传核心方法
                 await UploadFileAndSaveToDatabase(dto).ConfigureAwait(true);
             }
             catch (Exception ex)
@@ -6010,16 +6028,27 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show($"上传失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
+        /// <summary>
+        /// 更新文件和保存到数据库的核心方法，接受一个包含上传所需信息的 DTO 对象。该方法负责执行整个上传流程，包括文件存储、数据库写入以及错误回滚等操作。
+        /// </summary>
+        /// <param name="dto">包含上传所需信息的 DTO 对象</param>
+        /// <returns>一个表示异步操作的任务</returns>
+        /// <exception cref="ArgumentNullException">当 dto 为 null 时抛出</exception>
+        /// <exception cref="ArgumentException">当 dto.FileStorage 为 null 时抛出</exception>
+        /// <exception cref="FileNotFoundException">当要上传的文件不存在时抛出</exception>
         public async Task UploadFileAndSaveToDatabase(ImportEntityDto dto)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             if (dto.FileStorage == null) throw new ArgumentException("dto.FileStorage 不能为空", nameof(dto));
+
+            // 中文注释：数据库可用性检查
             if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
             {
                 MessageBox.Show("数据库未连接或不可用，无法保存。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
+
+            // 中文注释：文件管理器可用性检查
             if (_fileManager == null)
             {
                 MessageBox.Show("文件管理器未初始化，无法上传文件。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -6027,18 +6056,23 @@ namespace GB_NewCadPlus_IV
             }
 
             await _uploadSemaphore.WaitAsync().ConfigureAwait(false);
+
+            // 中文注释：记录已落盘文件，失败时用于物理回滚
             var uploadedFiles = new List<string>();
-            bool success = false;
+
+            // 中文注释：记录数据库主键，失败时用于级联回滚
+            int savedStorageId = 0;
 
             try
             {
-                LogManager.Instance.LogInfo("开始上传文件并保存到数据库");
+                LogManager.Instance.LogInfo("开始上传文件并保存到数据库（JSON链路）");
 
-                // 1) 上传主文件（FileManager 负责物理存储并返回带完整信息的 FileStorage）
+                // 中文注释：校验源文件
                 var sourcePath = dto.FileStorage.FilePath;
                 if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
                     throw new FileNotFoundException("要上传的文件不存在", sourcePath);
 
+                // 中文注释：1) 上传主文件到存储目录，返回完整 FileStorage 元数据
                 using (var fs = File.OpenRead(sourcePath))
                 {
                     var uploaded = await _fileManager.UploadFileAsync(
@@ -6054,17 +6088,21 @@ namespace GB_NewCadPlus_IV
                     if (uploaded == null)
                         throw new Exception("文件上传失败，返回信息为空。");
 
-                    // 用上传后的元数据更新 DTO（保留用户在 DTO/界面上设置的 DisplayName/FileName）
-                    dto.FileStorage.FileStoredName = uploaded.FileStoredName ?? uploaded.FileStoredName;
+                    // 中文注释：回填上传后字段
+                    dto.FileStorage.FileStoredName = uploaded.FileStoredName;
                     dto.FileStorage.FilePath = uploaded.FilePath;
                     dto.FileStorage.FileHash = uploaded.FileHash;
                     dto.FileStorage.FileSize = uploaded.FileSize;
                     dto.FileStorage.FileType = uploaded.FileType;
-                    uploadedFiles.Add(dto.FileStorage.FilePath);
+
+                    // 中文注释：记录物理文件路径（回滚用）
+                    if (!string.IsNullOrWhiteSpace(dto.FileStorage.FilePath))
+                        uploadedFiles.Add(dto.FileStorage.FilePath);
+
                     LogManager.Instance.LogInfo($"文件上传成功: {dto.FileStorage.FilePath}");
                 }
 
-                // 2) 上传/复制预览图片（如存在）
+                // 中文注释：2) 复制预览图（若存在）
                 if (!string.IsNullOrEmpty(dto.PreviewImagePath) && File.Exists(dto.PreviewImagePath))
                 {
                     try
@@ -6074,34 +6112,43 @@ namespace GB_NewCadPlus_IV
                         string previewStoredPath = Path.Combine(Path.GetDirectoryName(dto.FileStorage.FilePath) ?? Path.GetTempPath(), previewStoredName);
 
                         File.Copy(dto.PreviewImagePath, previewStoredPath, true);
+
                         dto.FileStorage.PreviewImageName = previewStoredName;
                         dto.FileStorage.PreviewImagePath = previewStoredPath;
+
+                        // 中文注释：记录预览图路径（回滚用）
                         uploadedFiles.Add(previewStoredPath);
+
                         LogManager.Instance.LogInfo($"预览图片复制成功: {previewStoredPath}");
                     }
                     catch (Exception exPreview)
                     {
+                        // 中文注释：预览图失败不阻断主流程
                         LogManager.Instance.LogWarning($"复制预览图片失败（继续）：{exPreview.Message}");
                     }
                 }
 
-                // 3) 准备 FileAttribute（确保时间与必要字段）
-                dto.FileAttribute.FileName = dto.FileStorage.FileName ?? dto.FileStorage.DisplayName ?? dto.FileStorage.FileStoredName;
-                dto.FileAttribute.CreatedAt = dto.FileAttribute.CreatedAt == default ? DateTime.Now : dto.FileAttribute.CreatedAt;
-                dto.FileAttribute.UpdatedAt = dto.FileAttribute.UpdatedAt == default ? DateTime.Now : dto.FileAttribute.UpdatedAt;
-                // 4) 原子写入数据库：storage + attribute（使用 DatabaseManager 的原子方法）
-                var (storageId, attributeId) = await _databaseManager.AddFileStorageAndAttributeAsync(dto.FileStorage, dto.FileAttribute).ConfigureAwait(false);
+                // 中文注释：3) 准备 JSON 属性字典
+                var attrs = dto.AttributesJson ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                attrs["FileName"] = dto.FileStorage.FileName ?? string.Empty;
+                attrs["DisplayName"] = dto.FileStorage.DisplayName ?? string.Empty;
+                attrs["BlockName"] = dto.FileStorage.BlockName ?? string.Empty;
+                attrs["LayerName"] = dto.FileStorage.LayerName ?? string.Empty;
+                attrs["CreatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                attrs["UpdatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-                if (storageId <= 0 || attributeId <= 0)
+                // 中文注释：4) 统一新写库链路：主表 + JSON 属性表（事务）
+                var (storageId, attrId) = await _databaseManager.AddFileStorageAndAttributesJsonAsync(dto.FileStorage, attrs, "default").ConfigureAwait(false);
+
+                if (storageId <= 0 || attrId <= 0)
                     throw new Exception("数据库写入失败：未返回有效的存储/属性 Id");
 
-                // 5) 更新本地 DTO 与界面状态
+                // 中文注释：记录主键
+                savedStorageId = storageId;
                 dto.FileStorage.Id = storageId;
-                dto.FileStorage.FileAttributeId = attributeId.ToString();
-                dto.FileAttribute.Id = attributeId;
-                dto.FileAttribute.FileStorageId = storageId;
+                dto.FileStorage.FileAttributeId = attrId.ToString();
 
-                // 6) 更新分类统计（异步，可不阻塞主流程）
+                // 中文注释：5) 刷新分类统计
                 try
                 {
                     await _databaseManager.UpdateCategoryStatisticsAsync(dto.FileStorage.CategoryId, dto.FileStorage.CategoryType ?? "sub").ConfigureAwait(false);
@@ -6111,15 +6158,11 @@ namespace GB_NewCadPlus_IV
                     LogManager.Instance.LogWarning($"更新分类统计失败（非致命）：{exStat.Message}");
                 }
 
-                success = true;
-                LogManager.Instance.LogInfo($"文件及属性已成功保存到数据库 (StorageId={storageId}, AttributeId={attributeId})");
-
-                // 7) 刷新 UI（在 UI 线程）
+                // 中文注释：6) 刷新UI
                 await Dispatcher.InvokeAsync(async () =>
                 {
                     try
                     {
-                        // 刷新当前分类列表
                         if (_selectedCategoryNode != null)
                             await RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode);
                     }
@@ -6129,23 +6172,41 @@ namespace GB_NewCadPlus_IV
                     }
                 });
 
+                LogManager.Instance.LogInfo($"文件及JSON属性已成功保存到数据库 (StorageId={storageId}, AttrId={attrId})");
                 MessageBox.Show($"文件上传并保存成功。\n路径: {dto.FileStorage.FilePath}", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogError($"UploadFileAndSaveToDatabase(dto) 失败: {ex.Message}");
-                // 回滚已经上传的文件与数据库残留（FileManager.RollbackFileUpload 需能处理部分已完成步骤）
-                try
+
+                // 中文注释：优先数据库级联回滚（已落库时）
+                if (savedStorageId > 0)
                 {
-                    await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, dto.FileAttribute).ConfigureAwait(false);
-                    LogManager.Instance.LogInfo("已执行上传回滚 (文件/数据库回退)。");
+                    try
+                    {
+                        await _databaseManager.DeleteCadGraphicCascadeAsync(savedStorageId, true).ConfigureAwait(false);
+                        LogManager.Instance.LogInfo("已执行数据库级联回滚。");
+                    }
+                    catch (Exception exRbDb)
+                    {
+                        LogManager.Instance.LogError($"数据库级联回滚失败: {exRbDb.Message}");
+                    }
                 }
-                catch (Exception exRb)
+                else
                 {
-                    LogManager.Instance.LogError($"回滚时失败: {exRb.Message}");
+                    // 中文注释：未落库时仅删除已上传文件
+                    try
+                    {
+                        // 中文注释：这里 FileAttribute 传 null，仅作为兼容旧签名，不再依赖旧属性表
+                        await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, null).ConfigureAwait(false);
+                        LogManager.Instance.LogInfo("已执行文件回滚。");
+                    }
+                    catch (Exception exRbFs)
+                    {
+                        LogManager.Instance.LogError($"文件回滚失败: {exRbFs.Message}");
+                    }
                 }
 
-                // 把错误抛回或显示友好消息
                 MessageBox.Show($"上传/保存失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally

@@ -43,6 +43,7 @@ namespace GB_NewCadPlus_IV.Views
         private static extern bool DeleteObject(IntPtr hObject);
         private readonly ImportEntityDto _dto;// 导入的实体数据
         private readonly WpfMainWindow _mainWindow; // 引用主窗口以访问方法
+
         /// <summary>
         /// 构造函数
         /// </summary>
@@ -69,6 +70,7 @@ namespace GB_NewCadPlus_IV.Views
             BtnPastePreview.Click += BtnPastePreview_Click;//粘贴预览按钮点击事件
             BtnExportTemplate.Click += BtnExportTemplate_Click;//导出模板按钮点击事件
         }
+
         /// <summary>
         /// 加载预览图片
         /// </summary>
@@ -107,6 +109,7 @@ namespace GB_NewCadPlus_IV.Views
                 PreviewImage.Source = null;
             }         
         }
+
         /// <summary>
         /// 绑定属性到数据网格
         /// </summary>
@@ -116,6 +119,7 @@ namespace GB_NewCadPlus_IV.Views
             var displayData = _mainWindow.PrepareFileDisplayData(_dto.FileStorage, _dto.FileAttribute);
             PropertiesGrid.ItemsSource = displayData;
         }
+
         /// <summary>
         /// 粘贴预览剪贴板图片
         /// </summary>
@@ -172,6 +176,7 @@ namespace GB_NewCadPlus_IV.Views
                 MessageBox.Show($"操作失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
         /// <summary>
         /// 粘贴剪贴板图片
         /// </summary>
@@ -181,15 +186,15 @@ namespace GB_NewCadPlus_IV.Views
         {
             try
             {
-                // 从UI读取当前值
+                // 中文注释：先把界面编辑值回写到 DTO
                 UpdateDtoFromGrid();
 
-                // 创建一个只包含当前图元信息的DataTable
+                // 中文注释：生成模板表
                 var dt = _mainWindow.CreateTemplateDataTable();
-                dt.Rows.Clear(); // 清空模板里的示例行
+                dt.Rows.Clear();
                 DataRow newRow = dt.NewRow();
 
-                // 填充FileStorage
+                // 中文注释：先填充 FileStorage 固定字段
                 foreach (PropertyInfo prop in typeof(FileStorage).GetProperties())
                 {
                     if (dt.Columns.Contains(prop.Name))
@@ -197,17 +202,29 @@ namespace GB_NewCadPlus_IV.Views
                         newRow[prop.Name] = prop.GetValue(_dto.FileStorage) ?? DBNull.Value;
                     }
                 }
-                // 填充FileAttribute
-                foreach (PropertyInfo prop in typeof(FileAttribute).GetProperties())
+
+                // 中文注释：构建 JSON 属性字典（优先 DTO 里的 Attributes 字典；没有则从旧 FileAttribute 桥接）
+                var attrDict = BuildExportAttributesDictionary();
+
+                // 中文注释：动态列导出——模板里没有的字段自动补列
+                foreach (var kv in attrDict)
                 {
-                    if (dt.Columns.Contains(prop.Name))
+                    if (string.IsNullOrWhiteSpace(kv.Key)) continue;
+
+                    // 中文注释：如果模板不存在该列，则动态新增
+                    if (!dt.Columns.Contains(kv.Key))
                     {
-                        newRow[prop.Name] = prop.GetValue(_dto.FileAttribute) ?? DBNull.Value;
+                        dt.Columns.Add(kv.Key, typeof(string));
                     }
+
+                    // 中文注释：写入字段值
+                    newRow[kv.Key] = kv.Value ?? string.Empty;
                 }
+
+                // 中文注释：加入一行
                 dt.Rows.Add(newRow);
 
-                // 导出
+                // 中文注释：导出文件
                 var saveFileDialog = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "Excel 文件 (*.xlsx)|*.xlsx",
@@ -226,6 +243,66 @@ namespace GB_NewCadPlus_IV.Views
             {
                 MessageBox.Show($"导出模板失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// 构建导出用属性字典（JSON化）
+        /// </summary>
+        private Dictionary<string, string> BuildExportAttributesDictionary()
+        {
+            // 中文注释：最终返回字典
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // 中文注释：优先尝试从 DTO 的 Attributes 字典取值（若你后续给 DTO 加了该字段可直接生效）
+            try
+            {
+                var dtoType = _dto.GetType();
+                var attrsProp = dtoType.GetProperty("Attributes");
+                if (attrsProp != null)
+                {
+                    var v = attrsProp.GetValue(_dto) as Dictionary<string, string>;
+                    if (v != null && v.Count > 0)
+                    {
+                        foreach (var kv in v)
+                        {
+                            if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                                dict[kv.Key.Trim()] = kv.Value.Trim();
+                        }
+                        return dict;
+                    }
+                }
+            }
+            catch
+            {
+                // 中文注释：忽略反射异常，继续走旧模型桥接
+            }
+
+            // 中文注释：兼容旧模型 FileAttribute -> 字典
+            if (_dto?.FileAttribute != null)
+            {
+                foreach (var p in typeof(FileAttribute).GetProperties())
+                {
+                    if (!p.CanRead) continue;
+
+                    // 中文注释：过滤技术字段
+                    if (string.Equals(p.Name, "Id", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(p.Name, "CreatedAt", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(p.Name, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var value = p.GetValue(_dto.FileAttribute);
+                    if (value == null) continue;
+
+                    var s = Convert.ToString(value);
+                    if (string.IsNullOrWhiteSpace(s)) continue;
+
+                    dict[p.Name] = s.Trim();
+                }
+            }
+
+            return dict;
         }
 
         /// <summary>
