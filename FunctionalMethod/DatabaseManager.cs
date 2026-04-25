@@ -1,6 +1,7 @@
 using Dapper;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using MySql.Data.MySqlClient;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -268,7 +269,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     "cad_categories",
                     "cad_subcategories",
                     "cad_file_storage",
-                    "cad_file_attributes",
+                    "cad_block_attributes_json",
                     "system_config",
                     "users",
                     "departments",
@@ -1899,6 +1900,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     "DELETE FROM cad_file_attributes WHERE file_storage_id = @Id OR file_attribute_id = @FileAttributeId",
                     new { Id = fileId, FileAttributeId = storage.FileAttributeId },
                     transaction).ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                    "DELETE FROM cad_block_attributes_json WHERE file_id = @Id",
+                    new { Id = fileId },
+                    transaction).ConfigureAwait(false);
 
                 int affected = await connection.ExecuteAsync(
                     "DELETE FROM cad_file_storage WHERE id = @Id",
@@ -2651,8 +2656,84 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
-        #endregion
+        // 中文注释：新方案——插入文件主记录 + JSON属性记录（事务）
+        public async Task<(int StorageId, long AttrId)> AddFileStorageAndAttributesJsonAsync(
+            FileStorage storage,
+            Dictionary<string, string> attributes,
+            string configName = "default")
+        {
+            if (storage == null) throw new ArgumentNullException(nameof(storage));
 
+            using var connection = GetConnection();
+            await connection.OpenAsync().ConfigureAwait(false);
+            using var tx = connection.BeginTransaction();
+
+            try
+            {
+                // 中文注释：先插入 cad_file_storage（你可复用现有 insertStorageSql）
+                const string insertStorageSql = @"
+INSERT INTO cad_file_storage
+(category_id, file_name, file_stored_name, display_name, file_type, file_hash, block_name, layer_name, color_index, scale, file_path, preview_image_name, preview_image_path, file_size, is_preview, version, description, is_active, created_by, category_type, title, keywords, is_public, updated_by, last_accessed_at, created_at, updated_at)
+VALUES
+(@CategoryId, @FileName, @FileStoredName, @DisplayName, @FileType, @FileHash, @BlockName, @LayerName, @ColorIndex, @Scale, @FilePath, @PreviewImageName, @PreviewImagePath, @FileSize, @IsPreview, @Version, @Description, @IsActive, @CreatedBy, @CategoryType, @Title, @Keywords, @IsPublic, @UpdatedBy, @LastAccessedAt, @CreatedAt, @UpdatedAt);";
+
+                await connection.ExecuteAsync(insertStorageSql, new
+                {
+                    storage.CategoryId,
+                    FileName = storage.FileName ?? string.Empty,
+                    FileStoredName = storage.FileStoredName ?? string.Empty,
+                    DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
+                    FileType = storage.FileType ?? string.Empty,
+                    FileHash = storage.FileHash ?? string.Empty,
+                    BlockName = storage.BlockName ?? string.Empty,
+                    LayerName = storage.LayerName ?? string.Empty,
+                    ColorIndex = storage.ColorIndex ?? 0,
+                    Scale = storage.Scale ?? 1.0,
+                    FilePath = storage.FilePath ?? string.Empty,
+                    PreviewImageName = storage.PreviewImageName ?? string.Empty,
+                    PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
+                    FileSize = storage.FileSize ?? 0L,
+                    storage.IsPreview,
+                    storage.Version,
+                    Description = storage.Description ?? string.Empty,
+                    storage.IsActive,
+                    CreatedBy = storage.CreatedBy ?? Environment.UserName,
+                    CategoryType = storage.CategoryType ?? "sub",
+                    Title = storage.Title ?? string.Empty,
+                    Keywords = storage.Keywords ?? string.Empty,
+                    storage.IsPublic,
+                    UpdatedBy = storage.UpdatedBy ?? string.Empty,
+                    storage.LastAccessedAt,
+                    CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
+                    UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
+                }, tx).ConfigureAwait(false);
+
+                int storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+
+                // 中文注释：再插入 cad_block_attributes_json
+                const string insertAttrSql = @"
+INSERT INTO cad_block_attributes_json (file_id, config_name, attributes_json, created_at, updated_at)
+VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
+
+                await connection.ExecuteAsync(insertAttrSql, new
+                {
+                    FileId = storageId,
+                    ConfigName = string.IsNullOrWhiteSpace(configName) ? "default" : configName,
+                    AttributesJson = ToJson(attributes)
+                }, tx).ConfigureAwait(false);
+
+                long attrId = await connection.QuerySingleAsync<long>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+
+                tx.Commit();
+                return (storageId, attrId);
+            }
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
+        }
+        #endregion
         /// <summary>
         /// CAD分类
         /// </summary>
@@ -2937,6 +3018,45 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             public DateTime UpdatedAt { get; set; }
         }
 
+        // 中文注释：JSON属性表模型（对应 cad_block_attributes_json）
+        public class BlockAttributesJson
+        {
+            public long AttrId { get; set; } // 中文注释：属性记录主键
+            public int FileId { get; set; } // 中文注释：关联 cad_file_storage.id
+            public string? ConfigName { get; set; } // 中文注释：配置名
+            public string? AttributesJson { get; set; } // 中文注释：JSON文本
+            public DateTime CreatedAt { get; set; } // 中文注释：创建时间
+            public DateTime UpdatedAt { get; set; } // 中文注释：更新时间
+        }
 
+        // 中文注释：将字典转成JSON字符串
+        private static string ToJson(Dictionary<string, string>? dict)
+        {
+            return JsonConvert.SerializeObject(dict ?? new Dictionary<string, string>());
+        }
+
+        // 中文注释：将JSON字符串转成字典
+        private static Dictionary<string, string> FromJson(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, string>();
+            return JsonConvert.DeserializeObject<Dictionary<string, string>>(json) 
+                   ?? new Dictionary<string, string>();
+        }
+
+        // 中文注释：按 file_id 获取JSON属性（返回字典）
+        public async Task<Dictionary<string, string>> GetAttributesJsonByFileIdAsync(int fileId, string configName = "default")
+        {
+            const string sql = @"
+SELECT attributes_json
+FROM cad_block_attributes_json
+WHERE file_id = @FileId AND config_name = @ConfigName
+ORDER BY attr_id DESC
+LIMIT 1;";
+
+            using var connection = GetConnection();
+            var json = await connection.QueryFirstOrDefaultAsync<string>(sql, new { FileId = fileId, ConfigName = configName }).ConfigureAwait(false);
+            return FromJson(json);
+        }
+       
     }
 }

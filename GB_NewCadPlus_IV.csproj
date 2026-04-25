@@ -71,12 +71,12 @@
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Dapper.Database" Version="5.0.0.258" />
-		<PackageReference Include="IFox.CAD.ACAD" Version="0.9.8.1" />
-		<PackageReference Include="MySql.Data" Version="9.5.0" />
+		<PackageReference Include="Dapper.Database" Version="6.0.0.23" />
+		<PackageReference Include="IFox.CAD.ACAD" Version="0.9.9.1" />
+		<PackageReference Include="MySql.Data" Version="9.7.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="OkEPPlus" Version="8.1.1" />
-		<PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.1" />
+		<PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.7" />
 
 	</ItemGroup>
 
