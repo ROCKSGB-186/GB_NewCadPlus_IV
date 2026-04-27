@@ -321,24 +321,42 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <returns>绘图比例</returns>
         public static double GetScale(bool useCache = true)
         {
-            double userScale = 1;
+            // 中文注释：默认先给一个无效占位值，后续按界面来源覆盖
+            double userScale = 0.0;
+
+            // 中文注释：如果当前是 WinForm 状态，则优先读取 WinForm 比例缓存
             if (VariableDictionary.winForm_Status)
             {
-                // 计算标注的文字高度和箭头大小，基于用户界面缩放比例，确保在不同缩放级别下标注具有合适的大小。
+                // 中文注释：WinForm 模式下直接取 textBoxScale
                 userScale = VariableDictionary.textBoxScale;
             }
             else
             {
-                // 尝试从WPF界面获取用户输入的比例值
-                userScale = GetDrawingScaleFromWpf();
+                // 中文注释：WPF 模式优先使用全局缓存的 wpfTextBoxScale（你要求的优先级）
+                if (VariableDictionary.wpfTextBoxScale > 0.0)
+                {
+                    userScale = VariableDictionary.wpfTextBoxScale;
+                }
+                else
+                {
+                    // 中文注释：若 wpfTextBoxScale 无效，再尝试实时从 WPF 文本框读取
+                    userScale = GetDrawingScaleFromWpf();
+                }
+
+                // 中文注释：兜底再尝试 textBoxScale，避免某些旧流程仅写入 textBoxScale
+                if (userScale <= 0.0 && VariableDictionary.textBoxScale > 0.0)
+                {
+                    userScale = VariableDictionary.textBoxScale;
+                }
             }
 
-            if (userScale > 0)
+            // 中文注释：只要拿到有效用户比例，直接返回，不走CAD视口计算
+            if (userScale > 0.0)
             {
                 return userScale;
             }
 
-            // 如果WPF界面不可用或输入无效，则使用原有逻辑
+            // 中文注释：如果界面比例不可用，则走原有缓存逻辑
             if (useCache)
             {
                 lock (_cacheLock)
@@ -348,8 +366,10 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
             }
 
+            // 中文注释：计算当前图纸/视口比例作为最终回退
             double scale = ComputeActiveDrawingScale();
 
+            // 中文注释：写入缓存，减少频繁计算
             lock (_cacheLock)
             {
                 _cachedScale = scale;
@@ -747,41 +767,90 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <returns>用户输入的比例值，如果获取失败返回0</returns>
         private static double GetDrawingScaleFromWpf()
         {
+            // 中文注释：局部函数，统一解析字符串到正数比例
+            static double ParsePositiveScale(string raw)
+            {
+                // 中文注释：空字符串直接返回0，表示无有效输入
+                if (string.IsNullOrWhiteSpace(raw)) return 0.0;
+                // 中文注释：先去掉首尾空白
+                raw = raw.Trim();
+
+                // 中文注释：先按 InvariantCulture 解析（支持标准小数点）
+                if (double.TryParse(raw, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out double v1) && v1 > 0.0)
+                    return v1;
+
+                // 中文注释：兼容中文环境下用逗号作小数分隔符
+                string alt = raw.Replace(',', '.');
+                if (double.TryParse(alt, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out double v2) && v2 > 0.0)
+                    return v2;
+
+                // 中文注释：最后兜底用当前区域解析
+                if (double.TryParse(raw, out double v3) && v3 > 0.0)
+                    return v3;
+
+                // 中文注释：解析失败返回0
+                return 1;
+            }
+
             try
             {
-                // 优先使用 WpfMainWindow.Instance（更可靠且不依赖于 Window 类型）
+                // 中文注释：优先拿到WPF主界面实例
                 var inst = GB_NewCadPlus_IV.WpfMainWindow.Instance;
                 if (inst != null)
                 {
-                    try
+                    // 中文注释：用于承接从UI线程读取到的文本
+                    string textFromUi = string.Empty;
+                    // 中文注释：用于承接Tag默认值（例如XAML里 Tag="100"）
+                    string tagFromUi = string.Empty;
+
+                    // 中文注释：必须在WPF Dispatcher线程访问TextBox，避免跨线程异常
+                    if (inst.Dispatcher != null)
                     {
-                        var tb = inst.TextBox_绘图比例;
-                        if (tb != null)
+                        // 中文注释：若当前就在UI线程，直接读取
+                        if (inst.Dispatcher.CheckAccess())
                         {
-                            var txt = (tb.Text ?? string.Empty).Trim();
-                            if (!string.IsNullOrEmpty(txt))
+                            // 中文注释：读取TextBox文本
+                            textFromUi = inst.TextBox_绘图比例?.Text ?? string.Empty;
+                            // 中文注释：读取Tag作为默认比例兜底
+                            tagFromUi = inst.TextBox_绘图比例?.Tag?.ToString() ?? string.Empty;
+                        }
+                        else
+                        {
+                            // 中文注释：不在UI线程时切回UI线程读取，避免抛跨线程异常
+                            inst.Dispatcher.Invoke(() =>
                             {
-                                // 使用 InvariantCulture 解析，兼容小数点/逗号替换
-                                if (double.TryParse(txt, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out double v) && v > 0.0)
-                                    return v;
-                                // 兼容用户使用逗号作为小数分隔符
-                                var alt = txt.Replace(',', '.');
-                                if (double.TryParse(alt, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out v) && v > 0.0)
-                                    return v;
-                            }
+                                // 中文注释：读取Text
+                                textFromUi = inst.TextBox_绘图比例?.Text ?? string.Empty;
+                                // 中文注释：读取Tag
+                                tagFromUi = inst.TextBox_绘图比例?.Tag?.ToString() ?? string.Empty;
+                            });
                         }
                     }
-                    catch
-                    {
-                        // 容错，继续回退
-                    }
+
+                    // 中文注释：优先解析用户输入的Text
+                    double v = ParsePositiveScale(textFromUi);
+                    if (v > 0.0) return v;
+
+                    // 中文注释：Text无效时尝试Tag默认值（你当前XAML里是100）
+                    v = ParsePositiveScale(tagFromUi);
+                    if (v > 0.0) return v;
                 }
             }
             catch
             {
-                // 忽略，返回0作为无法读取标识
+                // 中文注释：WPF读取失败时继续走变量兜底
             }
-            return 0;
+
+            // 中文注释：兜底1，读取WPF侧缓存值（由WPF代码维护）
+            if (VariableDictionary.wpfTextBoxScale > 0.0)
+                return VariableDictionary.wpfTextBoxScale;
+
+            // 中文注释：兜底2，读取通用缓存值
+            if (VariableDictionary.textBoxScale > 0.0)
+                return VariableDictionary.textBoxScale;
+
+            // 中文注释：最终失败返回0，让上层走原有回退逻辑
+            return 1;
         }
 
         /// <summary>
@@ -994,6 +1063,41 @@ namespace GB_NewCadPlus_IV.Helpers
                 AutoCadHelper.LogWithSafety($"\nDEBUG_DIMSTYLE_JLPDI 异常: {ex.Message}");
                 Env.Editor.WriteMessage($"\nDEBUG_DIMSTYLE_JLPDI 异常: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// 端点接触容差（例如 1e-3）
+        /// 中文注释：安全读取可能存在的系统变量作为容差，若不存在或读取失败则返回合理的默认值。
+        /// </summary>
+        public static double GetPipeEndpointTolerance()
+        {
+            // 尝试从系统变量读取（变量名为示例，可根据项目实际变量名调整）
+            // 如果系统变量不存在或读取失败，SafeGetSystemVariableDouble 会返回第二个参数作为默认值
+            double tol = SafeGetSystemVariableDouble("PIPE_ENDPOINT_TOL", 0.001);
+            // 容错：确保返回为正数，避免后续计算异常
+            if (!(tol > 0.0))
+            {
+                tol = 0.001; // 默认 1mm（可根据项目调整）
+            }
+            return tol;
+        }
+
+        /// <summary>
+        /// 共线角度容差（例如 1.0 度转弧度）
+        /// 中文注释：从系统变量读取角度容差（单位默认度），返回值为弧度。
+        /// </summary>
+        public static double GetPipeCollinearAngleToleranceRad()
+        {
+            // 尝试从系统变量读取角度容差（以度为单位），若不可用则使用 1.0 度为默认值
+            double angleDeg = SafeGetSystemVariableDouble("PIPE_COLLINEAR_ANGLE_DEG", 1.0);
+            // 容错：确保角度为非负合理值
+            if (double.IsNaN(angleDeg) || angleDeg <= 0.0)
+            {
+                angleDeg = 1.0; // 默认 1 度
+            }
+            // 将度转换为弧度返回
+            double angleRad = angleDeg * (Math.PI / 180.0);
+            return angleRad;
         }
     }
 }

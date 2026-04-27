@@ -59,119 +59,232 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         public static ImportEntityDto PickAndReadEntity()
         {
+            // 中文注释：获取当前活动CAD文档
             var doc = Application.DocumentManager.MdiActiveDocument;
+
+            // 中文注释：如果没有活动文档，直接抛异常
             if (doc == null)
             {
                 throw new InvalidOperationException("没有活动的CAD文档。");
             }
 
+            // 中文注释：初始化返回对象
             ImportEntityDto dto = null;
 
-            // 必须在文档锁定的情况下与CAD数据库交互
+            // 中文注释：锁定当前文档，避免在访问CAD数据库时出现冲突
             using (doc.LockDocument())
             {
+                // 中文注释：获取编辑器和数据库对象
                 var ed = doc.Editor;
                 var db = doc.Database;
 
+                // 中文注释：弹出实体选择提示
                 var peo = new PromptEntityOptions("\n请选择要导入的图元（块、属性块等）：");
                 var per = ed.GetEntity(peo);
 
+                // 中文注释：如果用户取消选择，则返回空
                 if (per.Status != PromptStatus.OK)
                 {
-                    return null; // 用户取消
+                    return null;
                 }
 
+                // 中文注释：开启事务读取实体信息
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
+                    // 中文注释：读取用户选中的实体
                     var entity = tr.GetObject(per.ObjectId, OpenMode.ForRead) as Entity;
+
+                    // 中文注释：如果实体为空，则直接返回空
                     if (entity == null)
                     {
                         tr.Commit();
                         return null;
                     }
 
+                    // 中文注释：初始化DTO、文件主信息对象、旧属性对象、JSON属性字典
                     dto = new ImportEntityDto();
                     var fs = dto.FileStorage;
                     var fa = dto.FileAttribute;
+                    var attrs = dto.AttributesJson;
 
-                    // 填充通用信息
-                    fs.FilePath = doc.Name; // 当前DWG文件路径
+                    // 中文注释：局部函数，安全写入文本属性到JSON字典
+                    void AddTextAttr(string key, string value)
+                    {
+                        // 中文注释：属性名或属性值为空时不写入
+                        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+                        {
+                            return;
+                        }
+
+                        // 中文注释：去除首尾空格后写入
+                        attrs[key.Trim()] = value.Trim();
+                    }
+
+                    // 中文注释：局部函数，安全写入数值属性到JSON字典，统一使用英文小数点
+                    void AddNumberAttr(string key, double value)
+                    {
+                        // 中文注释：属性名为空时不写入
+                        if (string.IsNullOrWhiteSpace(key))
+                        {
+                            return;
+                        }
+
+                        // 中文注释：将数字转成InvariantCulture字符串，避免小数点格式混乱
+                        attrs[key.Trim()] = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+
+                    // 中文注释：初始化文件主表信息
+                    fs.FilePath = doc.Name;
                     fs.FileType = ".dwg";
                     fs.CreatedAt = DateTime.Now;
                     fs.UpdatedAt = DateTime.Now;
                     fs.IsActive = 1;
                     fs.IsPublic = 1;
                     fs.CreatedBy = Environment.UserName;
+                    fs.Version = 1;
+                    fs.Scale = 1.0;
+
+                    // 中文注释：初始化旧属性对象，保持兼容
                     fa.CreatedAt = DateTime.Now;
                     fa.UpdatedAt = DateTime.Now;
 
-                    // 针对不同实体类型提取信息
+                    // 中文注释：记录基础元数据到JSON
+                    AddTextAttr("CreatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                    AddTextAttr("UpdatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                    AddTextAttr("SourceDrawing", doc.Name);
+
+                    // 中文注释：如果当前实体是块参照，则提取块相关信息
                     if (entity is BlockReference br)
                     {
-                        var btr = (BlockTableRecord)tr.GetObject(br.BlockTableRecord, OpenMode.ForRead);
-                        fs.DisplayName = btr.Name;
-                        fs.BlockName = btr.Name;
+                        // 中文注释：读取块定义
+                        var btr = tr.GetObject(br.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+
+                        // 中文注释：块定义存在时，优先使用块名
+                        if (btr != null)
+                        {
+                            fs.DisplayName = btr.Name;
+                            fs.BlockName = btr.Name;
+                        }
+                        else
+                        {
+                            // 中文注释：兜底处理，避免块定义读取失败时名称为空
+                            fs.DisplayName = "BlockReference";
+                            fs.BlockName = "BlockReference";
+                        }
+
+                        // 中文注释：写入块的主信息
                         fs.LayerName = br.Layer;
                         fs.ColorIndex = br.Color.ColorIndex;
-                        fs.Scale = br.ScaleFactors.X; // 简化，只取X向缩放
+                        fs.Scale = br.ScaleFactors.X;
 
+                        // 中文注释：同步写入旧属性对象，兼容旧界面和旧逻辑
                         fa.Angle = (decimal)br.Rotation;
                         fa.BasePointX = (decimal)br.Position.X;
                         fa.BasePointY = (decimal)br.Position.Y;
                         fa.BasePointZ = (decimal)br.Position.Z;
 
-                        // 提取属性
-                        if (br.AttributeCollection.Count > 0)
+                        // 中文注释：写入JSON动态属性
+                        AddNumberAttr("Angle", br.Rotation);
+                        AddNumberAttr("BasePointX", br.Position.X);
+                        AddNumberAttr("BasePointY", br.Position.Y);
+                        AddNumberAttr("BasePointZ", br.Position.Z);
+
+                        // 中文注释：提取块属性集合
+                        if (br.AttributeCollection != null && br.AttributeCollection.Count > 0)
                         {
+                            // 中文注释：用于拼接备注文本
                             var attributesText = new List<string>();
+
+                            // 中文注释：遍历块属性
                             foreach (ObjectId attId in br.AttributeCollection)
                             {
+                                // 中文注释：读取属性引用对象
                                 var attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                                if (attRef != null)
+
+                                // 中文注释：空对象跳过
+                                if (attRef == null)
                                 {
-                                    attributesText.Add($"{attRef.Tag}: {attRef.TextString}");
+                                    continue;
                                 }
+
+                                // 中文注释：把块属性标签和值写入JSON
+                                AddTextAttr(attRef.Tag, attRef.TextString ?? string.Empty);
+
+                                // 中文注释：同时汇总成备注，兼容旧显示方式
+                                attributesText.Add($"{attRef.Tag}: {attRef.TextString}");
                             }
-                            fa.Remarks = string.Join("\n", attributesText);
+
+                            // 中文注释：如果有属性文本，则写入旧属性对象和JSON备注
+                            if (attributesText.Count > 0)
+                            {
+                                fa.Remarks = string.Join("\n", attributesText);
+                                AddTextAttr("Remarks", fa.Remarks);
+                            }
                         }
                     }
                     else
                     {
+                        // 中文注释：普通实体的名称使用RXClass名称
                         fs.DisplayName = entity.GetRXClass().Name;
                         fs.LayerName = entity.Layer;
                         fs.ColorIndex = entity.Color.ColorIndex;
                     }
 
-                    fs.FileName = fs.DisplayName; // 默认文件名等于显示名
+                    // 中文注释：默认文件名使用显示名称
+                    fs.FileName = fs.DisplayName;
                     fa.FileName = fs.DisplayName;
 
-                    // 估算尺寸
+                    // 中文注释：把主表关键字段写入JSON，方便测试核对
+                    AddTextAttr("FileName", fs.FileName ?? string.Empty);
+                    AddTextAttr("DisplayName", fs.DisplayName ?? string.Empty);
+                    AddTextAttr("BlockName", fs.BlockName ?? string.Empty);
+                    AddTextAttr("LayerName", fs.LayerName ?? string.Empty);
+                    AddTextAttr("ColorIndex", fs.ColorIndex.HasValue ? fs.ColorIndex.Value.ToString() : string.Empty);
+                    AddTextAttr("Scale", fs.Scale.HasValue ? fs.Scale.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
+
+                    // 中文注释：尝试估算实体尺寸
                     try
                     {
+                        // 中文注释：读取几何边界
                         var ext = entity.GeometricExtents;
-                        fa.Length = (decimal)(ext.MaxPoint.X - ext.MinPoint.X);
-                        fa.Width = (decimal)(ext.MaxPoint.Y - ext.MinPoint.Y);
-                        fa.Height = (decimal)(ext.MaxPoint.Z - ext.MinPoint.Z);
+
+                        // 中文注释：计算长宽高
+                        double length = ext.MaxPoint.X - ext.MinPoint.X;
+                        double width = ext.MaxPoint.Y - ext.MinPoint.Y;
+                        double height = ext.MaxPoint.Z - ext.MinPoint.Z;
+
+                        // 中文注释：同步写入旧属性对象
+                        fa.Length = (decimal)length;
+                        fa.Width = (decimal)width;
+                        fa.Height = (decimal)height;
+
+                        // 中文注释：写入JSON动态属性
+                        AddNumberAttr("Length", length);
+                        AddNumberAttr("Width", width);
+                        AddNumberAttr("Height", height);
                     }
                     catch (Exception ex)
                     {
+                        // 中文注释：尺寸估算失败仅记日志，不中断流程
                         LogManager.Instance.LogWarning($"估算尺寸失败: {ex.Message}");
                     }
 
-                    // 生成预览图片
+                    // 中文注释：准备预览图输出路径
                     string previewPath = PreparePreviewPath();
 
                     try
                     {
-                        // 保存当前视图
+                        // 中文注释：保存当前视图，方便截图后恢复
                         ViewTableRecord originalView = ed.GetCurrentView();
 
-                        // --- 获取实体在世界坐标下的包围盒 ---
+                        // 中文注释：先尝试获取实体世界坐标包围盒
                         Extents3d? worldExt = null;
                         try
                         {
                             if (TryGetEntityWorldExtents(tr, entity, out var extWorld))
+                            {
                                 worldExt = extWorld;
+                            }
                         }
                         catch (Exception exExt)
                         {
@@ -179,15 +292,17 @@ namespace GB_NewCadPlus_IV.Helpers
                             worldExt = null;
                         }
 
-                        // 如果能拿到包围盒，设置合适视图并多次重试截图；否则尝试临时插入回退再全图截图
+                        // 中文注释：截图成功标记
                         bool captured = false;
+
+                        // 中文注释：优先按实体包围盒截图
                         if (worldExt != null)
                         {
-                            // 记录包围盒信息用于调试
                             var min = worldExt.Value.MinPoint;
                             var max = worldExt.Value.MaxPoint;
                             double extWidth = max.X - min.X;
                             double extHeight = max.Y - min.Y;
+
                             LogManager.Instance.LogInfo($"实体包围盒: Min({min.X:F2},{min.Y:F2}), Max({max.X:F2},{max.Y:F2}), 尺寸({extWidth:F2},{extHeight:F2})");
 
                             captured = TryCaptureUsingView(doc, ed, worldExt.Value, previewPath);
@@ -204,7 +319,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             }
                         }
 
-                        // 回退方案：临时插入实体副本到 ModelSpace，移动到原点并 ZoomExtents 后截图
+                        // 中文注释：如果包围盒截图失败，则尝试临时插入方式回退截图
                         if (!captured)
                         {
                             try
@@ -228,10 +343,12 @@ namespace GB_NewCadPlus_IV.Helpers
                             }
                         }
 
-                        // 最后退路：全图截图
+                        // 中文注释：如果还失败，则退回到全图截图
                         if (!captured)
                         {
                             Bitmap previewBmp = null;
+
+                            // 中文注释：最多尝试3次获取截图
                             for (int i = 0; i < 3 && previewBmp == null; i++)
                             {
                                 try
@@ -251,6 +368,7 @@ namespace GB_NewCadPlus_IV.Helpers
                                 }
                             }
 
+                            // 中文注释：截图成功则保存为PNG
                             if (previewBmp != null)
                             {
                                 try
@@ -272,19 +390,31 @@ namespace GB_NewCadPlus_IV.Helpers
                             }
                         }
 
-                        // 恢复原视图
-                        try { ed.SetCurrentView(originalView); } catch (Exception ex) { LogManager.Instance.LogWarning($"恢复原视图失败: {ex.Message}"); }
+                        // 中文注释：恢复原始视图
+                        try
+                        {
+                            ed.SetCurrentView(originalView);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogManager.Instance.LogWarning($"恢复原视图失败: {ex.Message}");
+                        }
                     }
                     catch (Exception ex)
                     {
+                        // 中文注释：预览图失败不影响主流程
                         LogManager.Instance.LogWarning($"生成预览图异常: {ex.Message}");
                     }
 
+                    // 中文注释：提交事务
                     tr.Commit();
                 }
             }
+
+            // 中文注释：返回最终DTO
             return dto;
         }
+
         /// <summary>
         /// 新增的辅助校验方法（放在类内）
         /// </summary>
@@ -317,7 +447,7 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 辅助：尝试获取实体在世界坐标下的包围盒（支持 BlockReference 的特殊计算）
+        /// 辅助：尝试获取实体在世界坐标下的包围盒（支持普通实体与 BlockReference）
         /// </summary>
         /// <param name="tr">事务</param>
         /// <param name="ent">实体</param>
@@ -326,28 +456,29 @@ namespace GB_NewCadPlus_IV.Helpers
         private static bool TryGetEntityWorldExtents(Transaction tr, Entity ent, out Extents3d worldExt)
         {
             worldExt = new Extents3d();
+
             try
             {
-                // 优先尝试实体自身的 GeometricExtents（多数情况下最可靠）
-                //try
-                //{
-                //    var eExt = ent.GeometricExtents;
-                //    if (IsExtentsReasonable(eExt))
-                //    {
-                //        worldExt = eExt;
-                //        return true;
-                //    }
-                //    else
-                //    {
-                //        LogManager.Instance.LogWarning($"实体自身 GeometricExtents 非常规：{eExt.MinPoint} - {eExt.MaxPoint}，将尝试其他方法。");
-                //    }
-                //}
-                //catch (Exception ex)
-                //{
-                //    LogManager.Instance.LogWarning($"常规获取几何边界失败: {ex.Message}");
-                //}
+                // 中文注释：先尝试使用实体自身的 GeometricExtents，这对普通实体最直接有效
+                try
+                {
+                    var eExt = ent.GeometricExtents;
+                    if (IsExtentsReasonable(eExt))
+                    {
+                        worldExt = eExt;
+                        return true;
+                    }
+                    else
+                    {
+                        LogManager.Instance.LogWarning($"实体自身 GeometricExtents 非常规：{eExt.MinPoint} - {eExt.MaxPoint}，将尝试其它方案。");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogWarning($"常规获取几何边界失败: {ex.Message}");
+                }
 
-                // 如果是块参照，尝试基于块定义逐个实体变换出世界包围盒（更鲁棒）
+                // 中文注释：如果是块参照，则进一步尝试基于块定义递归计算包围盒
                 if (ent is BlockReference br)
                 {
                     if (TryComputeBlockReferenceWorldExtents(tr, br, out var extFromBtr) && IsExtentsReasonable(extFromBtr))
@@ -355,11 +486,8 @@ namespace GB_NewCadPlus_IV.Helpers
                         worldExt = extFromBtr;
                         return true;
                     }
-                    else
-                    {
-                        LogManager.Instance.LogWarning("基于块定义计算的 worldExt 非常规或计算失败，回退其它方案。");
-                        return false;
-                    }
+
+                    LogManager.Instance.LogWarning("基于块定义计算的 worldExt 非常规或计算失败。");
                 }
 
                 return false;
@@ -538,98 +666,126 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <returns>是否截图成功</returns>
         private static bool TryCaptureUsingView(Document doc, Editor ed, Extents3d ext, string outPreviewPath)
         {
+            ViewTableRecord originalView = null;
+
             try
             {
-                //1:合法性检查:先用 IsExtentsReasonable(Extents3d) 过滤异常/极端的包围盒（NaN、极小/极大、极端长宽比等），不合理则放弃按 ext 截图并返回 false。
+                // 中文注释：先检查包围盒是否合理，不合理则直接放弃
                 if (!IsExtentsReasonable(ext))
                 {
                     LogManager.Instance.LogWarning($"TryCaptureUsingView: 提供的 ext 不合理，放弃按 ext 截图: Min{ext.MinPoint} Max{ext.MaxPoint}");
                     return false;
                 }
 
-                //2. 计算包围盒与内容世界尺寸 
+                // 中文注释：计算包围盒尺寸
                 var min = ext.MinPoint;
                 var max = ext.MaxPoint;
 
-                // 原始内容世界尺寸（不含 margin）•	防止宽或高为 0 导致后续除零或视图尺寸为零的问题，最小取 1.0（世界单位）。
                 double contentWidthWorld = Math.Max(max.X - min.X, 1.0);
                 double contentHeightWorld = Math.Max(max.Y - min.Y, 1.0);
 
-                // 3.自适应 world margin  按实体较大边的百分比，•	margin = 较大边的 5%（相对）但至少 0.5，最多 10。目的是既保证边距又避免 margin 过大或过小。
+                // 中文注释：计算适度边距，避免截图太贴边
                 double worldMargin = Math.Min(10.0, Math.Max(Math.Max(contentWidthWorld, contentHeightWorld) * 0.05, 0.5));
 
-                // 4.计算最终视图的世界尺寸（包含 margin）视图尺寸 = 内容 + margin*2 
+                // 中文注释：最终视图宽高 = 内容尺寸 + 边距
                 double contentWidth = contentWidthWorld + worldMargin * 2;
                 double contentHeight = contentHeightWorld + worldMargin * 2;
 
-                // 5.计算视图中心（世界坐标，Z 设为 0）•	注意：这里 Z 直接设为 0，意味着截屏视图是顶视并以 Z=0 平面作为投影中心。
+                // 中文注释：计算视图中心
                 var centerWCS = new Point3d((min.X + max.X) / 2.0, (min.Y + max.Y) / 2.0, 0);
 
-                //6. 备份并克隆当前视图 •	克隆后在 newView 上修改，方便后续恢复 originalView。
-                var originalView = ed.GetCurrentView();
+                // 中文注释：备份当前视图
+                originalView = ed.GetCurrentView();
                 var newView = (ViewTableRecord)originalView.Clone();
 
-                //7. 配置新视图为顶视（默认朝向），置中并设置宽高（世界单位）
+                // 中文注释：设置顶视图和中心点
                 newView.ViewDirection = Vector3d.ZAxis;
                 newView.ViewTwist = 0.0;
                 newView.CenterPoint = new Point2d(centerWCS.X, centerWCS.Y);
                 newView.Width = contentWidth;
                 newView.Height = contentHeight;
 
-                //8. 应用视图并等待渲染 •	给 AutoCAD 一点时间刷新并重绘画面，之后代码会去捕获截图。
+                // 中文注释：应用新视图并等待屏幕刷新
                 ed.SetCurrentView(newView);
-                System.Threading.Thread.Sleep(200);
+                System.Threading.Thread.Sleep(300);
                 try { Application.UpdateScreen(); } catch { }
 
                 const int baseSize = 600;
-                uint outputWidth, outputHeight;
+                uint outputWidth;
+                uint outputHeight;
                 double aspectRatio = contentWidth / contentHeight;
 
                 if (aspectRatio >= 1.0)
                 {
-                    outputWidth = baseSize;
+                    outputWidth = (uint)baseSize;
                     outputHeight = (uint)(baseSize / aspectRatio);
                 }
                 else
                 {
-                    outputHeight = baseSize;
+                    outputHeight = (uint)baseSize;
                     outputWidth = (uint)(baseSize * aspectRatio);
                 }
 
                 outputWidth = Math.Max(outputWidth, 300u);
                 outputHeight = Math.Max(outputHeight, 300u);
 
+                // 中文注释：执行截图
                 Bitmap previewBmp = CaptureImage(doc, outputWidth, outputHeight);
-                if (previewBmp != null)
-                {
-                    try
-                    {
-                        // 这里传入未包含 margin 的世界宽高（contentWidthWorld/contentHeightWorld）
-                        using (var cropped = CropPreviewToContent(previewBmp, worldMargin, contentWidthWorld, contentHeightWorld, outputWidth, outputHeight))
-                        {
-                            cropped.Save(outPreviewPath, System.Drawing.Imaging.ImageFormat.Png);
-                        }
-                        LogManager.Instance.LogInfo($"截图成功: 中心WCS({centerWCS.X:F2},{centerWCS.Y:F2}), 视图尺寸({contentWidth:F2}×{contentHeight:F2}), 图像尺寸({outputWidth}×{outputHeight}), worldMargin({worldMargin:F2})");
-                    }
-                    finally
-                    {
-                        previewBmp.Dispose();
-                    }
-                    return true;
-                }
-                else
+                if (previewBmp == null)
                 {
                     LogManager.Instance.LogWarning($"截图失败: 中心WCS({centerWCS.X:F2},{centerWCS.Y:F2}), 视图尺寸({contentWidth:F2}×{contentHeight:F2})");
+                    return false;
                 }
 
-                try { ed.SetCurrentView(originalView); } catch (Exception ex) { LogManager.Instance.LogWarning($"恢复原视图失败: {ex.Message}"); }
+                try
+                {
+                    // 中文注释：裁剪后保存PNG
+                    using (var cropped = CropPreviewToContent(previewBmp, worldMargin, contentWidthWorld, contentHeightWorld, outputWidth, outputHeight))
+                    {
+                        cropped.Save(outPreviewPath, System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                }
+                finally
+                {
+                    previewBmp.Dispose();
+                }
 
-                return false;
+                // 中文注释：最终检查文件是否真实生成成功
+                if (!System.IO.File.Exists(outPreviewPath))
+                {
+                    LogManager.Instance.LogWarning($"截图流程结束但文件未生成: {outPreviewPath}");
+                    return false;
+                }
+
+                var fileInfo = new System.IO.FileInfo(outPreviewPath);
+                if (fileInfo.Length <= 0)
+                {
+                    LogManager.Instance.LogWarning($"截图流程结束但文件为空: {outPreviewPath}");
+                    return false;
+                }
+
+                LogManager.Instance.LogInfo($"截图成功: 中心WCS({centerWCS.X:F2},{centerWCS.Y:F2}), 视图尺寸({contentWidth:F2}×{contentHeight:F2}), 图像尺寸({outputWidth}×{outputHeight}), worldMargin({worldMargin:F2})");
+                return true;
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogWarning($"TryCaptureUsingView 异常: {ex.Message}");
                 return false;
+            }
+            finally
+            {
+                // 中文注释：无论成功失败都恢复原视图，避免影响后续截图和界面状态
+                if (originalView != null)
+                {
+                    try
+                    {
+                        ed.SetCurrentView(originalView);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Instance.LogWarning($"恢复原视图失败: {ex.Message}");
+                    }
+                }
             }
         }
 

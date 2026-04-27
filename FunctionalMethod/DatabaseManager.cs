@@ -25,7 +25,7 @@ using FileTag = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileTag;
 using FileAccessLog = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAccessLog;
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
-{    
+{
     /// <summary>
     /// 数据库访问类  
     /// </summary>
@@ -114,7 +114,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             LogManager.Instance.LogWarning("AddFileStorageAsync 旧写入链路已废弃，请改用 AddFileStorageAndAttributesJsonAsync。");
             return 0;
         }
-               
+
 
         //public virtual async Task<FileStorage?> GetFileStorageAsync(string fileHash)
         //{
@@ -146,7 +146,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             return 1;
         }
 
-     
+
         /// <summary>
         /// 用户实体（对应 users 表）
         /// </summary>
@@ -753,7 +753,9 @@ ON UPDATE CASCADE;");
 
         #region 部门与人员同步方法
 
-        // 新增：部门实体
+        /// <summary>
+        /// 新增：部门实体
+        /// </summary>
         public class Department
         {
             public int Id { get; set; }
@@ -1978,7 +1980,7 @@ LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
             }
         }
 
-       
+
 
         /// <summary>
         /// 根据文件扩展名获取分类下的文件
@@ -2943,7 +2945,7 @@ LIMIT 1;";
             return p;
         }
 
-       
+
         /// <summary>
         /// 事务插入：先插入文件存储，再插入 JSON 属性（新表 cad_block_attributes_json）
         /// 说明：保留旧方法签名，兼容现有调用方；旧 FileAttribute 会被转换为字典后存入 JSON。
@@ -3100,7 +3102,7 @@ WHERE id = @Id;";
                 try { tx?.Dispose(); } catch { }
             }
         }
-               
+
         /// <summary>
         /// 中文注释：新方案——插入文件主记录 + JSON属性记录（事务）
         /// </summary>
@@ -3192,6 +3194,137 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
 
         #endregion
 
+        #region 管道操作方法
+
+        /// <summary>
+        /// 中文注释：管道模板查询结果（主记录 + JSON属性）
+        /// </summary>
+        public sealed class PipeTemplateQueryResult
+        {
+            /// <summary>
+            /// 中文注释：模板主表记录
+            /// </summary>
+            public FileStorage? Storage { get; set; }
+
+            /// <summary>
+            /// 中文注释：模板属性字典（来自 cad_block_attributes_json）
+            /// </summary>
+            public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// 中文注释：按入口/出口从数据库获取“最新可用管道模板”及其属性字典
+        /// 规则：优先匹配 display_name/file_name/block_name/title/keywords，按 updated_at/id 倒序取一条
+        /// </summary>
+        /// <param name="isOutlet">中文注释：true=出口模板，false=入口模板</param>
+        /// <returns>中文注释：命中时返回模板与属性，未命中返回 null</returns>
+        public async Task<PipeTemplateQueryResult?> GetLatestPipeTemplateWithAttributesAsync(bool isOutlet)
+        {
+            try
+            {
+                // 中文注释：根据入口/出口准备关键词
+                string kwCnMain = isOutlet ? "出口管道" : "入口管道";
+                string kwCnSub = isOutlet ? "出口" : "入口";
+                string kwEn = isOutlet ? "outlet" : "inlet";
+
+                // 中文注释：模糊匹配参数
+                string k1 = $"%{kwCnMain}%";
+                string k2 = $"%{kwCnSub}%";
+                string k3 = $"%{kwEn}%";
+
+                // 中文注释：查询模板主记录（只取激活记录）
+                const string sqlTemplate = @"
+                              SELECT
+                                  id AS Id,
+                                  category_id AS CategoryId,
+                                  category_type AS CategoryType,
+                                  file_attribute_id AS FileAttributeId,
+                                  file_name AS FileName,
+                                  file_stored_name AS FileStoredName,
+                                  display_name AS DisplayName,
+                                  file_type AS FileType,
+                                  file_hash AS FileHash,
+                                  block_name AS BlockName,
+                                  layer_name AS LayerName,
+                                  color_index AS ColorIndex,
+                                  scale AS Scale,
+                                  file_path AS FilePath,
+                                  preview_image_name AS PreviewImageName,
+                                  preview_image_path AS PreviewImagePath,
+                                  file_size AS FileSize,
+                                  is_preview AS IsPreview,
+                                  version AS Version,
+                                  description AS Description,
+                                  is_active AS IsActive,
+                                  created_by AS CreatedBy,
+                                  title AS Title,
+                                  keywords AS Keywords,
+                                  is_public AS IsPublic,
+                                  updated_by AS UpdatedBy,
+                                  last_accessed_at AS LastAccessedAt,
+                                  created_at AS CreatedAt,
+                                  updated_at AS UpdatedAt
+                              FROM cad_file_storage
+                              WHERE is_active = 1
+                                AND (
+                                    display_name LIKE @K1 OR display_name LIKE @K2 OR display_name LIKE @K3
+                                    OR file_name LIKE @K1 OR file_name LIKE @K2 OR file_name LIKE @K3
+                                    OR block_name LIKE @K1 OR block_name LIKE @K2 OR block_name LIKE @K3
+                                    OR title LIKE @K1 OR title LIKE @K2 OR title LIKE @K3
+                                    OR keywords LIKE @K1 OR keywords LIKE @K2 OR keywords LIKE @K3
+                                )
+                              ORDER BY updated_at DESC, id DESC
+                              LIMIT 1;";
+
+                // 中文注释：建立连接并查询主记录
+                using var connection = GetConnection();
+                var storage = await connection.QueryFirstOrDefaultAsync<FileStorage>(
+                    sqlTemplate,
+                    new { K1 = k1, K2 = k2, K3 = k3 }).ConfigureAwait(false);
+
+                // 中文注释：未命中模板直接返回 null
+                if (storage == null)
+                {
+                    return null;
+                }
+
+                // 中文注释：查询该模板最新属性JSON
+                const string sqlAttr = @"
+                             SELECT attributes_json
+                             FROM cad_block_attributes_json
+                             WHERE file_id = @FileId
+                             ORDER BY updated_at DESC, attr_id DESC
+                             LIMIT 1;";
+
+                string? attrJson = await connection.QueryFirstOrDefaultAsync<string>(
+                    sqlAttr,
+                    new { FileId = storage.Id }).ConfigureAwait(false);
+
+                // 中文注释：反序列化属性字典（空则返回空字典）
+                var attrs = string.IsNullOrWhiteSpace(attrJson)
+                    ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    : (Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attrJson)
+                       ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+                // 中文注释：返回统一结果对象
+                return new PipeTemplateQueryResult
+                {
+                    Storage = storage,
+                    Attributes = attrs
+                };
+            }
+            catch (Exception ex)
+            {
+                // 中文注释：记录异常日志，返回 null 由上层兜底
+                LogManager.Instance.LogInfo($"GetLatestPipeTemplateWithAttributesAsync 出错: {ex.Message}");
+                return null;
+            }
+        }
+
+        #endregion
+
+
+
         /// <summary>
         /// CAD分类
         /// </summary>
@@ -3206,8 +3339,10 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             public DateTime UpdatedAt { get; set; } // 更新时间
         }
 
-       
-             public class CadSubcategory
+        /// <summary>
+        /// CAD子分类
+        /// </summary>
+        public class CadSubcategory
         {
             public int Id { get; set; } // 子分类ID
             public int ParentId { get; set; } // 父分类ID
@@ -3474,7 +3609,9 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             public DateTime UpdatedAt { get; set; }
         }
 
-        // 中文注释：JSON属性表模型（对应 cad_block_attributes_json）
+        /// <summary>
+        /// 中文注释：JSON属性表模型（对应 cad_block_attributes_json）
+        /// </summary>
         public class BlockAttributesJson
         {
             public long AttrId { get; set; } // 中文注释：属性记录主键
@@ -3485,21 +3622,34 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             public DateTime UpdatedAt { get; set; } // 中文注释：更新时间
         }
 
-        // 中文注释：将字典转成JSON字符串
+        /// <summary>
+        /// 中文注释：将字典转成JSON字符串
+        /// </summary>
+        /// <param name="dict"></param>
+        /// <returns></returns>
         private static string ToJson(Dictionary<string, string>? dict)
         {
             return JsonConvert.SerializeObject(dict ?? new Dictionary<string, string>());
         }
 
-        // 中文注释：将JSON字符串转成字典
+        /// <summary>
+        /// 中文注释：将JSON字符串转成字典
+        /// </summary>
+        /// <param name="json"></param>
+        /// <returns></returns>
         private static Dictionary<string, string> FromJson(string? json)
         {
             if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, string>();
-            return JsonConvert.DeserializeObject<Dictionary<string, string>>(json) 
+            return JsonConvert.DeserializeObject<Dictionary<string, string>>(json)
                    ?? new Dictionary<string, string>();
         }
 
-        // 中文注释：按 file_id 获取JSON属性（返回字典）
+        /// <summary>
+        /// 中文注释：按 file_id 获取JSON属性（返回字典）
+        /// </summary>
+        /// <param name="fileId"></param>
+        /// <param name="configName"></param>
+        /// <returns></returns>
         public async Task<Dictionary<string, string>> GetAttributesJsonByFileIdAsync(int fileId, string configName = "default")
         {
             const string sql = @"
@@ -3513,6 +3663,6 @@ LIMIT 1;";
             var json = await connection.QueryFirstOrDefaultAsync<string>(sql, new { FileId = fileId, ConfigName = configName }).ConfigureAwait(false);
             return FromJson(json);
         }
-       
+
     }
 }

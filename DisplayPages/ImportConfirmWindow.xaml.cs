@@ -76,38 +76,59 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private void LoadPreviewImage()
         {
-           
             try
             {
-                if (string.IsNullOrWhiteSpace(_dto?.PreviewImagePath) || !File.Exists(_dto.PreviewImagePath))
+                // 中文注释：优先使用 DTO 顶层预览路径，如果没有则回退到 FileStorage 中的预览路径
+                string previewPath = _dto?.PreviewImagePath;
+
+                // 中文注释：如果 DTO 顶层路径为空，则尝试读取 FileStorage 中的预览路径
+                if (string.IsNullOrWhiteSpace(previewPath))
+                {
+                    previewPath = _dto?.FileStorage?.PreviewImagePath;
+                }
+
+                // 中文注释：如果最终路径为空或文件不存在，则清空图片并记录日志
+                if (string.IsNullOrWhiteSpace(previewPath) || !System.IO.File.Exists(previewPath))
                 {
                     PreviewImage.Source = null;
+                    LogManager.Instance.LogWarning($"预览图未找到。DTO路径: {_dto?.PreviewImagePath}，FileStorage路径: {_dto?.FileStorage?.PreviewImagePath}");
                     return;
                 }
-                // 读取文件字节到内存，避免文件句柄/共享问题
-                byte[] bytes = File.ReadAllBytes(_dto.PreviewImagePath);
+
+                // 中文注释：读取文件字节到内存，避免文件锁问题
+                byte[] bytes = System.IO.File.ReadAllBytes(previewPath);
+
+                // 中文注释：如果文件为空，则不显示
+                if (bytes == null || bytes.Length == 0)
+                {
+                    PreviewImage.Source = null;
+                    LogManager.Instance.LogWarning($"预览图文件为空: {previewPath}");
+                    return;
+                }
+
                 using (var ms = new MemoryStream(bytes))
                 {
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad; // 立即加载到内存
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.StreamSource = ms;
                     bitmap.EndInit();
                     bitmap.Freeze();
                     PreviewImage.Source = bitmap;
                 }
-                // 确保可见并刷新布局
+
+                // 中文注释：确保图片控件可见并刷新布局
                 PreviewImage.Visibility = System.Windows.Visibility.Visible;
                 PreviewImage.InvalidateVisual();
                 PreviewImage.UpdateLayout();
 
-                LogManager.Instance.LogInfo($"已加载并显示预览图: {_dto.PreviewImagePath}");
+                LogManager.Instance.LogInfo($"已加载并显示预览图: {previewPath}");
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogError($"加载预览图失败: {ex.Message}");
                 PreviewImage.Source = null;
-            }         
+            }
         }
 
         /// <summary>
@@ -115,8 +136,8 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private void BindPropertiesToGrid()
         {
-            // 使用主窗口已有的方法来准备数据
-            var displayData = _mainWindow.PrepareFileDisplayData(_dto.FileStorage, _dto.FileAttribute);
+            // 中文注释：优先使用 DTO 中的 JSON 属性字典来生成展示数据
+            var displayData = _mainWindow.PrepareFileDisplayData(_dto.FileStorage, _dto.AttributesJson);
             PropertiesGrid.ItemsSource = displayData;
         }
 
@@ -250,59 +271,14 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private Dictionary<string, string> BuildExportAttributesDictionary()
         {
-            // 中文注释：最终返回字典
-            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            // 中文注释：优先尝试从 DTO 的 Attributes 字典取值（若你后续给 DTO 加了该字段可直接生效）
-            try
+            // 中文注释：优先返回 DTO 中最新的 JSON 属性字典副本
+            if (_dto != null && _dto.AttributesJson != null && _dto.AttributesJson.Count > 0)
             {
-                var dtoType = _dto.GetType();
-                var attrsProp = dtoType.GetProperty("Attributes");
-                if (attrsProp != null)
-                {
-                    var v = attrsProp.GetValue(_dto) as Dictionary<string, string>;
-                    if (v != null && v.Count > 0)
-                    {
-                        foreach (var kv in v)
-                        {
-                            if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
-                                dict[kv.Key.Trim()] = kv.Value.Trim();
-                        }
-                        return dict;
-                    }
-                }
-            }
-            catch
-            {
-                // 中文注释：忽略反射异常，继续走旧模型桥接
+                return new Dictionary<string, string>(_dto.AttributesJson, StringComparer.OrdinalIgnoreCase);
             }
 
-            // 中文注释：兼容旧模型 FileAttribute -> 字典
-            if (_dto?.FileAttribute != null)
-            {
-                foreach (var p in typeof(FileAttribute).GetProperties())
-                {
-                    if (!p.CanRead) continue;
-
-                    // 中文注释：过滤技术字段
-                    if (string.Equals(p.Name, "Id", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, "CreatedAt", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var value = p.GetValue(_dto.FileAttribute);
-                    if (value == null) continue;
-
-                    var s = Convert.ToString(value);
-                    if (string.IsNullOrWhiteSpace(s)) continue;
-
-                    dict[p.Name] = s.Trim();
-                }
-            }
-
-            return dict;
+            // 中文注释：兜底返回空字典，避免空引用
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -393,15 +369,86 @@ namespace GB_NewCadPlus_IV.Views
             var items = PropertiesGrid.ItemsSource as List<CategoryPropertyEditModel>;
             if (items == null) return;
 
+            // 中文注释：确保 JSON 属性字典已初始化
+            _dto.AttributesJson ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // 中文注释：每次重新采集前先清空，避免旧值残留
+            _dto.AttributesJson.Clear();
+
+            // 中文注释：把界面显示名统一映射为系统内部标准键名，避免后续 JSON 键混乱
+            string NormalizeKey(string key)
+            {
+                if (string.IsNullOrWhiteSpace(key)) return string.Empty;
+
+                switch (key.Trim())
+                {
+                    case "文件名": return "FileName";
+                    case "显示名称": return "DisplayName";
+                    case "元素块名": return "BlockName";
+                    case "图层名称": return "LayerName";
+                    case "层名": return "LayerName";
+                    case "颜色索引": return "ColorIndex";
+                    case "比例": return "Scale";
+                    case "长度": return "Length";
+                    case "宽度": return "Width";
+                    case "高度": return "Height";
+                    case "角度": return "Angle";
+                    case "基点X": return "BasePointX";
+                    case "基点Y": return "BasePointY";
+                    case "基点Z": return "BasePointZ";
+                    case "介质": return "MediumName";
+                    case "规格": return "Specifications";
+                    case "材质": return "Material";
+                    case "标准号": return "StandardNumber";
+                    case "功率": return "Power";
+                    case "容积": return "Volume";
+                    case "压力": return "Pressure";
+                    case "温度": return "Temperature";
+                    case "直径": return "Diameter";
+                    case "外径": return "OuterDiameter";
+                    case "内径": return "InnerDiameter";
+                    case "厚度": return "Thickness";
+                    case "重量": return "Weight";
+                    case "型号": return "Model";
+                    case "备注": return "Remarks";
+                    case "自定义1": return "Customize1";
+                    case "自定义2": return "Customize2";
+                    case "自定义3": return "Customize3";
+                    default: return key.Trim();
+                }
+            }
+
+            // 中文注释：局部函数，安全写入 JSON 属性字典
+            void AddAttr(string key, string value)
+            {
+                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return;
+
+                // 中文注释：统一键名后再写入
+                var normalizedKey = NormalizeKey(key);
+                if (string.IsNullOrWhiteSpace(normalizedKey)) return;
+
+                _dto.AttributesJson[normalizedKey] = value.Trim();
+            }
+
             foreach (var item in items)
             {
-                // 使用主窗口的 SetFileAttributeProperty 方法来解析和设置属性
-                _mainWindow.SetFileAttributeProperty(_dto.FileAttribute, item.PropertyName1, item.PropertyValue1);
-                _mainWindow.SetFileAttributeProperty(_dto.FileAttribute, item.PropertyName2, item.PropertyValue2);
-                // 采集文件信息（完善：支持FileStorage字段）
+                // 中文注释：先回写 FileStorage 固定字段
                 _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName1, item.PropertyValue1);
                 _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName2, item.PropertyValue2);
+
+                // 中文注释：再把两列属性写回 JSON 字典
+                AddAttr(item.PropertyName1, item.PropertyValue1);
+                AddAttr(item.PropertyName2, item.PropertyValue2);
             }
+
+            // 中文注释：补充主表关键字段，保证 JSON 中也有一份稳定数据
+            AddAttr("FileName", _dto.FileStorage.FileName ?? string.Empty);
+            AddAttr("DisplayName", _dto.FileStorage.DisplayName ?? string.Empty);
+            AddAttr("BlockName", _dto.FileStorage.BlockName ?? string.Empty);
+            AddAttr("LayerName", _dto.FileStorage.LayerName ?? string.Empty);
+            AddAttr("ColorIndex", _dto.FileStorage.ColorIndex?.ToString() ?? string.Empty);
+            AddAttr("Scale", _dto.FileStorage.Scale?.ToString() ?? string.Empty);
+            AddAttr("UpdatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
         }
 
     }

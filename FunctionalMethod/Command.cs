@@ -6245,7 +6245,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
         #endregion
 
-        ///GetCircumcenter
+        ///GetCircumcenter  GeneratePipeTableFromSelection getscale
 
         #region Excel相关 
 

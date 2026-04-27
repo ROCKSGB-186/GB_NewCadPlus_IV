@@ -33,7 +33,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
     {
         #region 命令方法示例
 
-
         /// <summary>
         /// 测试命令 - 获取动态块信息
         /// </summary>
@@ -110,7 +109,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
         #endregion
 
-       
+
 
         #region 动态块拉伸
 
@@ -994,5 +993,39 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             return $"{device.Name}_{string.Join("_", device.Attributes.Values)}";
         }
         #endregion
+
+        // 统一后处理入口：对新创建的管线实体执行后续处理（避免在多个地方重复实现）
+        // 每行均添加中文注释，便于理解和维护
+        private static void TryRunPipePostProcess(DBTrans tr, ObjectId newPipeId, string pipeRole)
+        {   // 方法开始：接收事务对象、新创建对象的 ObjectId 以及角色字符串
+            if (tr == null) return; // 如果事务为空则直接返回（防御式编程）
+            if (newPipeId == ObjectId.Null) return; // 如果对象Id无效则直接返回
+
+            try
+            {   // 尝试在事务上下文中读取对象，安全执行后处理逻辑
+                DBObject dbObj = tr.GetObject(newPipeId, OpenMode.ForRead); // 从事务中以只读方式获取对象
+                if (dbObj == null) return; // 如果获取失败则返回，不做任何操作
+
+                // 如果需要根据不同的角色执行不同的后处理，可在此处扩展逻辑
+                // 目前实现为安全占位：仅做简单日志输出，避免改变数据库状态
+                if (!string.IsNullOrEmpty(pipeRole))
+                {   // 如果角色字符串不为空，则输出提示便于调试
+                    Env.Editor.WriteMessage($"\n管线后处理: 对象 {newPipeId} , 角色: {pipeRole}"); // 日志输出到编辑器
+                }
+                else
+                {   // 如果未指定角色，也输出对象信息，便于排查
+                    Env.Editor.WriteMessage($"\n管线后处理: 对象 {newPipeId} , 未指定角色"); // 日志输出到编辑器
+                }
+
+                // 若将来需要在后处理时修改实体，应在此处：
+                // 1) 升级打开对象为写模式（dbObj.UpgradeOpen 或使用 tr.GetObject(..., OpenMode.ForWrite)）
+                // 2) 执行属性同步/插入图元等操作
+                // 3) 提交由外层事务负责提交（请勿在此处调用 tr.Commit）
+            }
+            catch (System.Exception ex)
+            {   // 捕获并记录异常，避免将异常抛出导致调用方事务失败
+                Env.Editor.WriteMessage($"\nTryRunPipePostProcess 异常: {ex.Message}"); // 将异常信息输出到编辑器
+            }
+        }
     }
 }

@@ -3597,7 +3597,6 @@
                         Grid.Row="3"
                         Height="155"
                         Background="Azure">
-
                         <Button
                             Width="NaN"
                             Height="22"
@@ -3694,8 +3693,6 @@
                             Style="{StaticResource WatermarkTextBoxStyle}"
                             Tag="文件类型："
                             TextWrapping="Wrap" />
-
-
                         <Button
                             x:Name="DeleteGraphic_Btn"
                             Width="NaN"
@@ -3986,9 +3983,7 @@
                                 Margin="0,0,6,0"
                                 VerticalAlignment="Bottom"
                                 Text="输入用户名搜索/分配" />
-
                         </StackPanel>
-
                     </StackPanel>
                     <StackPanel
                         Grid.Row="2"
@@ -4023,7 +4018,6 @@
                             HorizontalContentAlignment="Center"
                             Click="BtnAssignUser_Click"
                             Content="将用户分配到选中部门" />
-
                     </StackPanel>
                     <StackPanel
                         Grid.Row="2"

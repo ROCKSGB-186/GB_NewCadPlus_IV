@@ -255,18 +255,59 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns></returns>
         public static Dictionary<string, string> LoadLastPipeAttributes(bool isOutlet)
         {
+            // 中文注释：获取入口/出口属性文件路径
             var path = GetPipeAttrSavePath(isOutlet);
+
+            // 中文注释：若文件不存在，则自动创建一个“空结构”的XML文件，保证后续有物理文件
             if (!File.Exists(path))
+            {
+                try
+                {
+                    // 中文注释：确保目录存在
+                    var dir = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+
+                    // 中文注释：创建空列表并序列化到文件（不是空文本，避免反序列化失败）
+                    var xsCreate = new XmlSerializer(typeof(List<PipeAttrEntry>));
+                    var settings = new System.Xml.XmlWriterSettings
+                    {
+                        Indent = true,
+                        Encoding = new System.Text.UTF8Encoding(true),
+                        NewLineChars = "\r\n"
+                    };
+
+                    using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+                    using (var xw = System.Xml.XmlWriter.Create(fs, settings))
+                    {
+                        xsCreate.Serialize(xw, new List<PipeAttrEntry>());
+                        xw.Flush();
+                        fs.Flush(true);
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"[FileManager] Auto-created empty pipe attrs file: {path}");
+                }
+                catch (Exception exCreate)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[FileManager] Auto-create pipe attrs file failed: {exCreate.Message}");
+                }
+
+                // 中文注释：首次创建后返回空字典
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
 
             try
             {
+                // 中文注释：按既有格式反序列化
                 var xs = new XmlSerializer(typeof(List<PipeAttrEntry>));
                 using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
                     var obj = xs.Deserialize(fs) as List<PipeAttrEntry>;
                     if (obj == null) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+                    // 中文注释：构建不区分大小写字典
                     var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var e in obj)
                     {
@@ -283,10 +324,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
             catch (Exception ex)
             {
+                // 中文注释：读取失败时返回空字典，避免影响主流程
                 System.Diagnostics.Debug.WriteLine($"[FileManager] LoadLastPipeAttributes failed: {ex.Message}");
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
-
         }
         /// <summary>
         /// 保存管道属性
@@ -295,12 +336,25 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="attrs"></param>
         public static void SaveLastPipeAttributes(bool isOutlet, Dictionary<string, string> attrs)
         {
-            if (attrs == null) return;
+            // 中文注释：即使 attrs 为 null，也按“空字典”处理，确保文件可被重建
+            if (attrs == null)
+            {
+                attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            // 中文注释：获取保存路径
             var path = GetPipeAttrSavePath(isOutlet);
 
             try
             {
-                // 规范化并过滤：Trim 键/值，丢弃空键，按不区分大小写合并同名键
+                // 中文注释：确保目录存在
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                // 中文注释：规范化键值，去空白并合并同名键
                 var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var kv in attrs)
                 {
@@ -310,27 +364,24 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     dict[k] = v;
                 }
 
-                // 如果没有有效项，则删除旧文件并返回
-                if (dict.Count == 0)
-                {
-                    try { if (File.Exists(path)) File.Delete(path); }
-                    catch { }
-                    System.Diagnostics.Debug.WriteLine($"[FileManager] Nothing to save for {path}");
-                    return;
-                }
-
+                // 中文注释：即使没有有效项，也写入“空列表XML”，而不是删除文件
                 var list = dict.Select(kv => new PipeAttrEntry { Key = kv.Key, Value = kv.Value }).ToList();
 
+                // 中文注释：序列化器
                 var xs = new XmlSerializer(typeof(List<PipeAttrEntry>));
+
+                // 中文注释：临时文件路径（先写临时，再替换，避免中间态损坏）
                 var tmpFile = path + ".tmp";
 
+                // 中文注释：写入设置（UTF8+BOM）
                 var settings = new System.Xml.XmlWriterSettings
                 {
                     Indent = true,
-                    Encoding = new System.Text.UTF8Encoding(true), // 带 BOM，符合编辑器/Windows 习惯
+                    Encoding = new System.Text.UTF8Encoding(true),
                     NewLineChars = "\r\n"
                 };
 
+                // 中文注释：写入临时文件
                 using (var ofs = new FileStream(tmpFile, FileMode.Create, FileAccess.Write, FileShare.None))
                 using (var xw = System.Xml.XmlWriter.Create(ofs, settings))
                 {
@@ -339,7 +390,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     ofs.Flush(true);
                 }
 
-                // 原子替换目标文件
+                // 中文注释：原子替换目标文件
                 try
                 {
                     if (File.Exists(path))
@@ -349,7 +400,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
                 catch
                 {
-                    // 回退：简单覆盖
+                    // 中文注释：回退覆盖策略
                     if (File.Exists(tmpFile))
                     {
                         File.Copy(tmpFile, path, true);
