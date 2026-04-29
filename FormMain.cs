@@ -8879,6 +8879,8 @@ namespace GB_NewCadPlus_IV
 
         #endregion
 
+        #region
+
         private void button纯化水_Click(object sender, EventArgs e)
         {
             VariableDictionary.tjtBtn = VariableDictionary.tjtBtnNull;
@@ -9235,6 +9237,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.selectTjtLayer.Add("ZG-标管2");
             Env.Document.SendStringToExecute("IsFrozenLayer ", false, false, false);
         }
+        #endregion
     }
 }
 

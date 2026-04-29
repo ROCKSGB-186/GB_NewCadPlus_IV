@@ -291,6 +291,14 @@ namespace GB_NewCadPlus_IV
             this.button_清理 = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
             this.label_VER = new System.Windows.Forms.Label();
+            this.button_向右下 = new System.Windows.Forms.Button();
+            this.button_向下 = new System.Windows.Forms.Button();
+            this.button_向左下 = new System.Windows.Forms.Button();
+            this.button_向右 = new System.Windows.Forms.Button();
+            this.button_向右上 = new System.Windows.Forms.Button();
+            this.button_向上 = new System.Windows.Forms.Button();
+            this.button_右 = new System.Windows.Forms.Button();
+            this.button_向左上 = new System.Windows.Forms.Button();
             this.tabCtl_Main = new System.Windows.Forms.TabControl();
             this.tabPage_条件图 = new System.Windows.Forms.TabPage();
             this.panel_信息 = new System.Windows.Forms.Panel();
@@ -822,14 +830,6 @@ namespace GB_NewCadPlus_IV
             this.Version = new System.Windows.Forms.GroupBox();
             this.label_版本 = new System.Windows.Forms.Label();
             this.dataGridView1 = new System.Windows.Forms.DataGridView();
-            this.button_向右下 = new System.Windows.Forms.Button();
-            this.button_向下 = new System.Windows.Forms.Button();
-            this.button_向左下 = new System.Windows.Forms.Button();
-            this.button_向右 = new System.Windows.Forms.Button();
-            this.button_向右上 = new System.Windows.Forms.Button();
-            this.button_向上 = new System.Windows.Forms.Button();
-            this.button_右 = new System.Windows.Forms.Button();
-            this.button_向左上 = new System.Windows.Forms.Button();
             this.tabPage_检查.SuspendLayout();
             this.共用.SuspendLayout();
             this.tabPage公用.SuspendLayout();
@@ -1040,7 +1040,7 @@ namespace GB_NewCadPlus_IV
             this.groupBox工艺图层.Controls.Add(this.button纯蒸汽);
             this.groupBox工艺图层.Controls.Add(this.button注射用水);
             this.groupBox工艺图层.Controls.Add(this.button纯化水);
-            this.groupBox工艺图层.Location = new System.Drawing.Point(1, 213);
+            this.groupBox工艺图层.Location = new System.Drawing.Point(2, 215);
             this.groupBox工艺图层.Margin = new System.Windows.Forms.Padding(0);
             this.groupBox工艺图层.Name = "groupBox工艺图层";
             this.groupBox工艺图层.Padding = new System.Windows.Forms.Padding(0);
@@ -4284,6 +4284,94 @@ namespace GB_NewCadPlus_IV
             this.label_VER.TabIndex = 0;
             this.label_VER.Text = "2.26.04.20.0119";
             // 
+            // button_向右下
+            // 
+            this.button_向右下.Image = ((System.Drawing.Image)(resources.GetObject("button_向右下.Image")));
+            this.button_向右下.ImageAlign = System.Drawing.ContentAlignment.BottomRight;
+            this.button_向右下.Location = new System.Drawing.Point(173, 10);
+            this.button_向右下.Name = "button_向右下";
+            this.button_向右下.Size = new System.Drawing.Size(35, 35);
+            this.button_向右下.TabIndex = 40;
+            this.button_向右下.UseVisualStyleBackColor = true;
+            this.button_向右下.Click += new System.EventHandler(this.button_向右下_Click);
+            // 
+            // button_向下
+            // 
+            this.button_向下.Image = ((System.Drawing.Image)(resources.GetObject("button_向下.Image")));
+            this.button_向下.ImageAlign = System.Drawing.ContentAlignment.BottomCenter;
+            this.button_向下.Location = new System.Drawing.Point(209, 10);
+            this.button_向下.Name = "button_向下";
+            this.button_向下.Size = new System.Drawing.Size(35, 35);
+            this.button_向下.TabIndex = 41;
+            this.button_向下.UseVisualStyleBackColor = true;
+            this.button_向下.Click += new System.EventHandler(this.button_向下_Click);
+            // 
+            // button_向左下
+            // 
+            this.button_向左下.Image = ((System.Drawing.Image)(resources.GetObject("button_向左下.Image")));
+            this.button_向左下.ImageAlign = System.Drawing.ContentAlignment.BottomLeft;
+            this.button_向左下.Location = new System.Drawing.Point(245, 10);
+            this.button_向左下.Name = "button_向左下";
+            this.button_向左下.Size = new System.Drawing.Size(35, 35);
+            this.button_向左下.TabIndex = 42;
+            this.button_向左下.UseVisualStyleBackColor = true;
+            this.button_向左下.Click += new System.EventHandler(this.button_向左下_Click);
+            // 
+            // button_向右
+            // 
+            this.button_向右.Image = ((System.Drawing.Image)(resources.GetObject("button_向右.Image")));
+            this.button_向右.ImageAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.button_向右.Location = new System.Drawing.Point(173, 46);
+            this.button_向右.Name = "button_向右";
+            this.button_向右.Size = new System.Drawing.Size(35, 35);
+            this.button_向右.TabIndex = 43;
+            this.button_向右.UseVisualStyleBackColor = true;
+            this.button_向右.Click += new System.EventHandler(this.button_向右_Click);
+            // 
+            // button_向右上
+            // 
+            this.button_向右上.Image = ((System.Drawing.Image)(resources.GetObject("button_向右上.Image")));
+            this.button_向右上.ImageAlign = System.Drawing.ContentAlignment.TopRight;
+            this.button_向右上.Location = new System.Drawing.Point(173, 82);
+            this.button_向右上.Name = "button_向右上";
+            this.button_向右上.Size = new System.Drawing.Size(35, 35);
+            this.button_向右上.TabIndex = 44;
+            this.button_向右上.UseVisualStyleBackColor = true;
+            this.button_向右上.Click += new System.EventHandler(this.button_向右上_Click);
+            // 
+            // button_向上
+            // 
+            this.button_向上.Image = ((System.Drawing.Image)(resources.GetObject("button_向上.Image")));
+            this.button_向上.ImageAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.button_向上.Location = new System.Drawing.Point(209, 82);
+            this.button_向上.Name = "button_向上";
+            this.button_向上.Size = new System.Drawing.Size(35, 35);
+            this.button_向上.TabIndex = 47;
+            this.button_向上.UseVisualStyleBackColor = true;
+            this.button_向上.Click += new System.EventHandler(this.button_向上_Click);
+            // 
+            // button_右
+            // 
+            this.button_右.Image = ((System.Drawing.Image)(resources.GetObject("button_右.Image")));
+            this.button_右.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.button_右.Location = new System.Drawing.Point(245, 46);
+            this.button_右.Name = "button_右";
+            this.button_右.Size = new System.Drawing.Size(35, 35);
+            this.button_右.TabIndex = 45;
+            this.button_右.UseVisualStyleBackColor = true;
+            this.button_右.Click += new System.EventHandler(this.button_向左_Click);
+            // 
+            // button_向左上
+            // 
+            this.button_向左上.Image = ((System.Drawing.Image)(resources.GetObject("button_向左上.Image")));
+            this.button_向左上.ImageAlign = System.Drawing.ContentAlignment.TopLeft;
+            this.button_向左上.Location = new System.Drawing.Point(245, 82);
+            this.button_向左上.Name = "button_向左上";
+            this.button_向左上.Size = new System.Drawing.Size(35, 35);
+            this.button_向左上.TabIndex = 46;
+            this.button_向左上.UseVisualStyleBackColor = true;
+            this.button_向左上.Click += new System.EventHandler(this.button_向左上_Click);
+            // 
             // tabCtl_Main
             // 
             this.tabCtl_Main.Controls.Add(this.tabPage_条件图);
@@ -4835,7 +4923,7 @@ namespace GB_NewCadPlus_IV
             this.groupBox8_Other.BackColor = System.Drawing.Color.FloralWhite;
             this.groupBox8_Other.Controls.Add(this.textBox_cmdShow);
             this.groupBox8_Other.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox8_Other.Location = new System.Drawing.Point(1, 1810);
+            this.groupBox8_Other.Location = new System.Drawing.Point(1, 1809);
             this.groupBox8_Other.Name = "groupBox8_Other";
             this.groupBox8_Other.Size = new System.Drawing.Size(242, 70);
             this.groupBox8_Other.TabIndex = 26;
@@ -7026,7 +7114,7 @@ namespace GB_NewCadPlus_IV
             this.groupBox其它.BackColor = System.Drawing.Color.Azure;
             this.groupBox其它.Controls.Add(this.textBox_show);
             this.groupBox其它.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox其它.Location = new System.Drawing.Point(3, 885);
+            this.groupBox其它.Location = new System.Drawing.Point(3, 882);
             this.groupBox其它.Name = "groupBox其它";
             this.groupBox其它.Size = new System.Drawing.Size(238, 81);
             this.groupBox其它.TabIndex = 30;
@@ -7230,7 +7318,7 @@ namespace GB_NewCadPlus_IV
             this.listView_电气.HideSelection = false;
             this.listView_电气.Location = new System.Drawing.Point(3, 772);
             this.listView_电气.Name = "listView_电气";
-            this.listView_电气.Size = new System.Drawing.Size(238, 194);
+            this.listView_电气.Size = new System.Drawing.Size(238, 191);
             this.listView_电气.TabIndex = 4;
             this.listView_电气.UseCompatibleStateImageBehavior = false;
             this.listView_电气.View = System.Windows.Forms.View.Details;
@@ -10545,94 +10633,6 @@ namespace GB_NewCadPlus_IV
             this.dataGridView1.RowTemplate.Height = 23;
             this.dataGridView1.Size = new System.Drawing.Size(286, 570);
             this.dataGridView1.TabIndex = 1;
-            // 
-            // button_向右下
-            // 
-            this.button_向右下.Image = ((System.Drawing.Image)(resources.GetObject("button_向右下.Image")));
-            this.button_向右下.ImageAlign = System.Drawing.ContentAlignment.BottomRight;
-            this.button_向右下.Location = new System.Drawing.Point(173, 10);
-            this.button_向右下.Name = "button_向右下";
-            this.button_向右下.Size = new System.Drawing.Size(35, 35);
-            this.button_向右下.TabIndex = 40;
-            this.button_向右下.UseVisualStyleBackColor = true;
-            this.button_向右下.Click += new System.EventHandler(this.button_向右下_Click);
-            // 
-            // button_向下
-            // 
-            this.button_向下.Image = ((System.Drawing.Image)(resources.GetObject("button_向下.Image")));
-            this.button_向下.ImageAlign = System.Drawing.ContentAlignment.BottomCenter;
-            this.button_向下.Location = new System.Drawing.Point(209, 10);
-            this.button_向下.Name = "button_向下";
-            this.button_向下.Size = new System.Drawing.Size(35, 35);
-            this.button_向下.TabIndex = 41;
-            this.button_向下.UseVisualStyleBackColor = true;
-            this.button_向下.Click += new System.EventHandler(this.button_向下_Click);
-            // 
-            // button_向左下
-            // 
-            this.button_向左下.Image = ((System.Drawing.Image)(resources.GetObject("button_向左下.Image")));
-            this.button_向左下.ImageAlign = System.Drawing.ContentAlignment.BottomLeft;
-            this.button_向左下.Location = new System.Drawing.Point(245, 10);
-            this.button_向左下.Name = "button_向左下";
-            this.button_向左下.Size = new System.Drawing.Size(35, 35);
-            this.button_向左下.TabIndex = 42;
-            this.button_向左下.UseVisualStyleBackColor = true;
-            this.button_向左下.Click += new System.EventHandler(this.button_向左下_Click);
-            // 
-            // button_向右
-            // 
-            this.button_向右.Image = ((System.Drawing.Image)(resources.GetObject("button_向右.Image")));
-            this.button_向右.ImageAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.button_向右.Location = new System.Drawing.Point(173, 46);
-            this.button_向右.Name = "button_向右";
-            this.button_向右.Size = new System.Drawing.Size(35, 35);
-            this.button_向右.TabIndex = 43;
-            this.button_向右.UseVisualStyleBackColor = true;
-            this.button_向右.Click += new System.EventHandler(this.button_向右_Click);
-            // 
-            // button_向右上
-            // 
-            this.button_向右上.Image = ((System.Drawing.Image)(resources.GetObject("button_向右上.Image")));
-            this.button_向右上.ImageAlign = System.Drawing.ContentAlignment.TopRight;
-            this.button_向右上.Location = new System.Drawing.Point(173, 82);
-            this.button_向右上.Name = "button_向右上";
-            this.button_向右上.Size = new System.Drawing.Size(35, 35);
-            this.button_向右上.TabIndex = 44;
-            this.button_向右上.UseVisualStyleBackColor = true;
-            this.button_向右上.Click += new System.EventHandler(this.button_向右上_Click);
-            // 
-            // button_向上
-            // 
-            this.button_向上.Image = ((System.Drawing.Image)(resources.GetObject("button_向上.Image")));
-            this.button_向上.ImageAlign = System.Drawing.ContentAlignment.TopCenter;
-            this.button_向上.Location = new System.Drawing.Point(209, 82);
-            this.button_向上.Name = "button_向上";
-            this.button_向上.Size = new System.Drawing.Size(35, 35);
-            this.button_向上.TabIndex = 47;
-            this.button_向上.UseVisualStyleBackColor = true;
-            this.button_向上.Click += new System.EventHandler(this.button_向上_Click);
-            // 
-            // button_右
-            // 
-            this.button_右.Image = ((System.Drawing.Image)(resources.GetObject("button_右.Image")));
-            this.button_右.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.button_右.Location = new System.Drawing.Point(245, 46);
-            this.button_右.Name = "button_右";
-            this.button_右.Size = new System.Drawing.Size(35, 35);
-            this.button_右.TabIndex = 45;
-            this.button_右.UseVisualStyleBackColor = true;
-            this.button_右.Click += new System.EventHandler(this.button_向左_Click);
-            // 
-            // button_向左上
-            // 
-            this.button_向左上.Image = ((System.Drawing.Image)(resources.GetObject("button_向左上.Image")));
-            this.button_向左上.ImageAlign = System.Drawing.ContentAlignment.TopLeft;
-            this.button_向左上.Location = new System.Drawing.Point(245, 82);
-            this.button_向左上.Name = "button_向左上";
-            this.button_向左上.Size = new System.Drawing.Size(35, 35);
-            this.button_向左上.TabIndex = 46;
-            this.button_向左上.UseVisualStyleBackColor = true;
-            this.button_向左上.Click += new System.EventHandler(this.button_向左上_Click);
             // 
             // FormMain
             // 
