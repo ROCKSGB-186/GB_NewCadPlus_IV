@@ -1,0 +1,116 @@
+<Window
+    x:Class="GB_NewCadPlus_IV.DisplayPages.PipeDriver_Tabel_WpfWindows"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:GB_NewCadPlus_IV.DisplayPages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:Name="PipeDriver_Tabel"
+    Title="PipeDriver_Tabel"
+    Width="800"
+    Height="600"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/GB_NewCadPlus_IV;component/DisplayPages/MainWindowStyleDictionary.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="5,5,5,5" Background="White">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="35" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid
+            Name="Menu"
+            Grid.Row="0"
+            Background="AliceBlue">
+            <TextBlock
+                x:Name="TableName"
+                Grid.Row="0"
+                Margin="6,0,6,6"
+                HorizontalAlignment="Left"
+                FontSize="18"
+                FontWeight="Bold"
+                Foreground="#0078D4"
+                Text="管道\设备表" />
+            <Button
+                x:Name="Btn_插入到cad"
+                Width="90"
+                Height="NaN"
+                Margin="0,10,101,3"
+                HorizontalAlignment="Right"
+                Click="Btn_管道设备表插入到cad_Click"
+                Content="插入到cad中" />
+            <Button
+                x:Name="Btn导出EXCEL"
+                Width="90"
+                Height="NaN"
+                Margin="0,10,6,3"
+                HorizontalAlignment="Right"
+                Click="Btn_导出EXCEL_Click"
+                Content="导出EXCEL" />
+            <Button
+                x:Name="Btn_加载管道设备表"
+                Width="90"
+                Height="NaN"
+                Margin="0,10,296,3"
+                HorizontalAlignment="Right"
+                Click="Btn_加载管道设备表_Click"
+                Content="加载管道设备表" />
+            <Button
+                x:Name="Btn_同步到cad图元"
+                Width="90"
+                Height="NaN"
+                Margin="0,10,201,3"
+                Click="Btn_同步到cad图元_Click"
+                Content="同步到cad图元" HorizontalAlignment="Right" />
+        </Grid>
+        <!-- 【新增】标题显示区域 -->
+        <Border Grid.Row="1" Background="#FFECECEC" BorderBrush="Gray" BorderThickness="1" Padding="5" Margin="0,0,0,2">
+            <!-- 关键：必须设置 x:Name="TextBlock_TableTitle" -->
+            <TextBlock x:Name="TextBlock_TableTitle" 
+                       Text="管道明细 - 设备材料明细表" 
+                       FontWeight="Bold" 
+                       FontSize="14" 
+                       HorizontalAlignment="Center"/>
+        </Border>
+        <!-- 数据表格 -->
+        <DataGrid x:Name="DataGrid_PipeDriver" 
+                  Grid.Row="2" 
+                  AutoGenerateColumns="True" 
+                  CanUserAddRows="False" 
+                  CanUserDeleteRows="False"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto"
+                  GridLinesVisibility="All"
+                  HeadersVisibility="Column"
+                  SelectionMode="Single"
+                  SelectionUnit="CellOrRowHeader">
+            <DataGrid.Style>
+                <Style TargetType="DataGrid">
+                    <Setter Property="ColumnHeaderStyle">
+                        <Setter.Value>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="#FFD3D3D3"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="Padding" Value="5"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </DataGrid.Style>
+        </DataGrid>
+        <!--  底部状态栏  -->
+        <StatusBar Grid.Row="3">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="就绪" />
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

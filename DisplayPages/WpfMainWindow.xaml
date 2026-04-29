@@ -1280,12 +1280,12 @@
                                                     Content="设备表导出"
                                                     FontFamily="Microsoft YaHei UI Light" />
                                                 <Button
-                                                    x:Name="区域开关"
+                                                    x:Name="管道设备表开关"
                                                     Width="88"
                                                     Height="20"
                                                     Margin="5,5,0,0"
-                                                    Click="区域开关_Btn_Click"
-                                                    Content="区域开关"
+                                                    Click="管道设备表开关_Btn_Click"
+                                                    Content="管道设备表开关"
                                                     FontFamily="Microsoft YaHei UI Light" />
                                             </WrapPanel>
                                         </Grid>
@@ -3017,7 +3017,7 @@
                     Padding="1,2,1,0"
                     Background="Azure"
                     ItemContainerStyle="{StaticResource VerticalTabStyle}"
-                    TabStripPlacement="Left">
+                    TabStripPlacement="Left" >
                     <TabItem
                         Height="68"
                         FontSize="12"

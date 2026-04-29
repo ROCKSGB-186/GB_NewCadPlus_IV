@@ -12,6 +12,8 @@ using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using AttributeCollection = Autodesk.AutoCAD.DatabaseServices.AttributeCollection;
 using DataTable = System.Data.DataTable;
 
+
+
 namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
@@ -19,15 +21,24 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
     /// </summary>
     public class DeviceInfo
     {
-        /// <summary>
-        /// 设备名称
-        /// </summary>
-        public string Name { get; set; } = string.Empty;
-
-        /// <summary>
-        /// 设备类型（如阀门、法兰等）
-        /// </summary>
-        public string Type { get; set; } = string.Empty;
+        public int Id { get; set; } // 设备ID
+        public string Name { get; set; } = string.Empty; // 设备名
+        public string Type { get; set; } = string.Empty; // 设备类型
+        public string MediumName { get; set; } = string.Empty; // 介质
+        public string Specifications { get; set; } = string.Empty; // 规格
+        public string Material { get; set; } = string.Empty; // 材质
+        public int Quantity { get; set; } // 数量
+        public string DrawingNumber { get; set; } = string.Empty; // 图号
+        public decimal Power { get; set; } // 功率
+        public decimal Volume { get; set; } // 容积
+        public decimal Pressure { get; set; } // 压力
+        public decimal Temperature { get; set; } // 温度
+        public decimal Diameter { get; set; } // 直径
+        public decimal Length { get; set; } // 长度
+        public decimal Thickness { get; set; } // 厚度
+        public decimal Weight { get; set; } // 重量
+        public string Model { get; set; } = string.Empty; // 型号
+        public string Remarks { get; set; } = string.Empty; // 备注       
 
         /// <summary>
         /// 属性字典（中文属性名-值）
@@ -114,123 +125,123 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         /// <summary>
-        /// “生成(工艺)管道表”：GeneratePipeTableFromSelection GeneratedeviceTable
+        /// “生成(工艺)管道表”：GeneratePipeTableFromSelection
         /// - 交互式选择实体
         /// - 提取属性（优先使用属性中包含“长度”的字段作为长度）
         /// - 按属性组合或几何尺寸分组并累加长度
-        /// - 最终以表格形式（沿用本类表格样式）生成一张或多张“管道”表（如果选择中包含多个不同管道规格，会生成一张表列出所有分组）
-        /// 说明：此方法同时可被命令调用或者由 UI 层调用（无需 UI 层再自行实现分组/样式）
+        /// - 最终以表格形式（沿用本类表格样式）生成一张或多张“管道”表
+        /// - 新增功能：自动调整每列列宽以适应最长文字
         /// </summary>
         [CommandMethod("GeneratePipeTableFromSelection")]
         public void GeneratePipeTableFromSelection()
         {
-            // 中文注释：获取当前活动文档，若为空直接返回，避免空引用异常
+            // 获取当前活动文档，若为空直接返回，避免空引用异常
             var doc = Application.DocumentManager.MdiActiveDocument;
-            // 中文注释：无活动文档时不继续执行
+            // 无活动文档时不继续执行
             if (doc == null) return;
 
-            // 中文注释：在统一的文档事务中执行，保持与现有代码风格一致
+            // 在统一的文档事务中执行，保持与现有代码风格一致
             AutoCadHelper.ExecuteInDocumentTransaction((d, tr) =>
             {
-                // 中文注释：获取编辑器对象，用于交互提示和日志输出
+                // 获取编辑器对象，用于交互提示和日志输出
                 var ed = d.Editor;
                 try
                 {
-                    // 中文注释：提示用户选择要统计的管道图元
+                    // 提示用户选择要统计的管道图元
                     ed.WriteMessage("\n开始生成管道表：请选择要统计的管道图元（完成选择回车）.");
-                    // 中文注释：设置选择提示文本
+                    // 设置选择提示文本
                     var pso = new PromptSelectionOptions { MessageForAdding = "\n请选择要统计的管道图元：" };
-                    // 中文注释：执行选择
+                    // 执行选择
                     var psr = ed.GetSelection(pso);
-                    // 中文注释：若未成功选择则直接结束
+                    // 若未成功选择则直接结束
                     if (psr.Status != PromptStatus.OK || psr.Value == null)
                     {
                         ed.WriteMessage("\n未选择实体或已取消。");
                         return;
                     }
 
-                    // 中文注释：取到所选对象ID数组
+                    // 取到所选对象ID数组
                     var selIds = psr.Value.GetObjectIds();
-                    // 中文注释：空选择保护
+                    // 空选择保护
                     if (selIds == null || selIds.Length == 0)
                     {
                         ed.WriteMessage("\n未选择任何实体。");
                         return;
                     }
 
-                    // 中文注释：统一比例来源——强制使用 AutoCadHelper.GetScale(...)（禁用缓存，避免刚切视口时读到旧值）
+                    // 统一比例来源——强制使用 AutoCadHelper.GetScale(...)（禁用缓存，避免刚切视口时读到旧值）
                     double rawScale = AutoCadHelper.GetScale(useCache: false);
-                    // 中文注释：把 GetScale 返回值统一归一化为“比例分母”（例如 0.01->100，100->100，1->1）
+                    // 把 GetScale 返回值统一归一化为“比例分母”（例如 0.01->100，100->100，1->1）
                     double scaleDenom = TextFontsStyleHelper.DetermineScaleDenominator(rawScale, null, roundToCommon: false);
-                    // 中文注释：兜底保护，防止非法值导致表格高度异常
+                    // 兜底保护，防止非法值导致表格高度异常
                     if (double.IsNaN(scaleDenom) || double.IsInfinity(scaleDenom) || scaleDenom <= 0.0)
                     {
-                        // 中文注释：非法时回退到 1:1
+                        // 非法时回退到 1:1
                         scaleDenom = 1.0;
                     }
 
-                    // 中文注释：输出日志，便于你核对“GetScale原值”和“最终分母值”
+                    // 输出日志，便于你核对“GetScale原值”和“最终分母值”
                     ed.WriteMessage($"\nGetScale原值: {rawScale}，归一化比例分母: {scaleDenom}（将用于表格文字高度与行高计算）。");
 
-                    // 中文注释：图形单位到米的换算常量（按你现有逻辑保持 1000）
+                    // 图形单位到米的换算常量（按你现有逻辑保持 1000）
                     const double unitToMeters = 1000.0;
-                    // 中文注释：管段号候选键
+                    // 管段号候选键
                     string[] pipeNoKeys = new[] { "管段号", "管段编号", "Pipeline No", "Pipeline", "Pipe No", "No" };
-                    // 中文注释：起点候选键
+                    // 起点候选键
                     string[] startKeys = new[] { "起点", "始点", "From" };
-                    // 中文注释：终点候选键
+                    // 终点候选键
                     string[] endKeys = new[] { "终点", "止点", "To" };
 
-                    // 中文注释：局部函数——按候选键优先、再按模糊键名匹配，提取首个有效属性值
+                    // 局部函数——按候选键优先、再按模糊键名匹配，提取首个有效属性值
                     string FindFirstAttrValueLocal(Dictionary<string, string>? attrs, string[] candidates)
                     {
-                        // 中文注释：空字典直接返回空字符串
+                        // 空字典直接返回空字符串
                         if (attrs == null) return string.Empty;
-                        // 中文注释：先走精确键匹配
+                        // 先走精确键匹配
                         foreach (var c in candidates)
                         {
-                            // 中文注释：命中且有值则立即返回
+                            // 命中且有值则立即返回
                             if (attrs.TryGetValue(c, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
                         }
-                        // 中文注释：再走包含匹配作为兜底
+                        // 再走包含匹配作为兜底
                         foreach (var kv in attrs)
                         {
-                            // 中文注释：空键跳过
+                            // 空键跳过
                             if (string.IsNullOrWhiteSpace(kv.Key)) continue;
                             foreach (var c in candidates)
                             {
-                                // 中文注释：键名包含候选词且值不空时返回
+                                // 键名包含候选词且值不空时返回
                                 if (kv.Key.IndexOf(c, StringComparison.OrdinalIgnoreCase) >= 0 && !string.IsNullOrWhiteSpace(kv.Value))
                                     return kv.Value;
                             }
                         }
-                        // 中文注释：未命中返回空
+                        // 未命中返回空
                         return string.Empty;
                     }
 
-                    // 中文注释：逐条管道记录列表（每个选中实体对应一行）
+                    // 逐条管道记录列表（每个选中实体对应一行）
                     var perPipeList = new List<DeviceInfo>();
-                    // 中文注释：顺序编号，用于默认 Name
+                    // 顺序编号，用于默认 Name
                     int seqIndex = 0;
 
-                    // 中文注释：遍历所选实体，提取长度/起点/终点/管段号等信息
+                    // 遍历所选实体，提取长度/起点/终点/管段号等信息
                     foreach (var id in selIds)
                     {
-                        // 中文注释：序号递增
+                        // 序号递增
                         seqIndex++;
                         try
                         {
-                            // 中文注释：读取实体对象
+                            // 读取实体对象
                             var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                            // 中文注释：无效实体跳过
+                            // 无效实体跳过
                             if (ent == null) continue;
 
-                            // 中文注释：读取实体属性字典（块属性、扩展字典、XData）
+                            // 读取实体属性字典（块属性、扩展字典、XData）
                             var attrMap = GetEntityAttributeMap(tr, ent);
 
-                            // 中文注释：长度（米）初始为 NaN，表示尚未取到
+                            // 长度（米）初始为 NaN，表示尚未取到
                             double length_m = double.NaN;
-                            // 中文注释：先从属性里找“长度”字段（优先）
+                            // 先从属性里找“长度”字段（优先）
                             if (attrMap != null)
                             {
                                 foreach (var k in attrMap.Keys)
@@ -247,7 +258,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 }
                             }
 
-                            // 中文注释：若属性没取到长度，再按实体几何类型回退计算
+                            // 若属性没取到长度，再按实体几何类型回退计算
                             if (double.IsNaN(length_m))
                             {
                                 if (ent is Line lineEnt)
@@ -283,11 +294,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 }
                             }
 
-                            // 中文注释：优先从属性取起点/终点
+                            // 优先从属性取起点/终点
                             string startStr = FindFirstAttrValueLocal(attrMap, startKeys);
                             string endStr = FindFirstAttrValueLocal(attrMap, endKeys);
 
-                            // 中文注释：属性缺失时，从几何信息回退
+                            // 属性缺失时，从几何信息回退
                             if (string.IsNullOrWhiteSpace(startStr) || string.IsNullOrWhiteSpace(endStr))
                             {
                                 if (ent is Line lineEnt2)
@@ -341,9 +352,9 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 }
                             }
 
-                            // 中文注释：读取管段号
+                            // 读取管段号
                             string pipeNo = FindFirstAttrValueLocal(attrMap, pipeNoKeys);
-                            // 中文注释：若无管段号且是块参照，则尝试从块名中提取数字
+                            // 若无管段号且是块参照，则尝试从块名中提取数字
                             if (string.IsNullOrWhiteSpace(pipeNo))
                             {
                                 if (ent is BlockReference brEnt3)
@@ -362,20 +373,20 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 }
                             }
 
-                            // 中文注释：构建单条记录对象
+                            // 构建单条记录对象
                             var info = new DeviceInfo
                             {
                                 Name = $"PIPE_{seqIndex}",
                                 Type = "管道"
                             };
 
-                            // 中文注释：拷贝原属性到记录中
+                            // 拷贝原属性到记录中
                             if (attrMap != null)
                             {
                                 foreach (var kv in attrMap) info.Attributes[kv.Key] = kv.Value;
                             }
 
-                            // 中文注释：写入标准化字段
+                            // 写入标准化字段
                             if (!string.IsNullOrWhiteSpace(pipeNo)) info.Attributes["管段号"] = pipeNo;
                             info.Attributes["起点"] = startStr;
                             info.Attributes["终点"] = endStr;
@@ -386,24 +397,24 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 info.Attributes["介质名称"] = medVal;
                             }
 
-                            // 中文注释：加入结果列表
+                            // 加入结果列表
                             perPipeList.Add(info);
                         }
                         catch (System.Exception exEnt)
                         {
-                            // 中文注释：单实体失败不影响整体
+                            // 单实体失败不影响整体
                             ed.WriteMessage($"\n处理实体 {id} 时出错: {exEnt.Message}");
                         }
                     }
 
-                    // 中文注释：无有效记录则结束
+                    // 无有效记录则结束
                     if (perPipeList.Count == 0)
                     {
                         ed.WriteMessage("\n未生成任何管道记录。");
                         return;
                     }
 
-                    // 中文注释：局部函数——从管段号中提取数字用于排序
+                    // 局部函数——从管段号中提取数字用于排序
                     int ExtractPipeNoNumber(string s)
                     {
                         if (string.IsNullOrWhiteSpace(s)) return int.MaxValue;
@@ -412,7 +423,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         return int.MaxValue;
                     }
 
-                    // 中文注释：按管段号数字排序，保证表格顺序稳定
+                    // 按管段号数字排序，保证表格顺序稳定
                     var finalList = perPipeList
                         .Select((e, idx) => new { Item = e, Orig = idx })
                         .OrderBy(x =>
@@ -424,17 +435,215 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         .Select(x => x.Item)
                         .ToList();
 
-                    // 中文注释：创建管道明细表，并传入统一后的比例分母
+                    // ================== 关键修改区域 ==================
+
+                    // 创建管道明细表，并传入统一后的比例分母
+                    // 注意：CreateDeviceTableWithType 是 void 方法，内部已处理列宽调整，因此不需要接收返回值
                     CreateDeviceTableWithType(d.Database, finalList, "管道明细", scaleDenom);
-                    // 中文注释：完成提示
+
+                    // 删除原本依赖 tableId 的代码块，因为方法内部已经完成了所有操作
+                    // if (!tableId.IsNull)
+                    // {
+                    //     AutoFitTableColumns(tr, tableId, ed);
+                    // }
+
+                    // ================== 结束关键修改区域 ==================
+
+                    // 完成提示
                     ed.WriteMessage($"\n管道表已生成，共 {finalList.Count} 条记录（每选中一条管道一行，使用比例分母 {scaleDenom}）。");
                 }
                 catch (System.Exception ex)
                 {
-                    // 中文注释：整体异常捕获，防止命令中断
+                    // 整体异常捕获，防止命令中断
                     d.Editor.WriteMessage($"\n生成管道表时发生错误: {ex.Message}");
                 }
             });
+        }
+
+        /// <summary>
+        /// 自动调整表格列宽以适应内容
+        /// </summary>
+        /// <param name="tr">当前事务</param>
+        /// <param name="tableId">表格对象的 ObjectId</param>
+        /// <param name="ed">编辑器对象，用于获取文字 extents</param>
+        private void AutoFitTableColumns(Transaction tr, ObjectId tableId, Editor ed)
+        {
+            try
+            {
+                // 以写模式打开表格对象
+                var table = tr.GetObject(tableId, OpenMode.ForWrite) as Autodesk.AutoCAD.DatabaseServices.Table;
+                if (table == null) return;
+
+                // 获取表格的行数和列数
+                int numRows = table.Rows.Count;
+                int numCols = table.Columns.Count;
+
+                // 遍历每一列
+                for (int col = 0; col < numCols; col++)
+                {
+                    double maxWidth = 0.0;
+                    // 获取当前列的文字高度（假设所有单元格文字高度一致，取第一个非空单元格的高度）
+                    double textHeight = 2.5; // 默认高度，可根据实际情况调整
+
+                    // 遍历该列的所有行
+                    for (int row = 0; row < numRows; row++)
+                    {
+                        // 获取单元格的文本内容
+                        string cellText = table.Cells[row, col].TextString;
+                        if (string.IsNullOrWhiteSpace(cellText)) continue;
+
+                        // 获取单元格的文字高度
+                        if (table.Cells[row, col].TextHeight > 0)
+                        {
+                            textHeight = Convert.ToDouble(table.Cells[row, col].TextHeight);
+                        }
+
+                        // 计算文本的显示宽度
+                        // 简单估算：汉字宽度约为高度的 1.0-1.2 倍，英文约为 0.6-0.8 倍
+                        // 更准确的方法是使用 Geometry.TextBounds，但需要知道字体和样式
+                        // 这里使用一种简化的估算方法：每个字符平均宽度为 textHeight * 0.8
+                        // 对于中文，可能需要更宽，这里乘以 1.0 作为系数
+                        double estimatedWidth = cellText.Length * textHeight * 0.8;
+
+                        // 考虑一些常用汉字的宽度，适当增加系数
+                        // 如果包含中文，系数可以更大一些，比如 1.0
+                        bool hasChinese = Regex.IsMatch(cellText, @"[\u4e00-\u9fff]");
+                        if (hasChinese)
+                        {
+                            estimatedWidth = cellText.Length * textHeight * 1.0;
+                        }
+
+                        // 更新最大宽度
+                        if (estimatedWidth > maxWidth)
+                        {
+                            maxWidth = estimatedWidth;
+                        }
+                    }
+
+                    // 设置列宽，增加一定的边距（Padding），例如左右各加 0.5 倍文字高度
+                    if (maxWidth > 0)
+                    {
+                        double padding = textHeight * 1.0; // 左右边距总和
+                        table.Columns[col].Width = maxWidth + padding;
+                    }
+                    else
+                    {
+                        // 如果列中没有内容，设置一个最小宽度
+                        table.Columns[col].Width = textHeight * 5;
+                    }
+                }
+
+                // 强制更新表格显示
+                table.GenerateLayout();
+            }
+            catch (Exception ex)
+            {
+                // 记录异常，但不中断程序
+                ed.WriteMessage($"\n自动调整列宽时出错: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 【优化版】高级自动调整表格列宽，考虑合并单元格和实际文本宽度
+        /// </summary>
+        /// <param name="table">要调整的表格对象</param>
+        private void AutoFitTableColumnsAdvanced(Table table)
+        {
+            if (table == null) return;
+
+            int numRows = table.Rows.Count;
+            int numCols = table.Columns.Count;
+
+            if (numRows == 0 || numCols == 0) return;
+
+            // 获取典型文字高度：优先使用数据行（通常从第4行开始，索引3）的高度，如果没有则用第0行
+            double textHeight = 2.5;
+            try
+            {
+                // 尝试获取数据行第一格的高度，通常数据行高度更具代表性
+                int sampleRow = numRows > 3 ? 3 : 0;
+                var h = table.Cells[sampleRow, 0].TextHeight;
+                if (h > 0) textHeight = Convert.ToDouble(h);
+            }
+            catch { }
+
+            // 遍历每一列
+            for (int col = 0; col < numCols; col++)
+            {
+                double maxWidthInCol = 0.0;
+
+                // 遍历该列的每一行
+                for (int row = 0; row < numRows; row++)
+                {
+                    var cell = table.Cells[row, col];
+
+                    // 1. 检查当前单元格是否被合并
+                    bool isMerged = Convert.ToBoolean(cell.IsMerged);
+                    bool shouldSkip = false;
+
+                    if (isMerged)
+                    {
+                        // 关键逻辑：如果是合并单元格，我们只计算“左上角”那个单元格的宽度贡献
+                        bool isTopLeft = true;
+
+                        // 向左检查：如果左边的单元格也是合并状态，则当前格不是最左
+                        if (col > 0 && Convert.ToBoolean(table.Cells[row, col - 1].IsMerged))
+                        {
+                            isTopLeft = false;
+                        }
+
+                        // 向上检查：如果上面的单元格也是合并状态，则当前格不是最上
+                        if (row > 0 && Convert.ToBoolean(table.Cells[row - 1, col].IsMerged))
+                        {
+                            isTopLeft = false;
+                        }
+
+                        // 如果不是左上角单元格，跳过计算，避免重复累加宽度
+                        if (!isTopLeft)
+                        {
+                            shouldSkip = true;
+                        }
+                    }
+
+                    if (shouldSkip) continue;
+
+                    string cellText = cell.TextString;
+                    if (string.IsNullOrWhiteSpace(cellText)) continue;
+
+                    // 计算文本估算宽度
+                    double estimatedWidth = 0.0;
+
+                    // 更精确的估算：区分中英文
+                    int chineseCount = System.Text.RegularExpressions.Regex.Matches(cellText, @"[\u4e00-\u9fff]").Count;
+                    int otherCount = cellText.Length - chineseCount;
+
+                    // 中文系数 1.0，英文/数字系数 0.6
+                    estimatedWidth = (chineseCount * 1.0 + otherCount * 0.6) * textHeight;
+
+                    // 增加左右边距 (Padding)，例如每侧 0.5 倍字高
+                    double padding = textHeight * 2; // 稍微减小边距，让列更紧凑
+                    estimatedWidth += padding;
+
+                    if (estimatedWidth > maxWidthInCol)
+                    {
+                        maxWidthInCol = estimatedWidth;
+                    }
+                }
+
+                // 设置列宽，设置一个最小宽度以防万一
+                // 【修改点】减小最小宽度系数，从 4.0 改为 3.0，让短列更紧凑
+                double minWidth = textHeight * 3;
+                if (maxWidthInCol < minWidth) maxWidthInCol = minWidth;
+
+                // 设置最大宽度限制，防止某列特别长导致表格过宽
+                double maxWidthLimit = textHeight * 60.0; // 稍微增加最大限制，适应长文本
+                if (maxWidthInCol > maxWidthLimit) maxWidthInCol = maxWidthLimit;
+
+                table.Columns[col].Width = maxWidthInCol;
+            }
+
+            // 强制更新表格布局
+            table.GenerateLayout();
         }
 
         /// <summary>
@@ -450,7 +659,56 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             return string.Concat(matches.Cast<Match>().Select(m => m.Value)).Trim();
         }
 
+        /// <summary>
+        /// 【新增公共方法】仅提取数据，不插入表格
+        /// 供 WPF 窗口调用
+        /// </summary>
+        public List<DeviceInfo> ExtractPipeDataFromSelection(Editor ed, Database db)
+        {
+            var deviceList = new List<DeviceInfo>();
 
+            // 1. 选择实体
+            var psr = ed.GetSelection();
+            if (psr.Status != PromptStatus.OK || psr.Value == null) return null;
+
+            var selIds = psr.Value.GetObjectIds();
+            if (selIds.Length == 0) return null;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                // 2. 遍历提取 (这里简化了逻辑，你可以复制 GeneratePipeTableFromSelection 中的核心提取代码)
+                foreach (var id in selIds)
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent is BlockReference br)
+                    {
+                        var info = new DeviceInfo();
+                        info.Name = br.Name;
+                        info.Type = "管道"; // 或其他逻辑
+
+                        // 提取属性
+                        var attrMap = GetEntityAttributeMap(tr, ent);
+                        if (attrMap != null)
+                        {
+                            foreach (var kv in attrMap)
+                            {
+                                info.Attributes[kv.Key] = kv.Value;
+                            }
+                        }
+
+                        // 提取管段号等关键信息 (参考 GeneratePipeTableFromSelection 中的逻辑)
+                        if (info.Attributes.TryGetValue("管段号", out var pipeNo))
+                        {
+                            info.Name = pipeNo; // 用管段号作为 Name 以便匹配
+                        }
+
+                        deviceList.Add(info);
+                    }
+                }
+                tr.Commit();
+            }
+            return deviceList;
+        }
 
         /// <summary>
         /// 从管道标题中提取管道等级，例如 "350-AR-1002-1.0G11" -> "1.0G11"
@@ -944,7 +1202,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
         #region 可直接替换的增强实现：在起点/终点自动拾取最近部件（块参照），读取属性，并按白名单把同名字段写回管道属性。
 
-        // 中文注释：端点拾取属性白名单（按你项目可继续补充）
+        // 端点拾取属性白名单（按你项目可继续补充）
         private static readonly HashSet<string> _pipeEndpointAttrWhitelist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
          {
              "位号","设备位号","设备名称","名称","Name","Tag","TAG",
@@ -2301,7 +2559,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                // 属性编辑完成后，开始采点（起点支持右键/回车直接取消）
         //                var points = new List<Point3d>();
         //                var firstOpts = new PromptPointOptions("\n指定起点（点击或输入坐标，右键/回车取消）：");
-        //                firstOpts.AllowNone = true; // 中文注释：允许 None，这样右键/回车可作为取消
+        //                firstOpts.AllowNone = true; // 允许 None，这样右键/回车可作为取消
 
         //                // 可选关键字：输入“取消”也可终止
         //                firstOpts.Keywords.Add("取消");
@@ -2309,7 +2567,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
         //                var firstRes = ed.GetPoint(firstOpts);
 
-        //                // 中文注释：右键/回车（None）或关键字“取消”都走友好取消提示
+        //                // 右键/回车（None）或关键字“取消”都走友好取消提示
         //                if (firstRes.Status == PromptStatus.None ||
         //                    (firstRes.Status == PromptStatus.Keyword &&
         //                     string.Equals(firstRes.StringResult, "取消", StringComparison.OrdinalIgnoreCase)))
@@ -2328,7 +2586,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：ESC 或其它异常状态
+        //                // ESC 或其它异常状态
         //                if (firstRes.Status != PromptStatus.OK)
         //                {
         //                    ed.WriteMessage("\n已取消绘制：起点输入已终止。");
@@ -2349,7 +2607,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
         //                while (true)
         //                {
-        //                    // 中文注释：允许“回车/空格/右键”结束采点，同时支持 ESC 取消输入并结束
+        //                    // 允许“回车/空格/右键”结束采点，同时支持 ESC 取消输入并结束
         //                    var nextOpts = new PromptPointOptions("\n指定下一个点（点击或输入坐标），右键/回车结束：");
         //                    nextOpts.UseBasePoint = true;
         //                    nextOpts.BasePoint = points.Last();
@@ -2370,16 +2628,16 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                        continue;
         //                    }
 
-        //                    // 中文注释：None = 回车/空格/右键，作为“结束绘制”
+        //                    // None = 回车/空格/右键，作为“结束绘制”
         //                    if (nextRes.Status == PromptStatus.None)
         //                        break;
 
-        //                    // 中文注释：关键字“完成”也结束绘制
+        //                    // 关键字“完成”也结束绘制
         //                    if (nextRes.Status == PromptStatus.Keyword &&
         //                        string.Equals(nextRes.StringResult, "完成", StringComparison.OrdinalIgnoreCase))
         //                        break;
 
-        //                    // 中文注释：ESC（Cancel）或其他状态，统一结束当前采点
+        //                    // ESC（Cancel）或其他状态，统一结束当前采点
         //                    break;
         //                }
 
@@ -2599,7 +2857,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
         //    try
         //    {
-        //        // 中文注释：先在块表中尝试自动寻找示例块（入口/出口）
+        //        // 先在块表中尝试自动寻找示例块（入口/出口）
         //        ObjectId sampleBtrId = ObjectId.Null;
         //        using (var tx = db.TransactionManager.StartTransaction())
         //        {
@@ -2640,7 +2898,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //        {
         //            try
         //            {
-        //                // 中文注释：若自动找到样例块，则临时插入一份作为模板
+        //                // 若自动找到样例块，则临时插入一份作为模板
         //                if (!sampleBtrId.IsNull)
         //                {
         //                    var scale = VariableDictionary.textBoxScale;
@@ -2651,7 +2909,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                }
         //                else
         //                {
-        //                    // 中文注释：未自动匹配时，手工选择示例块
+        //                    // 未自动匹配时，手工选择示例块
         //                    ed.WriteMessage("\n未自动找到示例块，请手动选择一个块参照作为模板。");
         //                    var peo = new PromptEntityOptions("\n请选择示例管线块：");
         //                    peo.SetRejectMessage("\n请选择块参照对象。");
@@ -2675,7 +2933,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：弹出属性编辑（沿用你原有逻辑）
+        //                // 弹出属性编辑（沿用你原有逻辑）
         //                var loadedAttrs = FileManager.LoadLastPipeAttributes(isOutlet);
         //                using (var editor = new PipeAttributeEditorForm(loadedAttrs))
         //                {
@@ -2714,7 +2972,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    catch { }
         //                }
 
-        //                // 中文注释：采集起点
+        //                // 采集起点
         //                var points = new List<Point3d>();
         //                var firstOpts = new PromptPointOptions("\n指定起点（右键/回车取消）：");
         //                firstOpts.AllowNone = true;
@@ -2739,7 +2997,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                }
         //                points.Add(firstRes.Value);
 
-        //                // 中文注释：循环采集后续点
+        //                // 循环采集后续点
         //                while (true)
         //                {
         //                    var nextOpts = new PromptPointOptions("\n指定下一个点（右键/回车结束）：");
@@ -2770,7 +3028,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：分析样例块
+        //                // 分析样例块
         //                var sampleInfo = AnalyzeSampleBlock(tr, sampleBr);
         //                if (sampleInfo?.PipeBodyTemplate == null)
         //                {
@@ -2780,39 +3038,39 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：计算长度与中点
+        //                // 计算长度与中点
         //                double pipelineLength = ComputePipelineLengthByPoints(points);
         //                var (midPoint, _) = ComputeMidPointAndAngle(points, pipelineLength);
 
-        //                // 中文注释：构建局部管线
+        //                // 构建局部管线
         //                var pipeLocal = BuildPipePolylineLocal(sampleInfo.PipeBodyTemplate, points, midPoint);
 
-        //                // 中文注释：读取样例块属性（基线属性）
+        //                // 读取样例块属性（基线属性）
         //                var latestSampleAttrs = GetEntityAttributeMap(tr, sampleBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         //                #region  ======================== 增强开始：起终点自动拾取并合并属性 ========================
-        //                //// 中文注释：根据比例计算搜索半径（你可按项目再调）
+        //                //// 根据比例计算搜索半径（你可按项目再调）
         //                //double pickRadius = Math.Max(200.0, VariableDictionary.textBoxScale * 5.0);
 
-        //                //// 中文注释：查找起点附近最近部件
+        //                //// 查找起点附近最近部件
         //                //var startBr = FindNearestBlockReferenceNearPoint(tr, points.First(), pickRadius, sampleBr.ObjectId);
 
-        //                //// 中文注释：查找终点附近最近部件
+        //                //// 查找终点附近最近部件
         //                //var endBr = FindNearestBlockReferenceNearPoint(tr, points.Last(), pickRadius, sampleBr.ObjectId);
 
-        //                //// 中文注释：读取起点部件属性
+        //                //// 读取起点部件属性
         //                //var startMap = startBr != null ? (GetEntityAttributeMap(tr, startBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
         //                //                               : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        //                //// 中文注释：读取终点部件属性
+        //                //// 读取终点部件属性
         //                //var endMap = endBr != null ? (GetEntityAttributeMap(tr, endBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
         //                //                           : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        //                //// 中文注释：统计命中数量
+        //                //// 统计命中数量
         //                //int startHit = 0;
         //                //int endHit = 0;
 
-        //                //// 中文注释：起点属性优先覆盖同名字段（仅白名单）
+        //                //// 起点属性优先覆盖同名字段（仅白名单）
         //                //foreach (var kv in startMap)
         //                //{
         //                //    string key = (kv.Key ?? string.Empty).Trim();
@@ -2826,7 +3084,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                //    }
         //                //}
 
-        //                //// 中文注释：终点属性补充覆盖同名字段（仅白名单）
+        //                //// 终点属性补充覆盖同名字段（仅白名单）
         //                //foreach (var kv in endMap)
         //                //{
         //                //    string key = (kv.Key ?? string.Empty).Trim();
@@ -2840,24 +3098,24 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                //    }
         //                //}
 
-        //                //// 中文注释：把起终点关键提示字段写入（可用于后续检查）
+        //                //// 把起终点关键提示字段写入（可用于后续检查）
         //                //latestSampleAttrs["始点"] = $"X={points.First().X:F3},Y={points.First().Y:F3}";
         //                //latestSampleAttrs["终点"] = $"X={points.Last().X:F3},Y={points.Last().Y:F3}";
 
-        //                //// 中文注释：输出命令行日志，明确是否真的拾取到了部件
+        //                //// 输出命令行日志，明确是否真的拾取到了部件
         //                //ed.WriteMessage($"\n端点拾取半径={pickRadius:F2}；起点部件={(startBr != null ? startBr.Name : "未命中")}；终点部件={(endBr != null ? endBr.Name : "未命中")}。");
         //                //ed.WriteMessage($"\n端点同名属性合并：起点命中={startHit}，终点命中={endHit}。");
         //                #endregion ======================== 增强结束 ========================
 
         //                // ======================== 增强开始：起终点自动拾取并合并属性（含名称/管道标题/管段号） ========================
-        //                // 中文注释：根据比例计算搜索半径（可按项目调参）
+        //                // 根据比例计算搜索半径（可按项目调参）
         //                double pickRadius = Math.Max(200.0, VariableDictionary.textBoxScale * 5.0);
 
-        //                // 中文注释：查找起点/终点附近最近部件（块参照）
+        //                // 查找起点/终点附近最近部件（块参照）
         //                var startBr = FindNearestBlockReferenceNearPoint(tr, points.First(), pickRadius, sampleBr.ObjectId);
         //                var endBr = FindNearestBlockReferenceNearPoint(tr, points.Last(), pickRadius, sampleBr.ObjectId);
 
-        //                // 中文注释：读取端点部件属性映射
+        //                // 读取端点部件属性映射
         //                var startMap = startBr != null
         //                    ? (GetEntityAttributeMap(tr, startBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
         //                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -2866,24 +3124,24 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    ? (GetEntityAttributeMap(tr, endBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
         //                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        //                // 中文注释：候选键集合（按你现场字段继续补）
+        //                // 候选键集合（按你现场字段继续补）
         //                string[] nameKeys = new[] { "名称", "设备名称", "Name", "TAG", "Tag", "位号", "设备位号" };
         //                string[] titleKeys = new[] { "管道标题", "标题", "Title" };
         //                string[] pipeNoKeys = new[] { "管段号", "管段编号", "Pipeline No", "Pipe No", "No" };
 
-        //                // 中文注释：本地函数：从属性字典里按候选键取第一个非空值（支持包含匹配）
+        //                // 本地函数：从属性字典里按候选键取第一个非空值（支持包含匹配）
         //                string FindFirstAttrValueLocal(Dictionary<string, string> attrs, string[] keys)
         //                {
         //                    if (attrs == null || attrs.Count == 0) return string.Empty;
 
-        //                    // 中文注释：先精确键匹配
+        //                    // 先精确键匹配
         //                    foreach (var k in keys)
         //                    {
         //                        if (attrs.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v))
         //                            return v.Trim();
         //                    }
 
-        //                    // 中文注释：再做包含匹配（兼容“起点名称”“设备名称1”等）
+        //                    // 再做包含匹配（兼容“起点名称”“设备名称1”等）
         //                    foreach (var kv in attrs)
         //                    {
         //                        if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value)) continue;
@@ -2897,11 +3155,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return string.Empty;
         //                }
 
-        //                // 中文注释：从起点/终点部件提取“名称”
+        //                // 从起点/终点部件提取“名称”
         //                string startName = FindFirstAttrValueLocal(startMap, nameKeys);
         //                string endName = FindFirstAttrValueLocal(endMap, nameKeys);
 
-        //                // 中文注释：从端点或样例提取“管道标题/管段号”
+        //                // 从端点或样例提取“管道标题/管段号”
         //                string startTitle = FindFirstAttrValueLocal(startMap, titleKeys);
         //                string endTitle = FindFirstAttrValueLocal(endMap, titleKeys);
         //                string sampleTitle = latestSampleAttrs.TryGetValue("管道标题", out var st) ? (st ?? string.Empty).Trim() : string.Empty;
@@ -2916,34 +3174,34 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                                 : !string.IsNullOrWhiteSpace(endPipeNo) ? endPipeNo
         //                                 : samplePipeNo;
 
-        //                // 中文注释：始点/终点字段优先写“名称值”，若未取到则回退坐标
+        //                // 始点/终点字段优先写“名称值”，若未取到则回退坐标
         //                string startCoordStr = $"X={points.First().X:F3},Y={points.First().Y:F3}";
         //                string endCoordStr = $"X={points.Last().X:F3},Y={points.Last().Y:F3}";
 
         //                latestSampleAttrs["始点"] = !string.IsNullOrWhiteSpace(startName) ? startName : startCoordStr;
         //                latestSampleAttrs["终点"] = !string.IsNullOrWhiteSpace(endName) ? endName : endCoordStr;
 
-        //                // 中文注释：把端点名称额外保留到独立字段（可选，但建议保留便于排查）
+        //                // 把端点名称额外保留到独立字段（可选，但建议保留便于排查）
         //                if (!string.IsNullOrWhiteSpace(startName)) latestSampleAttrs["始点名称"] = startName;
         //                if (!string.IsNullOrWhiteSpace(endName)) latestSampleAttrs["终点名称"] = endName;
 
-        //                // 中文注释：管道标题与管段号按“端点优先、样例兜底”写回
+        //                // 管道标题与管段号按“端点优先、样例兜底”写回
         //                if (!string.IsNullOrWhiteSpace(finalTitle)) latestSampleAttrs["管道标题"] = finalTitle;
         //                if (!string.IsNullOrWhiteSpace(finalPipeNo)) latestSampleAttrs["管段号"] = finalPipeNo;
 
-        //                // 中文注释：命令行诊断输出
+        //                // 命令行诊断输出
         //                ed.WriteMessage($"\n端点拾取半径={pickRadius:F2}；起点部件={(startBr != null ? startBr.Name : "未命中")}；终点部件={(endBr != null ? endBr.Name : "未命中")}。");
         //                ed.WriteMessage($"\n端点名称：始点='{latestSampleAttrs["始点"]}'，终点='{latestSampleAttrs["终点"]}'。");
         //                ed.WriteMessage($"\n标题/管段号：管道标题='{(latestSampleAttrs.ContainsKey("管道标题") ? latestSampleAttrs["管道标题"] : "")}'，管段号='{(latestSampleAttrs.ContainsKey("管段号") ? latestSampleAttrs["管段号"] : "")}'。");
         //                // ======================== 增强结束 ========================
 
-        //                // 中文注释：生成标题与箭头
+        //                // 生成标题与箭头
         //                string pipeTitle = latestSampleAttrs.TryGetValue("管道标题", out var sample_Title) && !string.IsNullOrWhiteSpace(sample_Title)
         //                                 ? sample_Title
         //                                 : sampleBr.Name ?? "管道";
         //                var arrowEntities = CreateDirectionalArrowsAndTitles(tr, sampleInfo, points, midPoint, pipeTitle, sampleBr.Name);
 
-        //                // 中文注释：克隆属性定义并回填值
+        //                // 克隆属性定义并回填值
         //                var attDefsLocal = CloneAttributeDefinitionsLocal(sampleInfo.AttributeDefinitions, midPoint, 0.0, pipelineLength, sampleBr.Name)
         //                                   ?? new List<AttributeDefinition>();
 
@@ -2981,7 +3239,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    }
         //                }
 
-        //                // 中文注释：确保关键属性存在
+        //                // 确保关键属性存在
         //                int nextSegNum = GetNextPipeSegmentNumber(db);
         //                string extractedPipeNo = nextSegNum.ToString("D4");
         //                if (latestSampleAttrs.TryGetValue("管段号", out var pn) && !string.IsNullOrWhiteSpace(pn))
@@ -2996,14 +3254,14 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                SetOrAddLengthAttrs(attDefsLocal, pipelineLength, ref extraIndex, finalYOffsetBase, finalAttHeight);
         //                SetOrAddAttr(attDefsLocal, "管段号", extractedPipeNo, ref extraIndex, finalYOffsetBase, finalAttHeight);
 
-        //                // 中文注释：属性设为隐藏（保持你原行为）
+        //                // 属性设为隐藏（保持你原行为）
         //                foreach (var ad in attDefsLocal)
         //                {
         //                    ad.Invisible = true;
         //                    ad.Constant = false;
         //                }
 
-        //                // 中文注释：构建并插入新块
+        //                // 构建并插入新块
         //                string newBlockName = BuildPipeBlockDefinition(tr, sampleBr.Name, (Polyline)pipeLocal.Clone(), arrowEntities, attDefsLocal);
         //                var attValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         //                foreach (var a in attDefsLocal)
@@ -3018,7 +3276,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                var newBr = tr.GetObject(newBrId, OpenMode.ForWrite) as BlockReference;
         //                if (newBr != null) newBr.Layer = sampleInfo.PipeBodyTemplate.Layer;
 
-        //                // 中文注释：清理临时样例块
+        //                // 清理临时样例块
         //                if (tempInserted)
         //                {
         //                    try { (tr.GetObject(sampleBr.ObjectId, OpenMode.ForWrite) as BlockReference)?.Erase(); } catch { }
@@ -3050,41 +3308,41 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// </summary>
         //private void DrawPipeByClicks(bool isOutlet)
         //{
-        //    // 中文注释：获取当前活动文档
+        //    // 获取当前活动文档
         //    var doc = Application.DocumentManager.MdiActiveDocument;
-        //    // 中文注释：无文档直接结束
+        //    // 无文档直接结束
         //    if (doc == null) return;
 
-        //    // 中文注释：获取编辑器
+        //    // 获取编辑器
         //    var ed = doc.Editor;
-        //    // 中文注释：获取数据库
+        //    // 获取数据库
         //    Database db = doc.Database;
 
         //    try
         //    {
-        //        // 中文注释：先在块表中自动匹配“入口/出口”样例块定义
+        //        // 先在块表中自动匹配“入口/出口”样例块定义
         //        ObjectId sampleBtrId = ObjectId.Null;
         //        using (var tx = db.TransactionManager.StartTransaction())
         //        {
-        //            // 中文注释：打开块表
+        //            // 打开块表
         //            var bt = (BlockTable)tx.GetObject(db.BlockTableId, OpenMode.ForRead);
-        //            // 中文注释：遍历块定义
+        //            // 遍历块定义
         //            foreach (ObjectId btrId in bt)
         //            {
         //                try
         //                {
-        //                    // 中文注释：读取块定义记录
+        //                    // 读取块定义记录
         //                    var btr = tx.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
-        //                    // 中文注释：空记录跳过
+        //                    // 空记录跳过
         //                    if (btr == null) continue;
 
-        //                    // 中文注释：块名转小写便于匹配
+        //                    // 块名转小写便于匹配
         //                    var nm = (btr.Name ?? string.Empty).ToLowerInvariant();
 
-        //                    // 中文注释：按入口/出口关键字匹配
+        //                    // 按入口/出口关键字匹配
         //                    if (isOutlet)
         //                    {
-        //                        // 中文注释：出口模式匹配“出口/outlet”
+        //                        // 出口模式匹配“出口/outlet”
         //                        if (nm.Contains("出口") || nm.Contains("outlet"))
         //                        {
         //                            sampleBtrId = btrId;
@@ -3093,7 +3351,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    }
         //                    else
         //                    {
-        //                        // 中文注释：入口模式匹配“入口/inlet”
+        //                        // 入口模式匹配“入口/inlet”
         //                        if (nm.Contains("入口") || nm.Contains("inlet"))
         //                        {
         //                            sampleBtrId = btrId;
@@ -3103,53 +3361,53 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                }
         //                catch
         //                {
-        //                    // 中文注释：单条读取异常忽略，继续扫描
+        //                    // 单条读取异常忽略，继续扫描
         //                }
         //            }
 
-        //            // 中文注释：提交只读事务
+        //            // 提交只读事务
         //            tx.Commit();
         //        }
 
-        //        // 中文注释：标记样例是否是临时插入
+        //        // 标记样例是否是临时插入
         //        bool tempInserted = false;
-        //        // 中文注释：样例块引用
+        //        // 样例块引用
         //        BlockReference sampleBr = null;
 
-        //        // 中文注释：开启绘制事务
+        //        // 开启绘制事务
         //        using (var tr = new DBTrans())
         //        {
         //            try
         //            {
-        //                // 中文注释：自动匹配命中时，临时插入样例块到原点
+        //                // 自动匹配命中时，临时插入样例块到原点
         //                if (!sampleBtrId.IsNull)
         //                {
-        //                    // 中文注释：读取比例
+        //                    // 读取比例
         //                    var scale = VariableDictionary.textBoxScale;
-        //                    // 中文注释：比例保护
+        //                    // 比例保护
         //                    if (double.IsNaN(scale) || scale <= 0) scale = 1.0;
 
-        //                    // 中文注释：插入临时样例块
+        //                    // 插入临时样例块
         //                    ObjectId tempSampleBrId = tr.CurrentSpace.InsertBlock(Point3d.Origin, sampleBtrId, new Scale3d(scale, scale, scale), 0.0, null);
-        //                    // 中文注释：打开可写引用
+        //                    // 打开可写引用
         //                    sampleBr = tr.GetObject(tempSampleBrId, OpenMode.ForWrite) as BlockReference;
-        //                    // 中文注释：标记为临时插入
+        //                    // 标记为临时插入
         //                    tempInserted = true;
         //                }
         //                else
         //                {
-        //                    // 中文注释：自动未命中时回退手工选择样例块
+        //                    // 自动未命中时回退手工选择样例块
         //                    ed.WriteMessage("\n未自动找到示例块，请手动选择一个块参照作为模板。");
-        //                    // 中文注释：创建选择提示
+        //                    // 创建选择提示
         //                    var peo = new PromptEntityOptions("\n请选择示例管线块：");
-        //                    // 中文注释：设置拒绝消息
+        //                    // 设置拒绝消息
         //                    peo.SetRejectMessage("\n请选择块参照对象。");
-        //                    // 中文注释：限制只能选块参照
+        //                    // 限制只能选块参照
         //                    peo.AddAllowedClass(typeof(BlockReference), true);
-        //                    // 中文注释：执行选择
+        //                    // 执行选择
         //                    var per = ed.GetEntity(peo);
 
-        //                    // 中文注释：选择取消则终止
+        //                    // 选择取消则终止
         //                    if (per.Status != PromptStatus.OK)
         //                    {
         //                        ed.WriteMessage("\n未选择示例块，操作取消。");
@@ -3157,15 +3415,15 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                        return;
         //                    }
 
-        //                    // 中文注释：读取用户选择的样例块
+        //                    // 读取用户选择的样例块
         //                    sampleBr = tr.GetObject(per.ObjectId, OpenMode.ForRead) as BlockReference;
-        //                    // 中文注释：升级为可写
+        //                    // 升级为可写
         //                    if (sampleBr != null && !sampleBr.IsWriteEnabled) sampleBr.UpgradeOpen();
-        //                    // 中文注释：手选样例不是临时插入
+        //                    // 手选样例不是临时插入
         //                    tempInserted = false;
         //                }
 
-        //                // 中文注释：样例获取失败直接退出
+        //                // 样例获取失败直接退出
         //                if (sampleBr == null)
         //                {
         //                    ed.WriteMessage("\n无法获取示例块，取消。");
@@ -3173,32 +3431,32 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：读取历史属性（入口/出口分开）
+        //                // 读取历史属性（入口/出口分开）
         //                var loadedAttrs = FileManager.LoadLastPipeAttributes(isOutlet) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        //                // 中文注释：兜底——如果历史属性为空，则用样例块当前属性填充，避免编辑页空表
+        //                // 兜底——如果历史属性为空，则用样例块当前属性填充，避免编辑页空表
         //                if (loadedAttrs.Count == 0)
         //                {
-        //                    // 中文注释：读取样例块属性字典
+        //                    // 读取样例块属性字典
         //                    var sampleAttrMap = GetEntityAttributeMap(tr, sampleBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        //                    // 中文注释：逐项写入编辑初值
+        //                    // 逐项写入编辑初值
         //                    foreach (var kv in sampleAttrMap)
         //                    {
         //                        if (string.IsNullOrWhiteSpace(kv.Key)) continue;
         //                        loadedAttrs[kv.Key.Trim()] = kv.Value ?? string.Empty;
         //                    }
 
-        //                    // 中文注释：打印兜底日志
+        //                    // 打印兜底日志
         //                    ed.WriteMessage($"\n已用样例块属性兜底初始化编辑项：{loadedAttrs.Count} 项。");
         //                }
 
-        //                // 中文注释：弹出属性编辑窗
+        //                // 弹出属性编辑窗
         //                using (var editor = new PipeAttributeEditorForm(loadedAttrs))
         //                {
-        //                    // 中文注释：显示编辑窗
+        //                    // 显示编辑窗
         //                    var dr = editor.ShowDialog();
 
-        //                    // 中文注释：用户取消则清理并退出
+        //                    // 用户取消则清理并退出
         //                    if (dr != DialogResult.OK)
         //                    {
         //                        if (tempInserted)
@@ -3211,27 +3469,27 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                        return;
         //                    }
 
-        //                    // 中文注释：获取编辑结果
+        //                    // 获取编辑结果
         //                    var editedAttrs = editor.Attributes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        //                    // 中文注释：保存到历史属性文件
+        //                    // 保存到历史属性文件
         //                    FileManager.SaveLastPipeAttributes(isOutlet, editedAttrs);
 
-        //                    // 中文注释：把编辑结果回写到样例块已有属性
+        //                    // 把编辑结果回写到样例块已有属性
         //                    try
         //                    {
-        //                        // 中文注释：打开样例块可写对象
+        //                        // 打开样例块可写对象
         //                        var sampleBrWrite = tr.GetObject(sampleBr.ObjectId, OpenMode.ForWrite) as BlockReference;
         //                        if (sampleBrWrite != null)
         //                        {
-        //                            // 中文注释：遍历属性引用
+        //                            // 遍历属性引用
         //                            foreach (ObjectId aid in sampleBrWrite.AttributeCollection)
         //                            {
-        //                                // 中文注释：读取属性引用
+        //                                // 读取属性引用
         //                                var ar = tr.GetObject(aid, OpenMode.ForWrite) as AttributeReference;
-        //                                // 中文注释：无效属性跳过
+        //                                // 无效属性跳过
         //                                if (ar == null || string.IsNullOrWhiteSpace(ar.Tag)) continue;
 
-        //                                // 中文注释：命中同名键则回写
+        //                                // 命中同名键则回写
         //                                if (editedAttrs.TryGetValue(ar.Tag, out var newVal))
         //                                {
         //                                    ar.TextString = newVal ?? string.Empty;
@@ -3242,23 +3500,23 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    }
         //                    catch
         //                    {
-        //                        // 中文注释：回写失败不阻塞主流程
+        //                        // 回写失败不阻塞主流程
         //                    }
         //                }
 
-        //                // 中文注释：采点列表
+        //                // 采点列表
         //                var points = new List<Point3d>();
 
-        //                // 中文注释：首点提示
+        //                // 首点提示
         //                var firstOpts = new PromptPointOptions("\n指定起点（右键/回车取消）：");
         //                firstOpts.AllowNone = true;
         //                firstOpts.Keywords.Add("取消");
         //                firstOpts.AppendKeywordsToMessage = true;
 
-        //                // 中文注释：读取首点
+        //                // 读取首点
         //                var firstRes = ed.GetPoint(firstOpts);
 
-        //                // 中文注释：首点取消
+        //                // 首点取消
         //                if (firstRes.Status == PromptStatus.None ||
         //                    (firstRes.Status == PromptStatus.Keyword && string.Equals(firstRes.StringResult, "取消", StringComparison.OrdinalIgnoreCase)))
         //                {
@@ -3268,7 +3526,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：首点非正常状态
+        //                // 首点非正常状态
         //                if (firstRes.Status != PromptStatus.OK)
         //                {
         //                    ed.WriteMessage("\n已取消：起点输入终止。");
@@ -3277,25 +3535,25 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：加入首点
+        //                // 加入首点
         //                points.Add(firstRes.Value);
 
-        //                // 中文注释：循环采集后续点
+        //                // 循环采集后续点
         //                while (true)
         //                {
-        //                    // 中文注释：后续点提示
+        //                    // 后续点提示
         //                    var nextOpts = new PromptPointOptions("\n指定下一个点（右键/回车结束）：");
-        //                    // 中文注释：启用基点橡皮筋
+        //                    // 启用基点橡皮筋
         //                    nextOpts.UseBasePoint = true;
         //                    nextOpts.BasePoint = points.Last();
         //                    nextOpts.AllowNone = true;
         //                    nextOpts.Keywords.Add("完成");
         //                    nextOpts.AppendKeywordsToMessage = true;
 
-        //                    // 中文注释：读取后续点
+        //                    // 读取后续点
         //                    var nextRes = ed.GetPoint(nextOpts);
 
-        //                    // 中文注释：正常点输入
+        //                    // 正常点输入
         //                    if (nextRes.Status == PromptStatus.OK)
         //                    {
         //                        var pt = nextRes.Value;
@@ -3304,15 +3562,15 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                        continue;
         //                    }
 
-        //                    // 中文注释：回车/右键结束
+        //                    // 回车/右键结束
         //                    if (nextRes.Status == PromptStatus.None) break;
-        //                    // 中文注释：关键字完成结束
+        //                    // 关键字完成结束
         //                    if (nextRes.Status == PromptStatus.Keyword && string.Equals(nextRes.StringResult, "完成", StringComparison.OrdinalIgnoreCase)) break;
-        //                    // 中文注释：其它状态统一结束
+        //                    // 其它状态统一结束
         //                    break;
         //                }
 
-        //                // 中文注释：至少两点
+        //                // 至少两点
         //                if (points.Count < 2)
         //                {
         //                    ed.WriteMessage("\n采点不足，取消生成。");
@@ -3321,20 +3579,20 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：本地函数——分析样例块（支持一级嵌套块回退）
+        //                // 本地函数——分析样例块（支持一级嵌套块回退）
         //                SamplePipeInfo AnalyzeSampleWithFallback()
         //                {
-        //                    // 中文注释：先按当前样例直接分析
+        //                    // 先按当前样例直接分析
         //                    var info = AnalyzeSampleBlock(tr, sampleBr);
         //                    if (info != null && info.PipeBodyTemplate != null) return info;
 
         //                    try
         //                    {
-        //                        // 中文注释：打开样例块定义
+        //                        // 打开样例块定义
         //                        var hostBtr = tr.GetObject(sampleBr.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
         //                        if (hostBtr == null) return info;
 
-        //                        // 中文注释：尝试从一级嵌套块中找真正的管道模板
+        //                        // 尝试从一级嵌套块中找真正的管道模板
         //                        foreach (ObjectId id in hostBtr)
         //                        {
         //                            var nested = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
@@ -3343,23 +3601,23 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                            var nestedInfo = AnalyzeSampleBlock(tr, nested);
         //                            if (nestedInfo != null && nestedInfo.PipeBodyTemplate != null)
         //                            {
-        //                                // 中文注释：命中嵌套模板则返回
+        //                                // 命中嵌套模板则返回
         //                                return nestedInfo;
         //                            }
         //                        }
         //                    }
         //                    catch
         //                    {
-        //                        // 中文注释：嵌套分析失败则回退原结果
+        //                        // 嵌套分析失败则回退原结果
         //                    }
 
         //                    return info;
         //                }
 
-        //                // 中文注释：分析样例块（含嵌套回退）
+        //                // 分析样例块（含嵌套回退）
         //                var sampleInfo = AnalyzeSampleWithFallback();
 
-        //                // 中文注释：未找到管道主体则提示并退出
+        //                // 未找到管道主体则提示并退出
         //                if (sampleInfo == null || sampleInfo.PipeBodyTemplate == null)
         //                {
         //                    ed.WriteMessage("\n示例块中未找到管道主体。");
@@ -3368,42 +3626,42 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return;
         //                }
 
-        //                // 中文注释：计算管线长度
+        //                // 计算管线长度
         //                double pipelineLength = ComputePipelineLengthByPoints(points);
-        //                // 中文注释：计算中点
+        //                // 计算中点
         //                var midTuple = ComputeMidPointAndAngle(points, pipelineLength);
         //                Point3d midPoint = midTuple.midPoint;
 
-        //                // 中文注释：构建局部管线
+        //                // 构建局部管线
         //                var pipeLocal = BuildPipePolylineLocal(sampleInfo.PipeBodyTemplate, points, midPoint);
 
-        //                // 中文注释：读取样例属性作为基线
+        //                // 读取样例属性作为基线
         //                var latestSampleAttrs = GetEntityAttributeMap(tr, sampleBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        //                // 中文注释：端点拾取半径
+        //                // 端点拾取半径
         //                double pickRadius = Math.Max(200.0, VariableDictionary.textBoxScale * 5.0);
 
-        //                // 中文注释：找起点附近部件
+        //                // 找起点附近部件
         //                var startBr = FindNearestBlockReferenceNearPoint(tr, points.First(), pickRadius, sampleBr.ObjectId);
-        //                // 中文注释：找终点附近部件
+        //                // 找终点附近部件
         //                var endBr = FindNearestBlockReferenceNearPoint(tr, points.Last(), pickRadius, sampleBr.ObjectId);
 
-        //                // 中文注释：读取起点部件属性
+        //                // 读取起点部件属性
         //                var startMap = startBr != null
         //                    ? (GetEntityAttributeMap(tr, startBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
         //                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        //                // 中文注释：读取终点部件属性
+        //                // 读取终点部件属性
         //                var endMap = endBr != null
         //                    ? (GetEntityAttributeMap(tr, endBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
         //                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        //                // 中文注释：候选键
+        //                // 候选键
         //                string[] nameKeys = { "名称", "设备名称", "Name", "TAG", "Tag", "位号", "设备位号" };
         //                string[] titleKeys = { "管道标题", "标题", "Title" };
         //                string[] pipeNoKeys = { "管段号", "管段编号", "Pipeline No", "Pipe No", "No" };
 
-        //                // 中文注释：本地函数，按候选键找首个非空值
+        //                // 本地函数，按候选键找首个非空值
         //                string FindFirstAttrValueLocal(Dictionary<string, string> attrs, string[] keys)
         //                {
         //                    if (attrs == null || attrs.Count == 0) return string.Empty;
@@ -3427,11 +3685,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    return string.Empty;
         //                }
 
-        //                // 中文注释：提取端点名称
+        //                // 提取端点名称
         //                string startName = FindFirstAttrValueLocal(startMap, nameKeys);
         //                string endName = FindFirstAttrValueLocal(endMap, nameKeys);
 
-        //                // 中文注释：提取标题与管段号
+        //                // 提取标题与管段号
         //                string startTitle = FindFirstAttrValueLocal(startMap, titleKeys);
         //                string endTitle = FindFirstAttrValueLocal(endMap, titleKeys);
         //                string sampleTitle = latestSampleAttrs.TryGetValue("管道标题", out var st) ? (st ?? string.Empty).Trim() : string.Empty;
@@ -3446,40 +3704,40 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                                 : !string.IsNullOrWhiteSpace(endPipeNo) ? endPipeNo
         //                                 : samplePipeNo;
 
-        //                // 中文注释：坐标回退值
+        //                // 坐标回退值
         //                string startCoordStr = $"X={points.First().X:F3},Y={points.First().Y:F3}";
         //                string endCoordStr = $"X={points.Last().X:F3},Y={points.Last().Y:F3}";
 
-        //                // 中文注释：始点终点优先写名称，否则写坐标
+        //                // 始点终点优先写名称，否则写坐标
         //                latestSampleAttrs["始点"] = !string.IsNullOrWhiteSpace(startName) ? startName : startCoordStr;
         //                latestSampleAttrs["终点"] = !string.IsNullOrWhiteSpace(endName) ? endName : endCoordStr;
 
-        //                // 中文注释：附加保存始点/终点名称
+        //                // 附加保存始点/终点名称
         //                if (!string.IsNullOrWhiteSpace(startName)) latestSampleAttrs["始点名称"] = startName;
         //                if (!string.IsNullOrWhiteSpace(endName)) latestSampleAttrs["终点名称"] = endName;
 
-        //                // 中文注释：回填标题/管段号
+        //                // 回填标题/管段号
         //                if (!string.IsNullOrWhiteSpace(finalTitle)) latestSampleAttrs["管道标题"] = finalTitle;
         //                if (!string.IsNullOrWhiteSpace(finalPipeNo)) latestSampleAttrs["管段号"] = finalPipeNo;
 
-        //                // 中文注释：命令行日志
+        //                // 命令行日志
         //                ed.WriteMessage($"\n端点拾取半径={pickRadius:F2}；起点部件={(startBr != null ? startBr.Name : "未命中")}；终点部件={(endBr != null ? endBr.Name : "未命中")}。");
         //                ed.WriteMessage($"\n端点名称：始点='{latestSampleAttrs["始点"]}'，终点='{latestSampleAttrs["终点"]}'。");
         //                ed.WriteMessage($"\n标题/管段号：管道标题='{(latestSampleAttrs.ContainsKey("管道标题") ? latestSampleAttrs["管道标题"] : "")}'，管段号='{(latestSampleAttrs.ContainsKey("管段号") ? latestSampleAttrs["管段号"] : "")}'。");
 
-        //                // 中文注释：生成标题文字内容
+        //                // 生成标题文字内容
         //                string pipeTitle = latestSampleAttrs.TryGetValue("管道标题", out var sample_Title) && !string.IsNullOrWhiteSpace(sample_Title)
         //                                 ? sample_Title
         //                                 : sampleBr.Name ?? "管道";
 
-        //                // 中文注释：创建箭头与标题实体
+        //                // 创建箭头与标题实体
         //                var arrowEntities = CreateDirectionalArrowsAndTitles(tr, sampleInfo, points, midPoint, pipeTitle, sampleBr.Name);
 
-        //                // 中文注释：克隆属性定义
+        //                // 克隆属性定义
         //                var attDefsLocal = CloneAttributeDefinitionsLocal(sampleInfo.AttributeDefinitions, midPoint, 0.0, pipelineLength, sampleBr.Name)
         //                                   ?? new List<AttributeDefinition>();
 
-        //                // 中文注释：有模板属性定义时按Tag回填
+        //                // 有模板属性定义时按Tag回填
         //                if (sampleInfo.AttributeDefinitions != null && sampleInfo.AttributeDefinitions.Count > 0)
         //                {
         //                    foreach (var def in attDefsLocal)
@@ -3493,7 +3751,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                }
         //                else
         //                {
-        //                    // 中文注释：无模板属性定义时，按字典动态生成
+        //                    // 无模板属性定义时，按字典动态生成
         //                    attDefsLocal.Clear();
         //                    double attHeight = 2.5;
         //                    double yOffsetBase = -attHeight * 2.0;
@@ -3516,37 +3774,37 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    }
         //                }
 
-        //                // 中文注释：生成管段号（样例优先，序号兜底）
+        //                // 生成管段号（样例优先，序号兜底）
         //                int nextSegNum = GetNextPipeSegmentNumber(db);
         //                string extractedPipeNo = nextSegNum.ToString("D4");
         //                if (latestSampleAttrs.TryGetValue("管段号", out var pn) && !string.IsNullOrWhiteSpace(pn))
         //                    extractedPipeNo = pn;
 
-        //                // 中文注释：计算附加属性定位参数
+        //                // 计算附加属性定位参数
         //                double finalAttHeight = attDefsLocal.Count > 0 ? attDefsLocal[0].Height : 2.5;
         //                double finalYOffsetBase = attDefsLocal.Count > 0 ? attDefsLocal[0].Position.Y - finalAttHeight * 1.2 : -finalAttHeight * 2.0;
         //                int extraIndex = 0;
 
-        //                // 中文注释：确保关键属性存在
+        //                // 确保关键属性存在
         //                SetOrAddAttr(attDefsLocal, "始点", latestSampleAttrs["始点"], ref extraIndex, finalYOffsetBase, finalAttHeight);
         //                SetOrAddAttr(attDefsLocal, "终点", latestSampleAttrs["终点"], ref extraIndex, finalYOffsetBase, finalAttHeight);
         //                SetOrAddLengthAttrs(attDefsLocal, pipelineLength, ref extraIndex, finalYOffsetBase, finalAttHeight);
         //                SetOrAddAttr(attDefsLocal, "管段号", extractedPipeNo, ref extraIndex, finalYOffsetBase, finalAttHeight);
 
-        //                // 中文注释：保持原行为，属性默认隐藏
+        //                // 保持原行为，属性默认隐藏
         //                foreach (var ad in attDefsLocal)
         //                {
         //                    ad.Invisible = true;
         //                    ad.Constant = false;
         //                }
 
-        //                // 中文注释：块名兜底，避免空名
+        //                // 块名兜底，避免空名
         //                string desiredName = string.IsNullOrWhiteSpace(sampleBr.Name) ? "PIPE_TEMPLATE" : sampleBr.Name;
 
-        //                // 中文注释：构建块定义并插入
+        //                // 构建块定义并插入
         //                string newBlockName = BuildPipeBlockDefinition(tr, desiredName, (Polyline)pipeLocal.Clone(), arrowEntities, attDefsLocal);
 
-        //                // 中文注释：整理属性值字典
+        //                // 整理属性值字典
         //                var attValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         //                foreach (var a in attDefsLocal)
         //                {
@@ -3554,31 +3812,31 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //                    attValues[a.Tag] = a.TextString ?? string.Empty;
         //                }
 
-        //                // 中文注释：插入新块
+        //                // 插入新块
         //                var newBrId = InsertPipeBlockWithAttributes(tr, midPoint, newBlockName, 0.0, attValues);
 
-        //                // 中文注释：后处理拓扑
+        //                // 后处理拓扑
         //                PipelineTopologyHelper.PostProcessAfterPipePlaced(tr, newBrId, isOutlet ? "Outlet" : "Inlet");
 
-        //                // 中文注释：继承图层
+        //                // 继承图层
         //                var newBr = tr.GetObject(newBrId, OpenMode.ForWrite) as BlockReference;
         //                if (newBr != null) newBr.Layer = sampleInfo.PipeBodyTemplate.Layer;
 
-        //                // 中文注释：清理临时样例块
+        //                // 清理临时样例块
         //                if (tempInserted)
         //                {
         //                    try { (tr.GetObject(sampleBr.ObjectId, OpenMode.ForWrite) as BlockReference)?.Erase(); } catch { }
         //                }
 
-        //                // 中文注释：提交事务
+        //                // 提交事务
         //                tr.Commit();
 
-        //                // 中文注释：输出完成消息
+        //                // 输出完成消息
         //                ed.WriteMessage($"\n管道已生成（{(isOutlet ? "出口" : "入口")}），点数={points.Count}，管段号={extractedPipeNo}。");
         //            }
         //            catch (Exception ex)
         //            {
-        //                // 中文注释：事务内异常回滚
+        //                // 事务内异常回滚
         //                tr.Abort();
         //                ed.WriteMessage($"\n生成管道时出错: {ex.Message}");
         //            }
@@ -3586,27 +3844,27 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //    }
         //    catch (Exception ex)
         //    {
-        //        // 中文注释：总异常兜底
+        //        // 总异常兜底
         //        ed.WriteMessage($"\n操作失败: {ex.Message}");
         //    }
         //}
 
         /// <summary>
-        /// 中文注释：按候选键提取第一个非空属性值（先精确匹配，再包含匹配）
+        /// 按候选键提取第一个非空属性值（先精确匹配，再包含匹配）
         /// </summary>
         //private static string FindFirstNonEmptyAttrValueForPipe(Dictionary<string, string> attrs, string[] keys)
         //{
-        //    // 中文注释：空字典直接返回空
+        //    // 空字典直接返回空
         //    if (attrs == null || attrs.Count == 0) return string.Empty;
 
-        //    // 中文注释：先做精确键匹配
+        //    // 先做精确键匹配
         //    foreach (var k in keys)
         //    {
         //        if (attrs.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v))
         //            return v.Trim();
         //    }
 
-        //    // 中文注释：再做包含匹配（兼容“设备名称1”“起点名称”等）
+        //    // 再做包含匹配（兼容“设备名称1”“起点名称”等）
         //    foreach (var kv in attrs)
         //    {
         //        if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value)) continue;
@@ -3617,54 +3875,54 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //        }
         //    }
 
-        //    // 中文注释：未命中返回空
+        //    // 未命中返回空
         //    return string.Empty;
         //}
 
         /// <summary>
-        /// 中文注释：判断点是否在包围盒内（带容差）
+        /// 判断点是否在包围盒内（带容差）
         /// </summary>
         private static bool IsPointInsideExtentsForPipeInheritance(Point3d p, Extents3d ext, double tol)
         {
-            // 中文注释：X 方向判断
+            // X 方向判断
             if (p.X < ext.MinPoint.X - tol || p.X > ext.MaxPoint.X + tol) return false;
-            // 中文注释：Y 方向判断
+            // Y 方向判断
             if (p.Y < ext.MinPoint.Y - tol || p.Y > ext.MaxPoint.Y + tol) return false;
-            // 中文注释：Z 方向判断
+            // Z 方向判断
             if (p.Z < ext.MinPoint.Z - tol || p.Z > ext.MaxPoint.Z + tol) return false;
-            // 中文注释：全部通过即命中
+            // 全部通过即命中
             return true;
         }
 
         /// <summary>
-        /// 中文注释：查找与指定端点“相交/命中”的候选块（优先包围盒命中，其次插入点接近）
+        /// 查找与指定端点“相交/命中”的候选块（优先包围盒命中，其次插入点接近）
         /// </summary>
         //private List<BlockReference> FindBlocksCrossingPointForPipeInheritance(DBTrans tr, Point3d point, ObjectId excludeId, double tol)
         //{
-        //    // 中文注释：包围盒命中列表
+        //    // 包围盒命中列表
         //    var insideHits = new List<BlockReference>();
-        //    // 中文注释：近距离命中列表（包围盒未命中，但插入点很近）
+        //    // 近距离命中列表（包围盒未命中，但插入点很近）
         //    var nearHits = new List<BlockReference>();
 
-        //    // 中文注释：遍历当前空间实体
+        //    // 遍历当前空间实体
         //    foreach (ObjectId id in tr.CurrentSpace)
         //    {
-        //        // 中文注释：排除指定对象（通常是样例块本身）
+        //        // 排除指定对象（通常是样例块本身）
         //        if (!excludeId.IsNull && id == excludeId) continue;
 
-        //        // 中文注释：读取实体
+        //        // 读取实体
         //        var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-        //        // 中文注释：过滤无效实体
+        //        // 过滤无效实体
         //        if (ent == null || ent.IsErased) continue;
 
-        //        // 中文注释：仅处理块参照（便于后续继承属性）
+        //        // 仅处理块参照（便于后续继承属性）
         //        var br = ent as BlockReference;
         //        if (br == null) continue;
 
-        //        // 中文注释：默认非包围盒命中
+        //        // 默认非包围盒命中
         //        bool inside = false;
 
-        //        // 中文注释：尝试读取包围盒并判断端点是否落入
+        //        // 尝试读取包围盒并判断端点是否落入
         //        try
         //        {
         //            var ext = br.GeometricExtents;
@@ -3672,17 +3930,17 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //        }
         //        catch
         //        {
-        //            // 中文注释：包围盒失败则保持 inside=false，走距离兜底
+        //            // 包围盒失败则保持 inside=false，走距离兜底
         //        }
 
-        //        // 中文注释：包围盒命中优先加入 insideHits
+        //        // 包围盒命中优先加入 insideHits
         //        if (inside)
         //        {
         //            insideHits.Add(br);
         //            continue;
         //        }
 
-        //        // 中文注释：包围盒未命中时，按插入点距离兜底
+        //        // 包围盒未命中时，按插入点距离兜底
         //        var d = br.Position.DistanceTo(point);
         //        if (d <= tol * 2.0)
         //        {
@@ -3690,48 +3948,48 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //        }
         //    }
 
-        //    // 中文注释：按“距离端点近”排序，提高稳定性
+        //    // 按“距离端点近”排序，提高稳定性
         //    insideHits = insideHits.OrderBy(b => b.Position.DistanceTo(point)).ToList();
         //    nearHits = nearHits.OrderBy(b => b.Position.DistanceTo(point)).ToList();
 
-        //    // 中文注释：先拼 insideHits，再拼 nearHits
+        //    // 先拼 insideHits，再拼 nearHits
         //    var result = new List<BlockReference>();
         //    result.AddRange(insideHits);
         //    result.AddRange(nearHits);
 
-        //    // 中文注释：返回候选
+        //    // 返回候选
         //    return result;
         //}
 
         /// <summary>
-        /// 中文注释：完成版——手选示例块 + 端点相交继承参数 + 同名标签同步（增强：读取到0不覆盖，字段标准化）
+        /// 完成版——手选示例块 + 端点相交继承参数 + 同名标签同步（增强：读取到0不覆盖，字段标准化）
         /// </summary>
         private void DrawPipeByClicks(bool isOutlet)
         {
-            // 中文注释：获取当前文档
+            // 获取当前文档
             var doc = Application.DocumentManager.MdiActiveDocument;
-            // 中文注释：无文档直接返回
+            // 无文档直接返回
             if (doc == null) return;
 
-            // 中文注释：获取编辑器和数据库
+            // 获取编辑器和数据库
             var ed = doc.Editor;
             Database db = doc.Database;
 
-            // 中文注释：本地函数——判断值是否应跳过（空或0）
+            // 本地函数——判断值是否应跳过（空或0）
             bool IsZeroLikeForPipe(string raw)
             {
-                // 中文注释：空值兜底
+                // 空值兜底
                 string text = (raw ?? string.Empty).Trim();
-                // 中文注释：空串直接视为无效继承值
+                // 空串直接视为无效继承值
                 if (string.IsNullOrWhiteSpace(text)) return true;
 
-                // 中文注释：兼容全角0和中文空格
+                // 兼容全角0和中文空格
                 text = text.Replace('０', '0').Replace('\u3000', ' ').Trim();
 
-                // 中文注释：纯0直接判定
+                // 纯0直接判定
                 if (string.Equals(text, "0", StringComparison.OrdinalIgnoreCase)) return true;
 
-                // 中文注释：先尝试纯数字判定
+                // 先尝试纯数字判定
                 double dv;
                 if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out dv))
                 {
@@ -3742,7 +4000,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     if (Math.Abs(dv) < 1e-12) return true;
                 }
 
-                // 中文注释：带单位0判定（例如 0MPa、0℃、0 m/s）
+                // 带单位0判定（例如 0MPa、0℃、0 m/s）
                 var m = System.Text.RegularExpressions.Regex.Match(
                     text,
                     @"^\s*([+-]?(?:0+(?:[.,]0+)?|[.,]0+))\s*[^0-9]*\s*$",
@@ -3757,17 +4015,17 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     }
                 }
 
-                // 中文注释：其余值保留
+                // 其余值保留
                 return false;
             }
 
-            // 中文注释：本地函数——按候选键提取首个“非空且非0”值
+            // 本地函数——按候选键提取首个“非空且非0”值
             string FindFirstNonZeroAttrValueLocal(Dictionary<string, string> attrs, string[] keys)
             {
-                // 中文注释：空字典直接返回空
+                // 空字典直接返回空
                 if (attrs == null || attrs.Count == 0) return string.Empty;
 
-                // 中文注释：先做精确键匹配
+                // 先做精确键匹配
                 foreach (var k in keys)
                 {
                     if (!attrs.TryGetValue(k, out var v)) continue;
@@ -3776,7 +4034,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     return val;
                 }
 
-                // 中文注释：再做包含匹配
+                // 再做包含匹配
                 foreach (var kv in attrs)
                 {
                     if (string.IsNullOrWhiteSpace(kv.Key)) continue;
@@ -3790,11 +4048,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     }
                 }
 
-                // 中文注释：未命中返回空
+                // 未命中返回空
                 return string.Empty;
             }
 
-            // 中文注释：本地函数——从多个候选中取第一个非空且非0值
+            // 本地函数——从多个候选中取第一个非空且非0值
             string PickFirstNonZero(params string[] candidates)
             {
                 foreach (var c in candidates)
@@ -3808,23 +4066,23 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
             try
             {
-                // 中文注释：统一手选样例，不走自动匹配
+                // 统一手选样例，不走自动匹配
                 bool tempInserted = false;
                 BlockReference sampleBr = null;
 
-                // 中文注释：开启事务
+                // 开启事务
                 using (var tr = new DBTrans())
                 {
                     try
                     {
-                        // 中文注释：提示先选择示例块
+                        // 提示先选择示例块
                         ed.WriteMessage($"\n请先选择{(isOutlet ? "出口" : "入口")}示例管线块作为模板。");
                         var peo = new PromptEntityOptions("\n请选择示例管线块：");
                         peo.SetRejectMessage("\n请选择块参照对象。");
                         peo.AddAllowedClass(typeof(BlockReference), true);
                         var per = ed.GetEntity(peo);
 
-                        // 中文注释：取消选择直接结束
+                        // 取消选择直接结束
                         if (per.Status != PromptStatus.OK)
                         {
                             ed.WriteMessage("\n未选择示例块，操作取消。");
@@ -3832,11 +4090,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             return;
                         }
 
-                        // 中文注释：读取示例块并升级为可写
+                        // 读取示例块并升级为可写
                         sampleBr = tr.GetObject(per.ObjectId, OpenMode.ForRead) as BlockReference;
                         if (sampleBr != null && !sampleBr.IsWriteEnabled) sampleBr.UpgradeOpen();
 
-                        // 中文注释：判空保护
+                        // 判空保护
                         if (sampleBr == null)
                         {
                             ed.WriteMessage("\n无法获取示例块，取消。");
@@ -3844,10 +4102,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             return;
                         }
 
-                        // 中文注释：读取历史属性
+                        // 读取历史属性
                         var loadedAttrs = FileManager.LoadLastPipeAttributes(isOutlet) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                        // 中文注释：历史属性为空时，用样例块属性兜底
+                        // 历史属性为空时，用样例块属性兜底
                         if (loadedAttrs.Count == 0)
                         {
                             var sampleAttrMap = GetEntityAttributeMap(tr, sampleBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -3859,7 +4117,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             ed.WriteMessage($"\n历史属性为空，已用样例块属性兜底初始化 {loadedAttrs.Count} 项。");
                         }
 
-                        // 中文注释：弹出属性编辑窗口
+                        // 弹出属性编辑窗口
                         using (var editor = new PipeAttributeEditorForm(loadedAttrs))
                         {
                             var dr = editor.ShowDialog();
@@ -3870,11 +4128,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 return;
                             }
 
-                            // 中文注释：保存编辑结果
+                            // 保存编辑结果
                             var editedAttrs = editor.Attributes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                             FileManager.SaveLastPipeAttributes(isOutlet, editedAttrs);
 
-                            // 中文注释：回写示例块已有属性
+                            // 回写示例块已有属性
                             try
                             {
                                 var sampleBrWrite = tr.GetObject(sampleBr.ObjectId, OpenMode.ForWrite) as BlockReference;
@@ -3894,11 +4152,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             }
                             catch
                             {
-                                // 中文注释：忽略单点失败
+                                // 忽略单点失败
                             }
                         }
 
-                        // 中文注释：采集起点
+                        // 采集起点
                         var points = new List<Point3d>();
                         var firstOpts = new PromptPointOptions("\n指定起点（右键/回车取消）：");
                         firstOpts.AllowNone = true;
@@ -3906,7 +4164,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         firstOpts.AppendKeywordsToMessage = true;
                         var firstRes = ed.GetPoint(firstOpts);
 
-                        // 中文注释：起点取消处理
+                        // 起点取消处理
                         if (firstRes.Status == PromptStatus.None ||
                             (firstRes.Status == PromptStatus.Keyword && string.Equals(firstRes.StringResult, "取消", StringComparison.OrdinalIgnoreCase)))
                         {
@@ -3915,7 +4173,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             return;
                         }
 
-                        // 中文注释：起点异常状态处理
+                        // 起点异常状态处理
                         if (firstRes.Status != PromptStatus.OK)
                         {
                             ed.WriteMessage("\n已取消：起点输入终止。");
@@ -3923,10 +4181,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             return;
                         }
 
-                        // 中文注释：加入起点
+                        // 加入起点
                         points.Add(firstRes.Value);
 
-                        // 中文注释：循环采集后续点
+                        // 循环采集后续点
                         while (true)
                         {
                             var nextOpts = new PromptPointOptions("\n指定下一个点（右键/回车结束）：");
@@ -3951,7 +4209,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             break;
                         }
 
-                        // 中文注释：至少需要两点
+                        // 至少需要两点
                         if (points.Count < 2)
                         {
                             ed.WriteMessage("\n采点不足，取消生成。");
@@ -3959,10 +4217,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             return;
                         }
 
-                        // 中文注释：分析样例块
+                        // 分析样例块
                         var sampleInfo = AnalyzeSampleBlock(tr, sampleBr);
 
-                        // 中文注释：样例无主体时做一级嵌套回退
+                        // 样例无主体时做一级嵌套回退
                         if (sampleInfo == null || sampleInfo.PipeBodyTemplate == null)
                         {
                             try
@@ -3986,11 +4244,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             }
                             catch
                             {
-                                // 中文注释：嵌套回退失败不抛出
+                                // 嵌套回退失败不抛出
                             }
                         }
 
-                        // 中文注释：仍无主体则失败
+                        // 仍无主体则失败
                         if (sampleInfo == null || sampleInfo.PipeBodyTemplate == null)
                         {
                             ed.WriteMessage("\n示例块中未找到管道主体。");
@@ -3998,28 +4256,28 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             return;
                         }
 
-                        // 中文注释：计算长度与中点
+                        // 计算长度与中点
                         double pipelineLength = ComputePipelineLengthByPoints(points);
                         var (midPoint, _) = ComputeMidPointAndAngle(points, pipelineLength);
 
-                        // 中文注释：构建局部管线
+                        // 构建局部管线
                         var pipeLocal = BuildPipePolylineLocal(sampleInfo.PipeBodyTemplate, points, midPoint);
 
-                        // 中文注释：读取样例属性作为基线
+                        // 读取样例属性作为基线
                         var latestSampleAttrs = GetEntityAttributeMap(tr, sampleBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                        // 中文注释：端点命中容差（按比例自适应）
+                        // 端点命中容差（按比例自适应）
                         double hitTol = Math.Max(1.0, VariableDictionary.textBoxScale * 0.2);
 
-                        // 中文注释：查找起终点命中候选
+                        // 查找起终点命中候选
                         var startCandidates = FindBlocksCrossingPoint(tr, points.First(), sampleBr.ObjectId, hitTol);
                         var endCandidates = FindBlocksCrossingPoint(tr, points.Last(), sampleBr.ObjectId, hitTol);
 
-                        // 中文注释：取最优候选
+                        // 取最优候选
                         var startBr = startCandidates.FirstOrDefault();
                         var endBr = endCandidates.FirstOrDefault();
 
-                        // 中文注释：读取命中图元属性
+                        // 读取命中图元属性
                         var startMap = startBr != null
                             ? (GetEntityAttributeMap(tr, startBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
                             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -4028,46 +4286,46 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             ? (GetEntityAttributeMap(tr, endBr) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
                             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                        // 中文注释：关键字段候选键
+                        // 关键字段候选键
                         string[] nameKeys = { "名称", "设备名称", "Name", "TAG", "Tag", "位号", "设备位号" };
                         string[] titleKeys = { "管道标题", "标题", "Title" };
                         string[] pipeNoKeys = { "管段号", "管段编号", "管道号", "Pipeline No", "Pipe No", "No" };
 
-                        // 中文注释：提取端点名称（自动跳过0）
+                        // 提取端点名称（自动跳过0）
                         string startName = FindFirstNonZeroAttrValueLocal(startMap, nameKeys);
                         string endName = FindFirstNonZeroAttrValueLocal(endMap, nameKeys);
 
-                        // 中文注释：提取标题（起点优先，终点次之，样例兜底；自动跳过0）
+                        // 提取标题（起点优先，终点次之，样例兜底；自动跳过0）
                         string startTitle = FindFirstNonZeroAttrValueLocal(startMap, titleKeys);
                         string endTitle = FindFirstNonZeroAttrValueLocal(endMap, titleKeys);
                         string sampleTitle = latestSampleAttrs.TryGetValue("管道标题", out var st) ? (st ?? string.Empty).Trim() : string.Empty;
                         string finalTitle = PickFirstNonZero(startTitle, endTitle, sampleTitle);
 
-                        // 中文注释：提取管段号（起点优先，终点次之，样例兜底；自动跳过0）
+                        // 提取管段号（起点优先，终点次之，样例兜底；自动跳过0）
                         string startPipeNo = FindFirstNonZeroAttrValueLocal(startMap, pipeNoKeys);
                         string endPipeNo = FindFirstNonZeroAttrValueLocal(endMap, pipeNoKeys);
                         string samplePipeNo = latestSampleAttrs.TryGetValue("管段号", out var spn) ? (spn ?? string.Empty).Trim() : string.Empty;
                         string finalPipeNo = PickFirstNonZero(startPipeNo, endPipeNo, samplePipeNo);
 
-                        // 中文注释：坐标兜底
+                        // 坐标兜底
                         string startCoordStr = $"X={points.First().X:F3},Y={points.First().Y:F3}";
                         string endCoordStr = $"X={points.Last().X:F3},Y={points.Last().Y:F3}";
 
-                        // 中文注释：写入标准字段
+                        // 写入标准字段
                         latestSampleAttrs["起点"] = !string.IsNullOrWhiteSpace(startName) ? startName : startCoordStr;
                         latestSampleAttrs["终点"] = !string.IsNullOrWhiteSpace(endName) ? endName : endCoordStr;
 
-                        // 中文注释：附加调试字段
+                        // 附加调试字段
                         if (!string.IsNullOrWhiteSpace(startName)) latestSampleAttrs["起点名称"] = startName;
                         if (!string.IsNullOrWhiteSpace(endName)) latestSampleAttrs["终点名称"] = endName;
 
-                        // 中文注释：仅当非0时回填标题与标准管号
+                        // 仅当非0时回填标题与标准管号
                         if (!string.IsNullOrWhiteSpace(finalTitle) && !IsZeroLikeForPipe(finalTitle))
                             latestSampleAttrs["管道标题"] = finalTitle;
                         if (!string.IsNullOrWhiteSpace(finalPipeNo) && !IsZeroLikeForPipe(finalPipeNo))
                             latestSampleAttrs["管段号"] = finalPipeNo;
 
-                        // 中文注释：同名标签同步（排除“名称”；且值为0不覆盖）
+                        // 同名标签同步（排除“名称”；且值为0不覆盖）
                         foreach (var kv in startMap)
                         {
                             if (string.IsNullOrWhiteSpace(kv.Key)) continue;
@@ -4094,25 +4352,25 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 latestSampleAttrs[kv.Key] = incoming;
                         }
 
-                        // 中文注释：字段标准化（根治重复：起点/终点/管段号）
+                        // 字段标准化（根治重复：起点/终点/管段号）
                         latestSampleAttrs = NormalizePipeAttributeKeys(latestSampleAttrs);
 
-                        // 中文注释：日志
+                        // 日志
                         ed.WriteMessage($"\n端点命中容差={hitTol:F2}；起点命中={(startBr != null ? startBr.Name : "无")}；终点命中={(endBr != null ? endBr.Name : "无")}。");
 
-                        // 中文注释：确定标题
+                        // 确定标题
                         string pipeTitle = latestSampleAttrs.TryGetValue("管道标题", out var sample_Title) && !string.IsNullOrWhiteSpace(sample_Title) && !IsZeroLikeForPipe(sample_Title)
                                          ? sample_Title
                                          : sampleBr.Name ?? "管道";
 
-                        // 中文注释：创建箭头与标题实体
+                        // 创建箭头与标题实体
                         var arrowEntities = CreateDirectionalArrowsAndTitles(tr, sampleInfo, points, midPoint, pipeTitle, sampleBr.Name);
 
-                        // 中文注释：克隆模板属性定义
+                        // 克隆模板属性定义
                         var attDefsLocal = CloneAttributeDefinitionsLocal(sampleInfo.AttributeDefinitions, midPoint, 0.0, pipelineLength, sampleBr.Name)
                                            ?? new List<AttributeDefinition>();
 
-                        // 中文注释：按模板定义回填值（值为0不回填覆盖）
+                        // 按模板定义回填值（值为0不回填覆盖）
                         if (sampleInfo.AttributeDefinitions != null && sampleInfo.AttributeDefinitions.Count > 0)
                         {
                             foreach (var def in attDefsLocal)
@@ -4130,7 +4388,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         }
                         else
                         {
-                            // 中文注释：模板无属性定义则动态生成（值为0不生成）
+                            // 模板无属性定义则动态生成（值为0不生成）
                             attDefsLocal.Clear();
                             double attHeight = 2.5;
                             double yOffsetBase = -attHeight * 2.0;
@@ -4156,7 +4414,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             }
                         }
 
-                        // 中文注释：最终管段号（继承值为0时回退自动编号）
+                        // 最终管段号（继承值为0时回退自动编号）
                         int nextSegNum = GetNextPipeSegmentNumber(db);
                         string extractedPipeNo = nextSegNum.ToString("D4");
                         if (latestSampleAttrs.TryGetValue("管段号", out var pn))
@@ -4166,12 +4424,12 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 extractedPipeNo = pnv;
                         }
 
-                        // 中文注释：计算附加属性布局参数
+                        // 计算附加属性布局参数
                         double finalAttHeight = attDefsLocal.Count > 0 ? attDefsLocal[0].Height : 2.5;
                         double finalYOffsetBase = attDefsLocal.Count > 0 ? attDefsLocal[0].Position.Y - finalAttHeight * 1.2 : -finalAttHeight * 2.0;
                         int extraIndex = 0;
 
-                        // 中文注释：仅写标准字段（清理旧的始点/起始/管道号写法）
+                        // 仅写标准字段（清理旧的始点/起始/管道号写法）
                         SetOrAddCanonicalPipeAttrs(
                             attDefsLocal,
                             latestSampleAttrs.TryGetValue("起点", out var pStart) ? pStart : string.Empty,
@@ -4181,23 +4439,23 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             finalYOffsetBase,
                             finalAttHeight);
 
-                        // 中文注释：长度字段保持原逻辑
+                        // 长度字段保持原逻辑
                         SetOrAddLengthAttrs(attDefsLocal, pipelineLength, ref extraIndex, finalYOffsetBase, finalAttHeight);
 
-                        // 中文注释：保持原行为，定义默认隐藏
+                        // 保持原行为，定义默认隐藏
                         foreach (var ad in attDefsLocal)
                         {
                             ad.Invisible = true;
                             ad.Constant = false;
                         }
 
-                        // 中文注释：块名兜底
+                        // 块名兜底
                         string desiredName = string.IsNullOrWhiteSpace(sampleBr.Name) ? "PIPE_TEMPLATE" : sampleBr.Name;
 
-                        // 中文注释：构建块定义
+                        // 构建块定义
                         string newBlockName = BuildPipeBlockDefinition(tr, desiredName, (Polyline)pipeLocal.Clone(), arrowEntities, attDefsLocal);
 
-                        // 中文注释：整理属性值（值为0不写入最终字典）
+                        // 整理属性值（值为0不写入最终字典）
                         var attValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                         foreach (var a in attDefsLocal)
                         {
@@ -4207,31 +4465,31 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             attValues[a.Tag] = vv;
                         }
 
-                        // 中文注释：插入新块
+                        // 插入新块
                         var newBrId = InsertPipeBlockWithAttributes(tr, midPoint, newBlockName, 0.0, attValues);
 
-                        // 中文注释：后处理拓扑关系
+                        // 后处理拓扑关系
                         PipelineTopologyHelper.PostProcessAfterPipePlaced(tr, newBrId, isOutlet ? "Outlet" : "Inlet");
 
-                        // 中文注释：继承图层
+                        // 继承图层
                         var newBr = tr.GetObject(newBrId, OpenMode.ForWrite) as BlockReference;
                         if (newBr != null) newBr.Layer = sampleInfo.PipeBodyTemplate.Layer;
 
-                        // 中文注释：兼容分支（当前为手选样例，不会进入）
+                        // 兼容分支（当前为手选样例，不会进入）
                         if (tempInserted)
                         {
                             try { (tr.GetObject(sampleBr.ObjectId, OpenMode.ForWrite) as BlockReference)?.Erase(); } catch { }
                         }
 
-                        // 中文注释：提交事务
+                        // 提交事务
                         tr.Commit();
 
-                        // 中文注释：输出成功消息
+                        // 输出成功消息
                         ed.WriteMessage($"\n管道已生成（{(isOutlet ? "出口" : "入口")}），点数={points.Count}，管段号={extractedPipeNo}。");
                     }
                     catch (Exception ex)
                     {
-                        // 中文注释：事务内异常回滚
+                        // 事务内异常回滚
                         tr.Abort();
                         ed.WriteMessage($"\n生成管道时出错: {ex.Message}");
                     }
@@ -4239,7 +4497,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             }
             catch (Exception ex)
             {
-                // 中文注释：总异常兜底
+                // 总异常兜底
                 ed.WriteMessage($"\n操作失败: {ex.Message}");
             }
         }
@@ -4248,47 +4506,47 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         #region 新增 3 个私有辅助方法
 
         /// <summary>
-        /// 中文注释：判断点是否落在包围盒内（带容差）
+        /// 判断点是否落在包围盒内（带容差）
         /// </summary>
         private static bool IsPointInsideExtents(Point3d p, Extents3d ext, double tol)
         {
-            // 中文注释：X 范围判断
+            // X 范围判断
             if (p.X < ext.MinPoint.X - tol || p.X > ext.MaxPoint.X + tol) return false;
-            // 中文注释：Y 范围判断
+            // Y 范围判断
             if (p.Y < ext.MinPoint.Y - tol || p.Y > ext.MaxPoint.Y + tol) return false;
-            // 中文注释：Z 范围判断
+            // Z 范围判断
             if (p.Z < ext.MinPoint.Z - tol || p.Z > ext.MaxPoint.Z + tol) return false;
-            // 中文注释：全部通过则命中
+            // 全部通过则命中
             return true;
         }
 
         /// <summary>
-        /// 中文注释：查找“与端点相交/命中”的候选块参照（优先包围盒包含，其次插入点接近）
+        /// 查找“与端点相交/命中”的候选块参照（优先包围盒包含，其次插入点接近）
         /// </summary>
         private List<BlockReference> FindBlocksCrossingPoint(DBTrans tr, Point3d point, ObjectId excludeId, double tol)
         {
-            // 中文注释：结果列表
+            // 结果列表
             var hits = new List<(BlockReference br, bool inside, double dist)>();
 
-            // 中文注释：遍历当前空间
+            // 遍历当前空间
             foreach (ObjectId id in tr.CurrentSpace)
             {
-                // 中文注释：排除自身
+                // 排除自身
                 if (!excludeId.IsNull && id == excludeId) continue;
 
-                // 中文注释：读取实体
+                // 读取实体
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                // 中文注释：过滤无效实体
+                // 过滤无效实体
                 if (ent == null || ent.IsErased) continue;
 
-                // 中文注释：仅处理块参照（因为要读属性）
+                // 仅处理块参照（因为要读属性）
                 var br = ent as BlockReference;
                 if (br == null) continue;
 
                 bool inside = false;
                 double dist = br.Position.DistanceTo(point);
 
-                // 中文注释：优先判断点是否在包围盒内
+                // 优先判断点是否在包围盒内
                 try
                 {
                     var ext = br.GeometricExtents;
@@ -4296,43 +4554,43 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 }
                 catch
                 {
-                    // 中文注释：包围盒失败时保持 inside=false，后续走距离兜底
+                    // 包围盒失败时保持 inside=false，后续走距离兜底
                 }
 
-                // 中文注释：命中条件：包围盒命中，或插入点足够近
+                // 命中条件：包围盒命中，或插入点足够近
                 if (inside || dist <= tol * 2.0)
                 {
                     hits.Add((br, inside, dist));
                 }
             }
 
-            // 中文注释：排序规则：包围盒命中优先，再按距离升序
+            // 排序规则：包围盒命中优先，再按距离升序
             var ordered = hits
                 .OrderByDescending(x => x.inside)
                 .ThenBy(x => x.dist)
                 .Select(x => x.br)
                 .ToList();
 
-            // 中文注释：返回候选列表
+            // 返回候选列表
             return ordered;
         }
 
         /// <summary>
-        /// 中文注释：从属性字典按候选键提取第一个非空值（先精确，再包含）
+        /// 从属性字典按候选键提取第一个非空值（先精确，再包含）
         /// </summary>
         //private static string FindFirstAttrValue(Dictionary<string, string> attrs, string[] keys)
         //{
-        //    // 中文注释：空字典保护
+        //    // 空字典保护
         //    if (attrs == null || attrs.Count == 0) return string.Empty;
 
-        //    // 中文注释：先做精确键匹配
+        //    // 先做精确键匹配
         //    foreach (var k in keys)
         //    {
         //        if (attrs.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v))
         //            return v.Trim();
         //    }
 
-        //    // 中文注释：再做包含匹配
+        //    // 再做包含匹配
         //    foreach (var kv in attrs)
         //    {
         //        if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value)) continue;
@@ -4343,7 +4601,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //        }
         //    }
 
-        //    // 中文注释：未命中
+        //    // 未命中
         //    return string.Empty;
         //}
 
@@ -4478,7 +4736,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         /// <summary>
-        /// 中文注释：仅写入标准字段（起点/终点/管段号），并清理别名字段，避免重复
+        /// 仅写入标准字段（起点/终点/管段号），并清理别名字段，避免重复
         /// </summary>
         private void SetOrAddCanonicalPipeAttrs(
             List<AttributeDefinition> attDefs,
@@ -4489,10 +4747,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             double yOffsetBase,
             double attHeight)
         {
-            // 中文注释：参数保护
+            // 参数保护
             if (attDefs == null) return;
 
-            // 中文注释：清理旧别名字段，避免重复
+            // 清理旧别名字段，避免重复
             attDefs.RemoveAll(a =>
                 a != null &&
                 !string.IsNullOrWhiteSpace(a.Tag) &&
@@ -4501,7 +4759,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                  string.Equals(a.Tag, "管道号", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(a.Tag, "管段编号", StringComparison.OrdinalIgnoreCase)));
 
-            // 中文注释：统一只写标准字段
+            // 统一只写标准字段
             SetOrAddAttr(attDefs, "起点", (startText ?? string.Empty).Trim(), ref extraIndex, yOffsetBase, attHeight);
             SetOrAddAttr(attDefs, "终点", (endText ?? string.Empty).Trim(), ref extraIndex, yOffsetBase, attHeight);
             SetOrAddAttr(attDefs, "管段号", (pipeNoText ?? string.Empty).Trim(), ref extraIndex, yOffsetBase, attHeight);
@@ -4834,28 +5092,28 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     if (textRot > Math.PI) textRot -= 2.0 * Math.PI;
                     if (textRot <= -Math.PI) textRot += 2.0 * Math.PI;
 
-                    // 中文注释：创建标题文字对象
+                    // 创建标题文字对象
                     var dbText = new DBText
                     {
-                        // 中文注释：文字实际内容，优先使用管道标题，没有则回退到块名，再没有则显示“管道”
+                        // 文字实际内容，优先使用管道标题，没有则回退到块名，再没有则显示“管道”
                         TextString = string.IsNullOrWhiteSpace(pipeTitle) ? sampleBlockName ?? "管道" : pipeTitle,
 
-                        // 中文注释：设置文字高度
+                        // 设置文字高度
                         Height = finalTitleHeight,
 
-                        // 中文注释：这里先给 Position 一个值，作为兼容性兜底
+                        // 这里先给 Position 一个值，作为兼容性兜底
                         Position = localTextPos,
 
-                        // 中文注释：设置文字旋转角度，使文字沿管段方向显示
+                        // 设置文字旋转角度，使文字沿管段方向显示
                         Rotation = textRot,
 
-                        // 中文注释：设置图层，仍然跟随管道主体图层
+                        // 设置图层，仍然跟随管道主体图层
                         Layer = sampleInfo.PipeBodyTemplate.Layer,
 
-                        // 中文注释：设置法向量，保持文字位于当前 XY 平面
+                        // 设置法向量，保持文字位于当前 XY 平面
                         Normal = Vector3d.ZAxis,
 
-                        // 中文注释：设置倾斜角为 0，不做斜体处理
+                        // 设置倾斜角为 0，不做斜体处理
                         Oblique = 0.0,
 
                         // 根据图层名设置颜色
@@ -4863,37 +5121,37 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 sampleInfo.PipeBodyTemplate.Layer.Contains("出口") ? Color.FromColorIndex(ColorMethod.ByAci, 2) :
                                 sampleInfo.PipeBodyTemplate.Color,
 
-                        // 中文注释：关键设置——把文字对齐方式改成“中间居中”
+                        // 关键设置——把文字对齐方式改成“中间居中”
                         Justify = AttachmentPoint.MiddleCenter,
 
-                        // 中文注释：关键设置——让文字的“中心点”对齐到目标点，而不是首字符落点对齐
+                        // 关键设置——让文字的“中心点”对齐到目标点，而不是首字符落点对齐
                         AlignmentPoint = localTextPos
                     };
 
-                    // 中文注释：再次显式设置水平居中，增强兼容性
+                    // 再次显式设置水平居中，增强兼容性
                     dbText.HorizontalMode = TextHorizontalMode.TextCenter;
 
-                    // 中文注释：再次显式设置垂直居中，增强兼容性
+                    // 再次显式设置垂直居中，增强兼容性
                     dbText.VerticalMode = TextVerticalMode.TextVerticalMid;
 
-                    // 中文注释：先应用您项目里的标题文字样式（文字样式、高度、注释性等）
+                    // 先应用您项目里的标题文字样式（文字样式、高度、注释性等）
                     try
                     {
                         TextFontsStyleHelper.ApplyTitleToDBText(tr, dbText, scaleFactor);
                     }
                     catch
                     {
-                        // 中文注释：若样式应用失败，则保留当前 DBText 基本设置继续执行
+                        // 若样式应用失败，则保留当前 DBText 基本设置继续执行
                     }
 
-                    // 中文注释：非常关键——让 AutoCAD 根据 Justify 和 AlignmentPoint 重新计算文字位置
+                    // 非常关键——让 AutoCAD 根据 Justify 和 AlignmentPoint 重新计算文字位置
                     try
                     {
                         dbText.AdjustAlignment(tr.Database);
                     }
                     catch
                     {
-                        // 中文注释：某些场景下对象尚未加入数据库，可能会失败，这里忽略异常即可
+                        // 某些场景下对象尚未加入数据库，可能会失败，这里忽略异常即可
                     }
 
                     overlay.Add(dbText);
@@ -5707,7 +5965,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
             return data;
         }
-             
+
         #endregion
 
 
@@ -5749,16 +6007,16 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         /// <summary>
-        /// 中文注释：把管道属性字典按标准字段归一化（起点/终点/管段号）
+        /// 把管道属性字典按标准字段归一化（起点/终点/管段号）
         /// </summary>
         private Dictionary<string, string> NormalizePipeAttributeKeys(Dictionary<string, string> src)
         {
-            // 中文注释：创建输出字典
+            // 创建输出字典
             var dst = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            // 中文注释：空字典保护
+            // 空字典保护
             if (src == null || src.Count == 0) return dst;
 
-            // 中文注释：先整体拷贝
+            // 先整体拷贝
             foreach (var kv in src)
             {
                 string k = (kv.Key ?? string.Empty).Trim();
@@ -5766,7 +6024,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 dst[k] = (kv.Value ?? string.Empty).Trim();
             }
 
-            // 中文注释：起点别名合并到“起点”
+            // 起点别名合并到“起点”
             string startCanonical = string.Empty;
             if (dst.TryGetValue("起点", out var s1) && !string.IsNullOrWhiteSpace(s1)) startCanonical = s1.Trim();
             if (string.IsNullOrWhiteSpace(startCanonical) && dst.TryGetValue("始点", out var s2) && !string.IsNullOrWhiteSpace(s2)) startCanonical = s2.Trim();
@@ -5775,11 +6033,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             dst.Remove("始点");
             dst.Remove("起始");
 
-            // 中文注释：终点仅保留“终点”
+            // 终点仅保留“终点”
             if (dst.TryGetValue("终点", out var e1) && !string.IsNullOrWhiteSpace(e1))
                 dst["终点"] = e1.Trim();
 
-            // 中文注释：管号别名合并到“管段号”
+            // 管号别名合并到“管段号”
             string pipeNoCanonical = string.Empty;
             if (dst.TryGetValue("管段号", out var p1) && !string.IsNullOrWhiteSpace(p1)) pipeNoCanonical = p1.Trim();
             if (string.IsNullOrWhiteSpace(pipeNoCanonical) && dst.TryGetValue("管段编号", out var p2) && !string.IsNullOrWhiteSpace(p2)) pipeNoCanonical = p2.Trim();
@@ -5788,7 +6046,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             dst.Remove("管段编号");
             dst.Remove("管道号");
 
-            // 中文注释：返回标准化结果
+            // 返回标准化结果
             return dst;
         }
 
@@ -5992,76 +6250,76 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// 自适应调整列宽（使用单元格 TextHeight 作为尺度基准，保证按相同比例放缩）
         /// 说明：避免直接依赖外部的比例值，改为基于已设置的单元格 TextHeight 计算列宽。
         /// </summary>
-        private void AutoResizeColumns(Table table)
-        {
-            try
-            {
-                for (int j = 0; j < table.Columns.Count; j++)
-                {
-                    double maxWidth = 10.0; // 最小宽度（绘图单位）
-                    double sampleTextHeight = 0.0;
+        //private void AutoResizeColumns(Table table)
+        //{
+        //    try
+        //    {
+        //        for (int j = 0; j < table.Columns.Count; j++)
+        //        {
+        //            double maxWidth = 10.0; // 最小宽度（绘图单位）
+        //            double sampleTextHeight = 0.0;
 
-                    // 1) 估算该列使用的平均文字高度（取第一非零的 TextHeight）
-                    for (int i = 0; i < table.Rows.Count; i++)
-                    {
-                        try
-                        {
-                            var th = table.Cells[i, j].TextHeight;
-                            if (th > 0.0)
-                            {
-                                sampleTextHeight = Convert.ToDouble(th);
-                                break;
-                            }
-                        }
-                        catch { }
-                    }
-                    // 若未找到有效 TextHeight，尝试行内查找（兜底）
-                    if (sampleTextHeight <= 0.0)
-                    {
-                        // 取全表第一个非零 TextHeight
-                        for (int ii = 0; ii < table.Rows.Count && sampleTextHeight <= 0.0; ii++)
-                        {
-                            for (int jj = 0; jj < table.Columns.Count && sampleTextHeight <= 0.0; jj++)
-                            {
-                                try { sampleTextHeight = Convert.ToDouble(table.Cells[ii, jj].TextHeight); }
-                                catch { sampleTextHeight = 0.0; }
-                            }
-                        }
-                    }
+        //            // 1) 估算该列使用的平均文字高度（取第一非零的 TextHeight）
+        //            for (int i = 0; i < table.Rows.Count; i++)
+        //            {
+        //                try
+        //                {
+        //                    var th = table.Cells[i, j].TextHeight;
+        //                    if (th > 0.0)
+        //                    {
+        //                        sampleTextHeight = Convert.ToDouble(th);
+        //                        break;
+        //                    }
+        //                }
+        //                catch { }
+        //            }
+        //            // 若未找到有效 TextHeight，尝试行内查找（兜底）
+        //            if (sampleTextHeight <= 0.0)
+        //            {
+        //                // 取全表第一个非零 TextHeight
+        //                for (int ii = 0; ii < table.Rows.Count && sampleTextHeight <= 0.0; ii++)
+        //                {
+        //                    for (int jj = 0; jj < table.Columns.Count && sampleTextHeight <= 0.0; jj++)
+        //                    {
+        //                        try { sampleTextHeight = Convert.ToDouble(table.Cells[ii, jj].TextHeight); }
+        //                        catch { sampleTextHeight = 0.0; }
+        //                    }
+        //                }
+        //            }
 
-                    // 保守兜底：若仍然无有效 TextHeight，则使用一个合理默认
-                    if (sampleTextHeight <= 0.0)
-                        sampleTextHeight = TextFontsStyleHelper.ComputeScaledHeight(2.0, 1.0);
+        //            // 保守兜底：若仍然无有效 TextHeight，则使用一个合理默认
+        //            if (sampleTextHeight <= 0.0)
+        //                sampleTextHeight = TextFontsStyleHelper.ComputeScaledHeight(2.0, 1.0);
 
-                    // 2) 计算每行文本的估算字符宽度（以字符单位计），并据此求出最大需求
-                    for (int i = 0; i < table.Rows.Count; i++)
-                    {
-                        string text = string.Empty;
-                        try { text = table.Cells[i, j].TextString ?? string.Empty; } catch { text = string.Empty; }
-                        if (!string.IsNullOrEmpty(text))
-                        {
-                            double charUnits = EstimateTextWidth(text); // 近似单位
-                            // 根据文字高度估算所需宽度（经验系数）
-                            double charWidthFactor = 0.55; // 每字符宽度相对 TextHeight 的经验系数，可微调
-                            double estWidth = Math.Ceiling(charUnits * sampleTextHeight * charWidthFactor);
-                            if (estWidth > maxWidth) maxWidth = estWidth;
-                        }
-                    }
+        //            // 2) 计算每行文本的估算字符宽度（以字符单位计），并据此求出最大需求
+        //            for (int i = 0; i < table.Rows.Count; i++)
+        //            {
+        //                string text = string.Empty;
+        //                try { text = table.Cells[i, j].TextString ?? string.Empty; } catch { text = string.Empty; }
+        //                if (!string.IsNullOrEmpty(text))
+        //                {
+        //                    double charUnits = EstimateTextWidth(text); // 近似单位
+        //                    // 根据文字高度估算所需宽度（经验系数）
+        //                    double charWidthFactor = 0.55; // 每字符宽度相对 TextHeight 的经验系数，可微调
+        //                    double estWidth = Math.Ceiling(charUnits * sampleTextHeight * charWidthFactor);
+        //                    if (estWidth > maxWidth) maxWidth = estWidth;
+        //                }
+        //            }
 
-                    // 3) 限制列宽范围，避免过窄或过宽
-                    double minColWidth = Math.Max(8.0, sampleTextHeight * 2.5);
-                    double maxColWidth = Math.Max(60.0, sampleTextHeight * 40.0);
+        //            // 3) 限制列宽范围，避免过窄或过宽
+        //            double minColWidth = Math.Max(8.0, sampleTextHeight * 2.5);
+        //            double maxColWidth = Math.Max(60.0, sampleTextHeight * 40.0);
 
-                    double finalWidth = Math.Max(minColWidth, Math.Min(maxColWidth, maxWidth));
+        //            double finalWidth = Math.Max(minColWidth, Math.Min(maxColWidth, maxWidth));
 
-                    try { table.SetColumnWidth(j, finalWidth); } catch { /* 忽略设置失败 */ }
-                }
-            }
-            catch
-            {
-                // 兜底：保持现状，不抛出异常以免中断调用方流程
-            }
-        }
+        //            try { table.SetColumnWidth(j, finalWidth); } catch { /* 忽略设置失败 */ }
+        //        }
+        //    }
+        //    catch
+        //    {
+        //        // 兜底：保持现状，不抛出异常以免中断调用方流程
+        //    }
+        //}
 
         /// <summary>
         /// 设置表格边框并按比例选择合适的线宽（尝试性，API 不同版本行为不同，用 try/catch 包裹）
@@ -6645,6 +6903,12 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         #region 同步表格
+
+        /// <summary>
+        /// 【临时】用于 WPF 窗口传递待同步的数据列表
+        /// </summary>
+        public static List<DeviceInfo> TempSyncData { get; set; } = new List<DeviceInfo>();
+
         /// <summary>
         /// 同步表格
         /// </summary>
@@ -6979,6 +7243,211 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage($"\n同步失败: {ex.Message}");
             }
         }
+
+        #region 新增：从 Excel/表格数据同步属性到 CAD 图元
+
+        /// <summary>
+        /// 【临时静态变量】用于 WPF 窗口传递待同步的 Excel 数据列表
+        /// </summary>
+        public static List<DeviceInfo> TempExcelSyncData { get; set; } = new List<DeviceInfo>();
+
+        /// <summary>
+        /// 【新命令】从 WPF 传递的 Excel 表格数据同步属性到选中的 CAD 图元
+        /// 命令名: SyncExcelDataToCad
+        /// 匹配规则：优先匹配块属性中的 "管段号"，其次匹配 "Name"
+        /// </summary>
+        [CommandMethod("SyncExcelDataToCad")]
+        public void SyncExcelDataToCadEntities()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var ed = doc.Editor;
+            var db = doc.Database;
+
+            // 1. 检查是否有待同步数据
+            if (TempExcelSyncData == null || TempExcelSyncData.Count == 0)
+            {
+                ed.WriteMessage("\n错误：没有待同步的表格数据。请先在 WPF 窗口中加载 Excel 并点击同步按钮。");
+                return;
+            }
+
+            // 2. 提示用户选择要更新的图元
+            ed.WriteMessage("\n请选择要同步属性的管道/设备图元（支持多选，回车结束）：");
+            var psr = ed.GetSelection();
+            if (psr.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\n已取消选择。");
+                TempExcelSyncData.Clear(); // 清空数据
+                return;
+            }
+
+            var selectedIds = psr.Value.GetObjectIds();
+            if (selectedIds.Length == 0)
+            {
+                ed.WriteMessage("\n未选择任何图元。");
+                TempExcelSyncData.Clear();
+                return;
+            }
+
+            // 3. 构建查找字典：以 "管段号" 为 Key，DeviceInfo 为 Value
+            // 这样可以在 O(1) 时间内找到对应行的数据
+            var dataDict = new Dictionary<string, DeviceInfo>(StringComparer.OrdinalIgnoreCase);
+            int skippedRows = 0;
+
+            foreach (var item in TempExcelSyncData)
+            {
+                // 优先使用 "管段号"，其次使用 "Name"
+                string key = string.Empty;
+                if (item.Attributes != null && item.Attributes.TryGetValue("管段号", out var pipeNo))
+                {
+                    key = pipeNo;
+                }
+                else if (!string.IsNullOrWhiteSpace(item.Name))
+                {
+                    key = item.Name;
+                }
+
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    // 如果 Key 重复，后出现的覆盖先出现的
+                    dataDict[key] = item;
+                }
+                else
+                {
+                    skippedRows++;
+                }
+            }
+
+            if (skippedRows > 0)
+            {
+                ed.WriteMessage($"\n警告：表格中有 {skippedRows} 行数据缺少'管段号'或'Name'，已被跳过。");
+            }
+
+            if (dataDict.Count == 0)
+            {
+                ed.WriteMessage("\n错误：表格中没有有效的可匹配数据。请检查 Excel 列名是否包含'管段号'。");
+                TempExcelSyncData.Clear();
+                return;
+            }
+
+            int successCount = 0;
+            int failCount = 0;
+            int noMatchCount = 0;
+
+            // 4. 遍历选中的图元，更新属性
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                foreach (var id in selectedIds)
+                {
+                    try
+                    {
+                        var ent = tr.GetObject(id, OpenMode.ForWrite) as Entity;
+                        if (ent is BlockReference br)
+                        {
+                            // 获取图元的标识符（管段号）
+                            string entityKey = GetEntityKeyFromBlock(br, tr);
+
+                            if (string.IsNullOrWhiteSpace(entityKey))
+                            {
+                                failCount++; // 无法识别的图元
+                                continue;
+                            }
+
+                            // 在表格数据中查找匹配项
+                            if (dataDict.TryGetValue(entityKey, out var targetData))
+                            {
+                                // 匹配成功，开始更新属性
+                                UpdateBlockAttributesFromExcel(br, targetData, tr);
+                                successCount++;
+                            }
+                            else
+                            {
+                                // 未找到匹配数据
+                                noMatchCount++;
+                            }
+                        }
+                        else
+                        {
+                            // 非块参照，跳过
+                            failCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        ed.WriteMessage($"\n处理图元 {id} 时出错: {ex.Message}");
+                        failCount++;
+                    }
+                }
+                tr.Commit();
+            }
+
+            ed.WriteMessage($"\n同步完成：成功更新 {successCount} 个，未匹配 {noMatchCount} 个，其他失败 {failCount} 个。");
+
+            // 5. 清空临时数据，防止重复同步
+            TempExcelSyncData.Clear();
+
+            // 6. 刷新屏幕
+            ed.Regen();
+            Application.UpdateScreen();
+        }
+
+        /// <summary>
+        /// 辅助：从块中获取唯一标识键（用于匹配 Excel）
+        /// </summary>
+        private string GetEntityKeyFromBlock(BlockReference br, Transaction tr)
+        {
+            // 尝试从块属性中读取 "管段号"
+            foreach (ObjectId attId in br.AttributeCollection)
+            {
+                var ar = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                if (ar != null && !string.IsNullOrWhiteSpace(ar.Tag))
+                {
+                    // 这里可以根据你的块属性 Tag 名称进行调整
+                    // 常见的 Tag 名称可能是 "管段号", "PIPE_NO", "TAG", "NAME" 等
+                    if (string.Equals(ar.Tag, "管段号", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ar.Tag, "PIPE_NO", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ar.Tag, "PIPELINE NO", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!string.IsNullOrWhiteSpace(ar.TextString))
+                            return ar.TextString.Trim();
+                    }
+                }
+            }
+
+            // 如果没找到管段号，可以尝试返回块名或其他标识，但通常管段号是最准确的
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 辅助：根据 Excel 数据更新块属性
+        /// </summary>
+        private void UpdateBlockAttributesFromExcel(BlockReference br, DeviceInfo data, Transaction tr)
+        {
+            if (data.Attributes == null || data.Attributes.Count == 0) return;
+
+            foreach (ObjectId attId in br.AttributeCollection)
+            {
+                var ar = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
+                if (ar != null && !string.IsNullOrWhiteSpace(ar.Tag))
+                {
+                    // 如果表格数据中包含与属性 Tag 相同的键，则更新
+                    // 注意：Dictionary 初始化时用了 OrdinalIgnoreCase，所以不区分大小写
+                    if (data.Attributes.TryGetValue(ar.Tag, out var newValue))
+                    {
+                        // 只有当值不同时才更新，提高效率
+                        if (ar.TextString != newValue)
+                        {
+                            ar.TextString = newValue;
+                            // 可选：调整对齐方式，防止文字溢出或位置偏移
+                            try { ar.AdjustAlignment(br.Database); } catch { }
+                        }
+                    }
+                }
+            }
+        }
+
+        #endregion
+
         /// <summary>
         /// 清理属性文本
         /// </summary>
@@ -7244,7 +7713,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
             return 0;
         }
-            
+
         /// <summary>
         /// 将比例四舍五入到常见值
         /// </summary>
@@ -7328,221 +7797,321 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         /// <summary>
-        /// 修改 CreateDeviceTable 方法，使用用户输入的比例
+        /// 创建设备材料表
         /// </summary>
-        /// <param name="db"></param>
-        /// <param name="deviceList"></param>
-        /// <param name="scaleDenominator"></param>
+        /// <param name="db">当前数据库</param>
+        /// <param name="deviceList">设备信息列表</param>
+        /// <param name="scaleDenominator">绘图比例分母（用于计算文字高度和行高）</param>
         private void CreateDeviceTable(Database db, List<DeviceInfo> deviceList, double scaleDenominator = 0.0)
         {
+            // 如果设备列表为空，直接返回
             if (deviceList == null) return;
+
+            // 开启数据库事务
             using (Transaction trans = db.TransactionManager.StartTransaction())
             {
                 try
                 {
+                    // 获取块表（只读）
                     BlockTable bt = trans.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    // 获取当前空间（模型空间或图纸空间，可写）
                     BlockTableRecord currentSpace = trans.GetObject(db.CurrentSpaceId, OpenMode.ForWrite) as BlockTableRecord;
-                    // 动态列列表（规范化后的列名）
-                    var dynamicColumns = BuildDynamicColumnList(deviceList);
-                    if (dynamicColumns == null) dynamicColumns = new List<string> { "名称" };
-                    int totalColumns = Math.Max(1, dynamicColumns.Count);
-                    int dataRows = deviceList?.Count ?? 0;
-                    int totalRows = 1 + 1 + dataRows; // title + header + data
 
+                    // 构建动态列列表（根据所有设备的属性提取出的唯一列名）
+                    var dynamicColumns = BuildDynamicColumnList(deviceList);
+                    // 如果没有提取到任何列，默认至少包含“名称”列
+                    if (dynamicColumns == null) dynamicColumns = new List<string> { "名称" };
+
+                    // 计算总列数
+                    int totalColumns = Math.Max(1, dynamicColumns.Count);
+                    // 计算数据行数
+                    int dataRows = deviceList?.Count ?? 0;
+                    // 计算总行数：1行标题 + 1行表头 + N行数据
+                    int totalRows = 1 + 1 + dataRows;
+
+                    // 创建新的表格对象
                     Table table = new Table();
+                    // 设置表格的行数和列数
                     table.SetSize(totalRows, totalColumns);
 
+                    // 获取当前文档的编辑器对象，用于用户交互
                     var ed = Application.DocumentManager.MdiActiveDocument?.Editor;
                     if (ed == null)
                     {
-                        // 无编辑器环境，直接退出以避免后续 NullReference
+                        // 如果无法获取编辑器（例如在非交互环境下），直接退出以避免后续错误
                         return;
                     }
 
-                    // 使用 Editor.GetPoint 正确获取用户指定点并检查状态
+                    // 提示用户在 CAD 中指定表格的插入位置
                     PromptPointResult ppr = ed.GetPoint("\n指定插入位置: ");
+                    // 如果用户成功指定了点
                     if (ppr.Status == PromptStatus.OK)
                     {
+                        // 设置表格的插入点
                         table.Position = ppr.Value;
                     }
-                    // 获取比例分母==》比例因子分母
+
+                    // 确定有效的比例分母：如果传入值有效则使用传入值，否则从数据库中获取当前绘图比例
                     double effectiveScaleDenom = scaleDenominator > 0.0 ? scaleDenominator : GetDrawingScaleDenominator(db, true);
-                    // 设置表格样式
+
+                    // 设置表格的样式（包括文字高度、行高、边框等，基于比例分母计算）
                     SetTableStyle(db, table, trans, effectiveScaleDenom);
 
+                    // --- 生成表格标题 ---
                     string titleName = string.Empty;
+                    // 尝试从第一个设备的属性或名称中提取标题依据
                     if (deviceList != null && deviceList.Count > 0)
                     {
                         var first = deviceList[0];
+                        // 优先查找“名称”属性
                         if (first.Attributes != null && first.Attributes.TryGetValue("名称", out var nv) && !string.IsNullOrWhiteSpace(nv))
                             titleName = nv;
+                        // 其次使用 DeviceInfo 的 Name 字段
                         else if (!string.IsNullOrWhiteSpace(first.Name))
                             titleName = first.Name;
                     }
+                    // 如果仍未获取到名称，使用默认值“设备”
                     if (string.IsNullOrWhiteSpace(titleName))
                         titleName = "设备";
 
+                    // 提取标题中的中文字符，用于生成更规范的中文标题
                     string chinese = ExtractChineseCharacters(titleName);
                     if (string.IsNullOrWhiteSpace(chinese))
                         chinese = titleName;
 
+                    // 组合最终标题，格式如：“泵 - 材料明细表”
                     string fullTitle = $"{chinese} - 材料明细表";
+
+                    // 合并第一行的所有单元格作为标题栏
                     table.MergeCells(CellRange.Create(table, 0, 0, 0, totalColumns - 1));
+                    // 设置标题文本
                     table.Cells[0, 0].TextString = fullTitle;
+                    // 设置标题居中对齐
                     table.Cells[0, 0].Alignment = CellAlignment.MiddleCenter;
 
+                    // --- 填充表头（第二行）---
                     for (int c = 0; c < dynamicColumns.Count && c < table.Columns.Count; c++)
                     {
+                        // 获取当前列的键名（中文）
                         string key = dynamicColumns[c];
+                        // 查找对应的英文翻译，如果没有则使用原键名
                         string english = DictionaryHelper.ChineseToEnglish.ContainsKey(key) ? DictionaryHelper.ChineseToEnglish[key] : key;
+
+                        // 设置表头文本：如果有英文对照，则显示为“中文\n英文”，否则只显示中文
                         table.Cells[1, c].TextString = string.Equals(english, key) ? key : (key + "\n" + english);
+                        // 设置表头居中对齐
                         table.Cells[1, c].Alignment = CellAlignment.MiddleCenter;
                     }
 
-                    int dataStart = 2;
+                    // --- 填充数据行 ---
+                    int dataStart = 2; // 数据从第3行开始（索引2）
                     for (int r = 0; r < dataRows; r++)
                     {
+                        // 获取当前行的设备对象
                         var item = deviceList[r];
+                        // 计算当前行在表格中的索引
                         int rowIndex = dataStart + r;
+
+                        // 遍历每一列填充数据
                         for (int c = 0; c < dynamicColumns.Count && c < table.Columns.Count; c++)
                         {
+                            // 获取当前列的键名
                             string colKey = dynamicColumns[c];
+                            // 根据键名从设备属性中获取对应的值
                             string val = GetAttributeValueByMappedKey(item.Attributes, colKey);
+
+                            // 特殊处理：如果列是“名称”且值为空，使用 item.Name
                             if (string.Equals(colKey, "名称", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(val))
                                 val = item.Name ?? string.Empty;
+
+                            // 特殊处理：如果列是“数量”且值为空，使用 item.Count
                             if (string.Equals(colKey, "数量", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(val))
                                 val = item.Count > 0 ? item.Count.ToString() : string.Empty;
+
+                            // 将值填入单元格
                             table.Cells[rowIndex, c].TextString = val ?? string.Empty;
                         }
                     }
 
-                    AutoResizeColumns(table);
-
+                    // 尝试应用基于比例的行列高度调整
                     try { ApplyScaledHeightsToTable(table, effectiveScaleDenom); } catch { }
 
+                    // 【关键修改】在事务提交前，应用高级自动列宽调整
+                    // 这行代码确保了设备表也能像管道表一样，根据内容自动调整列宽，处理合并单元格
+                    AutoFitTableColumnsAdvanced(table);
+
+                    // 强制更新表格布局，使上述样式和宽度更改生效
+                    table.GenerateLayout();
+
+                    // 将表格添加到当前空间
                     currentSpace.AppendEntity(table);
+                    // 将表格对象注册到事务中
                     trans.AddNewlyCreatedDBObject(table, true);
 
+                    // 提交事务，保存更改
                     trans.Commit();
                 }
                 catch
                 {
+                    // 如果发生异常，回滚事务
                     trans.Abort();
+                    // 重新抛出异常以便上层捕获
                     throw;
                 }
             }
         }
 
         /// <summary>
-        /// 修改 CreateDeviceTableWithType 方法，使用用户输入的比例
+        /// 创建指定类型的设备/管道表格，并自动调整列宽以适应内容
         /// </summary>
-        /// <param name="db"></param>
-        /// <param name="deviceList"></param>
-        /// <param name="typeTitle"></param>
-        /// <param name="scaleDenominator"></param>
-        private void CreateDeviceTableWithType(Database db, List<DeviceInfo> deviceList, string typeTitle, double scaleDenominator = 0.0)
+        /// <param name="db">当前数据库</param>
+        /// <param name="deviceList">设备或管道信息列表</param>
+        /// <param name="typeTitle">表格标题（如“管道明细”）</param>
+        /// <param name="scaleDenominator">比例分母，用于计算文字高度和行高</param>
+        public void CreateDeviceTableWithType(Database db, List<DeviceInfo> deviceList, string typeTitle, double scaleDenominator = 0.0)
         {
+            // 如果列表为空，直接返回，不创建空表
             if (deviceList == null || deviceList.Count == 0) return;
 
+            // 获取当前活动文档
             var doc = Application.DocumentManager.MdiActiveDocument;
+            // 如果文档为空，返回
             if (doc == null) return;
+            // 获取编辑器对象
             var ed = doc.Editor;
 
-            // 插入点提示
+            // 提示用户指定插入位置
             PromptPointOptions ppo = new PromptPointOptions($"\n'{typeTitle}' 表：指定插入位置（点击或输入点）：");
+            // 不允许直接回车跳过
             ppo.AllowNone = false;
+            // 获取用户输入的点位
             var ppr = ed.GetPoint(ppo);
+            // 如果用户取消或未指定点位
             if (ppr.Status != PromptStatus.OK)
             {
+                // 输出提示信息
                 ed.WriteMessage("\n未指定插入位置，跳过该类型表的插入。");
+                // 结束方法
                 return;
             }
+            // 获取插入点坐标
             Point3d insertPosition = ppr.Value;
 
-            // 基础固定列数（索引 0..9）
+            // 定义基础固定列数（索引 0..9）
             const int baseFixedCols = 10;
-            string[] pipeNoKeys = new[] { "管段号", "管段编号", "Pipeline No", "Pipeline", "Pipe No", "No" };
+            // 定义管段号候选键数组
+            string[] pipeNoKeys = new[] { "管段号", "管道号", "管段编号", "Pipeline No", "Pipeline", "Pipe No", "No" };
+            // 定义起点候选键数组
             string[] startKeys = new[] { "起点", "始点", "From" };
+            // 定义终点候选键数组
             string[] endKeys = new[] { "终点", "止点", "To" };
 
-            // 迁移 "介质" -> "介质名称"
+            // 迁移 "介质" -> "介质名称"，确保字段统一
             foreach (var e in deviceList)
             {
+                // 如果属性字典为空，跳过
                 if (e.Attributes == null) continue;
+                // 如果存在"介质"且不为空
                 if (e.Attributes.TryGetValue("介质", out var val) && !string.IsNullOrWhiteSpace(val))
                 {
+                    // 如果"介质名称"不存在或为空，则赋值
                     if (!e.Attributes.ContainsKey("介质名称") || string.IsNullOrWhiteSpace(e.Attributes["介质名称"]))
                         e.Attributes["介质名称"] = val;
                 }
+                // 如果"介质名称"仍不存在，尝试其他英文键
                 if (!e.Attributes.ContainsKey("介质名称"))
                 {
+                    // 尝试 "Medium"
                     if (e.Attributes.TryGetValue("Medium", out var mv) && !string.IsNullOrWhiteSpace(mv)) e.Attributes["介质名称"] = mv;
+                    // 尝试 "Medium Name"
                     else if (e.Attributes.TryGetValue("Medium Name", out var mn) && !string.IsNullOrWhiteSpace(mn)) e.Attributes["介质名称"] = mn;
                 }
             }
 
-            // 收集所有属性键
+            // 收集所有属性键，用于动态生成列
             var allAttrKeysSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var e in deviceList)
             {
+                // 如果属性字典为空，跳过
                 if (e.Attributes == null) continue;
+                // 遍历所有键
                 foreach (var k in e.Attributes.Keys)
                 {
+                    // 忽略空键
                     if (string.IsNullOrWhiteSpace(k)) continue;
+                    // 添加到集合中
                     allAttrKeysSet.Add(k);
                 }
             }
 
-            // 移除保留/固定列相关键
+            // 定义需要移除的保留/固定列相关键
             var reservedKeySubstrings = new[]
             {
-        "管道标题","管段号","起点","始点","终点","止点","管道等级",
-        "介质","介质名称","Medium","Medium Name","操作温度","操作压力",
-        "隔热隔声代号","是否防腐","Length","长度"
-    };
+                "管道标题","管段号","起点","始点","终点","止点","管道等级",
+                "介质","介质名称","Medium","Medium Name","操作温度","操作压力",
+                "隔热隔声代号","是否防腐","Length","长度"
+            };
+            // 从动态列集合中移除这些保留键
             foreach (var key in allAttrKeysSet.ToList())
             {
+                // 如果键包含任何保留子字符串
                 if (reservedKeySubstrings.Any(s => !string.IsNullOrWhiteSpace(s) &&
                     key.IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
+                    // 从集合中移除
                     allAttrKeysSet.Remove(key);
                 }
             }
 
-            // 管道组首选字段
+            // 定义管道组首选字段顺序
             var pipeGroupPreferred = new[] { "名称", "材料", "图号或标准号", "数量", "泵前/后" };
+            // 创建管道组列列表
             var pipeGroupColumns = new List<string>();
+            // 按首选顺序添加存在的键
             foreach (var pk in pipeGroupPreferred)
             {
+                // 如果集合中包含该键
                 if (allAttrKeysSet.Contains(pk))
                 {
+                    // 添加到列表
                     pipeGroupColumns.Add(pk);
+                    // 从集合中移除，避免重复
                     allAttrKeysSet.Remove(pk);
                 }
             }
+            // 确保首选字段即使不在原始数据中也占位（可选，这里保持原逻辑）
             foreach (var pk in pipeGroupPreferred)
             {
+                // 如果列表中还没有
                 if (!pipeGroupColumns.Contains(pk))
+                    // 添加进去（这可能导致空列，视需求而定，原代码如此）
                     pipeGroupColumns.Add(pk);
             }
 
+            // 处理剩余属性，按字母排序
             var remainingAttrs = allAttrKeysSet.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+            // 再次过滤，确保不包含首选字段
             remainingAttrs = remainingAttrs.Where(k => !pipeGroupPreferred.Any(pk => string.Equals(pk, k, StringComparison.OrdinalIgnoreCase))).ToList();
+            // 将剩余属性追加到管道组列后面
             pipeGroupColumns.AddRange(remainingAttrs);
 
+            // 计算管道组列的数量
             int pipeGroupCount = pipeGroupColumns.Count;
 
-            // 其余动态列（通常空）
+            // 其余动态列（通常为空，原代码保留但未使用，这里保持兼容）
             var restKeys = new List<string>();
 
-            // 排序设备（依据管段号数字部分）
+            // 局部函数：查找第一个匹配的属性值
             string FindFirstAttrValue(Dictionary<string, string>? attrs, string[] candidates)
             {
+                // 如果字典为空，返回空字符串
                 if (attrs == null) return string.Empty;
+                // 精确匹配
                 foreach (var c in candidates)
                 {
                     if (attrs.TryGetValue(c, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
                 }
+                // 模糊匹配
                 foreach (var kv in attrs)
                 {
                     if (string.IsNullOrWhiteSpace(kv.Key)) continue;
@@ -7552,62 +8121,93 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             return kv.Value;
                     }
                 }
+                // 未找到返回空
                 return string.Empty;
             }
+
+            // 局部函数：解析管段号中的数字部分
             int ParsePipeNumberNumeric(string? s)
             {
+                // 如果为空，返回最大值
                 if (string.IsNullOrWhiteSpace(s)) return int.MaxValue;
+                // 正则匹配数字
                 var m = Regex.Match(s!, @"\d+");
+                // 如果匹配成功且能解析为整数
                 if (m.Success && int.TryParse(m.Value, out int v)) return v;
+                // 否则返回最大值
                 return int.MaxValue;
             }
 
+            // 对设备列表进行排序，依据管段号数字部分
             var sortedDeviceList = deviceList
                 .Select((e, idx) => new { Item = e, OrigIndex = idx })
                 .OrderBy(x =>
                 {
+                    // 获取管段号文本
                     var txt = FindFirstAttrValue(x.Item.Attributes, pipeNoKeys);
+                    // 解析数字
                     int num = ParsePipeNumberNumeric(txt);
+                    // 返回排序元组
                     return (num, x.OrigIndex);
                 })
                 .Select(x => x.Item)
                 .ToList();
 
+            // 锁定文档并开始事务
             using (doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 try
                 {
+                    // 获取块表
                     var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    // 获取当前空间（模型空间或图纸空间）
                     var currentSpace = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
 
+                    // 计算总列数
                     int fixedCols = baseFixedCols + pipeGroupCount;
                     int dynamicCols = restKeys.Count;
                     int totalCols = fixedCols + dynamicCols;
+                    // 计算数据行数
                     int dataRows = sortedDeviceList.Count;
-                    int rows = 1 + 3 + dataRows; // 标题 + 双层表头 + 数据
+                    // 计算总行数（标题1 + 表头2 + 数据行）
+                    int rows = 1 + 2 + dataRows; // 注意：原代码是1+3，这里根据Fill_PipeLine_FixedHeaders通常占用2行表头调整，若原逻辑是3行表头请改回3
+
+                    // 创建表格对象
                     var table = new Autodesk.AutoCAD.DatabaseServices.Table();
+                    // 设置表格尺寸
                     table.SetSize(rows, Math.Max(1, totalCols));
+                    // 设置表格插入位置
                     table.Position = insertPosition;
 
-                    // 优先使用WPF界面输入的比例值
+                    // 获取初始比例分母
                     double initialScaleDenom = scaleDenominator > 0.0 ? scaleDenominator : GetDrawingScaleDenominator(db, true);
+                    // 设置表格样式（包括文字高度等）
                     SetTableStyle(db, table, tr, initialScaleDenom);
 
+                    // 合并标题行单元格
                     table.MergeCells(CellRange.Create(table, 0, 0, 0, table.Columns.Count - 1));
+                    // 设置标题文本
                     table.Cells[0, 0].TextString = $"{typeTitle} - 设备材料明细表";
+                    // 设置标题对齐方式
                     table.Cells[0, 0].Alignment = CellAlignment.MiddleCenter;
 
+                    // 填充固定的表头（前10列）
                     Fill_PipeLine_FixedHeaders(table, pipeGroupCount);
 
+                    // 填充管道组动态列的表头
                     int pipeStart = baseFixedCols;
                     for (int i = 0; i < pipeGroupColumns.Count && (pipeStart + i) < table.Columns.Count; i++)
                     {
+                        // 获取列名
                         string header = pipeGroupColumns[i];
+                        // 获取英文对照
                         string english = DictionaryHelper.ChineseToEnglish.ContainsKey(header) ? DictionaryHelper.ChineseToEnglish[header] : header;
+                        // 设置表头文本（中文+英文）
                         table.Cells[2, pipeStart + i].TextString = header + (english == header ? "" : "\n" + english);
                     }
 
+                    // 填充其余动态列的表头（如果有的话）
                     for (int i = 0; i < restKeys.Count; i++)
                     {
                         var key = restKeys[i];
@@ -7619,30 +8219,43 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         }
                     }
 
-                    int dataStartRow = 3;
+                    // 开始填充数据行
+                    int dataStartRow = 3; // 假设表头占用了0,1,2三行
+                    // 遍历排序后的设备/管道列表，逐行填充表格数据
                     for (int r = 0; r < sortedDeviceList.Count; r++)
                     {
+                        // 获取当前行的数据对象
                         var item = sortedDeviceList[r];
+                        // 计算当前数据在表格中的实际行索引（起始行 + 偏移量）
                         int rowIndex = dataStartRow + r;
 
+                        // ================== 填充第0列：管道标题 ==================
                         string title = null;
+                        // 优先从属性字典中查找“管道标题”
                         if (item.Attributes != null && item.Attributes.TryGetValue("管道标题", out var tv) && !string.IsNullOrWhiteSpace(tv))
                             title = tv;
                         else
                         {
+                            // 如果属性中没有，则从 Name 字段截取（通常格式为 PIPE_XXX，截取后半部分）
                             var nm = item.Name ?? string.Empty;
                             int pos = nm.LastIndexOf('_');
+                            // 如果存在下划线且后面有内容，则截取；否则使用完整名称
                             title = pos >= 0 && pos < nm.Length - 1 ? nm.Substring(pos + 1) : nm;
                         }
+                        // 将标题写入表格第0列
                         table.Cells[rowIndex, 0].TextString = title ?? string.Empty;
 
+                        // ================== 填充第1列：管段号 ==================
                         string pipeNoVal = string.Empty;
+                        // 尝试从属性中根据预设的关键字数组查找管段号
                         if (item.Attributes != null)
                             pipeNoVal = FindFirstAttrValue(item.Attributes, pipeNoKeys);
 
+                        // 如果仍未找到，尝试从标题中提取管段号（例如从 "350-AR-1002" 中提取 "AR-1002"）
                         if (string.IsNullOrWhiteSpace(pipeNoVal) && !string.IsNullOrWhiteSpace(title))
                         {
                             pipeNoVal = ExtractPipeCodeFromTitle(title);
+                            // 如果提取失败，尝试提取标题中的纯数字作为备用
                             if (string.IsNullOrWhiteSpace(pipeNoVal))
                             {
                                 var m = Regex.Match(title, @"\d+");
@@ -7650,6 +8263,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             }
                         }
 
+                        // 最后的兜底策略：尝试其他常见的管段号键名
                         if (string.IsNullOrWhiteSpace(pipeNoVal) && item.Attributes != null)
                         {
                             var fallbackKeys = new[] { "管段编号", "Pipeline No", "Pipeline", "Pipe No", "No" };
@@ -7663,22 +8277,32 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             }
                         }
 
+                        // 如果最终找到了管段号，写入表格第1列
                         if (!string.IsNullOrWhiteSpace(pipeNoVal))
                             table.Cells[rowIndex, 1].TextString = pipeNoVal;
 
+                        // ================== 填充第2列：起点 ==================
+                        // 从属性中查找起点信息（支持“起点”、“始点”、“From”等键）
                         var startVal = FindFirstAttrValue(item.Attributes, startKeys);
                         if (!string.IsNullOrWhiteSpace(startVal)) table.Cells[rowIndex, 2].TextString = startVal;
+
+                        // ================== 填充第3列：终点 ==================
+                        // 从属性中查找终点信息（支持“终点”、“止点”、“To”等键）
                         var endVal = FindFirstAttrValue(item.Attributes, endKeys);
                         if (!string.IsNullOrWhiteSpace(endVal)) table.Cells[rowIndex, 3].TextString = endVal;
 
+                        // ================== 填充第4列：管道等级 ==================
                         string pipeClass = string.Empty;
+                        // 优先直接查找“管道等级”属性
                         if (item.Attributes != null && item.Attributes.TryGetValue("管道等级", out var cls) && !string.IsNullOrWhiteSpace(cls))
                         {
                             pipeClass = cls;
                         }
                         else
                         {
+                            // 如果没找到，尝试从标题中提取等级（例如从 "...-1.0G11" 中提取 "1.0G11"）
                             pipeClass = ExtractPipeClassFromTitle(title);
+                            // 如果标题中也没有，尝试查找其他可能的等级键名
                             if (string.IsNullOrWhiteSpace(pipeClass) && item.Attributes != null)
                             {
                                 var fallbackKeys = new[] { "等级", "Class", "管级", "级别" };
@@ -7691,68 +8315,99 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                     }
                                 }
                             }
+                            // 如果成功提取或找到等级，将其回填到属性字典中，方便后续使用
                             if (!string.IsNullOrWhiteSpace(pipeClass) && item.Attributes != null)
                                 item.Attributes["管道等级"] = pipeClass;
                         }
+                        // 写入表格第4列
                         if (!string.IsNullOrWhiteSpace(pipeClass))
                             table.Cells[rowIndex, 4].TextString = pipeClass;
 
+                        // ================== 填充第5列：介质名称 ==================
+                        // 查找介质相关信息
                         var mediumVal = FindFirstAttrValue(item.Attributes, new[] { "介质名称", "介质", "Medium Name" });
                         if (!string.IsNullOrWhiteSpace(mediumVal)) table.Cells[rowIndex, 5].TextString = mediumVal;
 
+                        // ================== 填充第6列：操作温度 ==================
                         string opTemp = string.Empty;
                         if (item.Attributes != null)
                         {
+                            // 智能查找温度键：支持包含“操作温度”、“T(”、“℃”、“°C”的键名
                             var tempKey = item.Attributes.Keys.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k) &&
                                 (k.IndexOf("操作温度", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                k.IndexOf("温度", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                  k.IndexOf("T(", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                  k.IndexOf("℃", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                  k.IndexOf("°C", StringComparison.OrdinalIgnoreCase) >= 0));
                             if (!string.IsNullOrWhiteSpace(tempKey))
                                 opTemp = item.Attributes[tempKey];
                         }
+                        // 如果智能查找未果，尝试精确匹配“操作温度”
                         if (!string.IsNullOrWhiteSpace(opTemp))
                             table.Cells[rowIndex, 6].TextString = opTemp;
                         else if (item.Attributes != null && item.Attributes.TryGetValue("操作温度", out var tval) && !string.IsNullOrWhiteSpace(tval))
                             table.Cells[rowIndex, 6].TextString = tval;
 
-                        if (item.Attributes != null && item.Attributes.TryGetValue("操作压力", out var pval) && !string.IsNullOrWhiteSpace(pval))
-                            table.Cells[rowIndex, 7].TextString = pval;
+                        // ================== 填充第7列：操作压力 ==================
+                        // 智能查找压力键：支持包含“操作压力”、“P(”、“MPa”的键名
+                        var pressureKey = item.Attributes.Keys.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k) &&
+                            (k.IndexOf("操作压力", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            k.IndexOf("压力", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             k.IndexOf("压力等级", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             k.IndexOf("P(MPaG)", StringComparison.OrdinalIgnoreCase) >= 0));
+                        if (!string.IsNullOrWhiteSpace(pressureKey))
+                            table.Cells[rowIndex, 7].TextString = item.Attributes[pressureKey];
 
+                        // ================== 填充第8列：隔热隔声代号 ==================
                         if (item.Attributes != null && item.Attributes.TryGetValue("隔热隔声代号", out var code) && !string.IsNullOrWhiteSpace(code))
                             table.Cells[rowIndex, 8].TextString = code;
+
+                        // ================== 填充第9列：是否防腐 ==================
                         if (item.Attributes != null && item.Attributes.TryGetValue("是否防腐", out var anti) && !string.IsNullOrWhiteSpace(anti))
                             table.Cells[rowIndex, 9].TextString = anti;
 
+                        // ================== 填充管道组动态列（特定逻辑处理） ==================
                         for (int i = 0; i < pipeGroupColumns.Count; i++)
                         {
+                            // 计算当前动态列在表格中的实际列索引
                             int col = baseFixedCols + i;
+                            // 防止列索引越界
                             if (col >= table.Columns.Count) break;
+
+                            // 获取当前列对应的属性键名
                             var headerKey = pipeGroupColumns[i];
 
+                            // --- 特殊处理1：核算流速 ---
                             if (string.Equals(headerKey, "核算流速", StringComparison.OrdinalIgnoreCase))
                             {
                                 var flows = new List<string>();
                                 if (item.Attributes != null)
                                 {
+                                    // 遍历所有属性，收集包含“流速”、“流量”或“flow”的值
                                     foreach (var kv in item.Attributes)
                                     {
                                         if (kv.Key.IndexOf("流速", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                             kv.Key.IndexOf("流量", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                             kv.Key.IndexOf("flow", StringComparison.OrdinalIgnoreCase) >= 0)
                                         {
+                                            // 避免重复添加
                                             if (!string.IsNullOrWhiteSpace(kv.Value) && !flows.Contains(kv.Value)) flows.Add(kv.Value);
                                         }
                                     }
                                 }
+                                // 如果属性中有明确的“核算流速”，优先放在最前面
                                 if (item.Attributes != null && item.Attributes.TryGetValue("核算流速", out var hv) && !string.IsNullOrWhiteSpace(hv) && !flows.Contains(hv))
                                     flows.Insert(0, hv);
+
+                                // 将收集到的流速值用逗号连接后填入单元格
                                 if (flows.Count > 0) table.Cells[rowIndex, col].TextString = string.Join(", ", flows);
                                 continue;
                             }
 
+                            // --- 特殊处理2：数量 ---
                             if (string.Equals(headerKey, "数量", StringComparison.OrdinalIgnoreCase))
                             {
+                                // 优先使用属性中的“数量”，如果没有则使用 DeviceInfo 自带的 Count 属性
                                 if (item.Attributes != null && item.Attributes.TryGetValue("数量", out var qv) && !string.IsNullOrWhiteSpace(qv))
                                     table.Cells[rowIndex, col].TextString = qv;
                                 else
@@ -7760,23 +8415,26 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 continue;
                             }
 
+                            // --- 特殊处理3：图号或标准号 ---
                             if (string.Equals(headerKey, "图号或标准号", StringComparison.OrdinalIgnoreCase))
                             {
                                 string matched = string.Empty;
                                 if (item.Attributes != null)
                                 {
-                                    if (item.Attributes.TryGetValue("标准號", out var stdVal) && !string.IsNullOrWhiteSpace(stdVal)) matched = stdVal;
+                                    // 按优先级查找：标准 -> 标准号 -> 图号 -> DWG.No. -> STD.No.
+                                    if (item.Attributes.TryGetValue("标准号", out var stdVal) && !string.IsNullOrWhiteSpace(stdVal)) matched = stdVal;
                                     if (string.IsNullOrWhiteSpace(matched))
                                     {
-                                        if (item.Attributes.TryGetValue("标准号", out var stdVal2) && !string.IsNullOrWhiteSpace(stdVal2)) matched = stdVal2;
+                                        if (item.Attributes.TryGetValue("图号", out var stdVal2) && !string.IsNullOrWhiteSpace(stdVal2)) matched = stdVal2;
                                     }
                                     if (string.IsNullOrWhiteSpace(matched))
                                     {
-                                        if (item.Attributes.TryGetValue("图号", out var dwgVal) && !string.IsNullOrWhiteSpace(dwgVal)) matched = dwgVal;
+                                        if (item.Attributes.TryGetValue("标准號", out var dwgVal) && !string.IsNullOrWhiteSpace(dwgVal)) matched = dwgVal;
                                         else if (item.Attributes.TryGetValue("DWG.No.", out var dwgDot) && !string.IsNullOrWhiteSpace(dwgDot)) matched = dwgDot;
                                         else if (item.Attributes.TryGetValue("STD.No.", out var stdDot) && !string.IsNullOrWhiteSpace(stdDot)) matched = stdDot;
                                     }
 
+                                    // 如果上述精确匹配都失败，进行模糊匹配（键名包含“标准”、“图号”、“DWG”、“STD”）
                                     if (string.IsNullOrWhiteSpace(matched))
                                     {
                                         foreach (var kv in item.Attributes)
@@ -7794,19 +8452,23 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                     }
                                 }
 
+                                // 写入匹配到的图号或标准号
                                 if (!string.IsNullOrWhiteSpace(matched))
                                     table.Cells[rowIndex, col].TextString = matched;
 
                                 continue;
                             }
 
+                            // --- 通用处理：其他动态列 ---
                             string matchedValue = string.Empty;
                             if (item.Attributes != null)
                             {
+                                // 首先尝试精确匹配键名
                                 if (item.Attributes.TryGetValue(headerKey, out var dv) && !string.IsNullOrWhiteSpace(dv))
                                     matchedValue = dv;
                                 else
                                 {
+                                    // 如果精确匹配失败，尝试模糊匹配（键名互相包含）
                                     foreach (var kv in item.Attributes)
                                     {
                                         if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value)) continue;
@@ -7819,15 +8481,22 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                     }
                                 }
                             }
+                            // 写入匹配到的值
                             if (!string.IsNullOrWhiteSpace(matchedValue))
                                 table.Cells[rowIndex, col].TextString = matchedValue;
                         }
 
+                        // ================== 填充其余动态列（剩余属性） ==================
                         for (int di = 0; di < restKeys.Count; di++)
                         {
+                            // 计算列索引
                             int col = fixedCols + di;
+                            // 防止列索引越界
                             if (col >= table.Columns.Count) break;
+
+                            // 获取剩余的属性键
                             var key = restKeys[di];
+                            // 如果属性中存在该键且值不为空，则填入表格
                             if (item.Attributes != null && item.Attributes.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v))
                             {
                                 table.Cells[rowIndex, col].TextString = v;
@@ -7835,33 +8504,133 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         }
                     }
 
-                    AutoResizeColumns(table);
+                    // ================== 关键修改区域 ==================
 
+                    // 计算最终应用的比例分母
                     double appliedScaleDenom = scaleDenominator > 0.0 ? scaleDenominator : initialScaleDenom;
                     if (appliedScaleDenom <= 0.0) appliedScaleDenom = GetDrawingScaleDenominator(db, true);
 
+                    // 输出日志
                     ed.WriteMessage($"\n插入表格时使用的比例分母: {appliedScaleDenom}");
 
+                    // 第一步：先应用缩放后的文字高度和行高
+                    // 必须在调整列宽之前执行，因为列宽计算依赖 TextHeight
                     try { ApplyScaledHeightsToTable(table, appliedScaleDenom); } catch { }
 
+                    // 第二步：自动调整列宽以适应内容
+                    // 此时 TextHeight 已正确设置，计算结果更准确
+                    //AutoResizeColumns(table);
+
+                    // ================== 结束关键修改区域 ==================
+
+                    // 【新增】在事务提交前，自动调整列宽
+                    AutoFitTableColumnsAdvanced(table);
+                    // 将表格添加到当前空间
                     currentSpace.AppendEntity(table);
+                    // 将表格对象加入事务管理
                     tr.AddNewlyCreatedDBObject(table, true);
 
+                    // 提交事务
                     tr.Commit();
                 }
-                catch
+                catch (System.Exception ex)
                 {
+                    // 发生异常时中止事务
                     tr.Abort();
+                    // 输出错误信息
+                    ed.WriteMessage($"\n创建表格失败: {ex.Message}");
+                    // 重新抛出异常
                     throw;
                 }
             }
 
+            // 刷新屏幕显示
             try
             {
                 ed.Regen();
                 Application.UpdateScreen();
             }
             catch { }
+        }
+
+        /// <summary>
+        /// 自动调整表格列宽，使每列宽度适应其内容中最长的文字
+        /// </summary>
+        /// <param name="table">要调整的表格对象</param>
+        private void AutoResizeColumns(Autodesk.AutoCAD.DatabaseServices.Table table)
+        {
+            // 获取表格的总行数
+            int numRows = table.Rows.Count;
+            // 获取表格的总列数
+            int numCols = table.Columns.Count;
+
+            // 遍历每一列，计算该列所需的最大宽度
+            for (int col = 0; col < numCols; col++)
+            {
+                // 初始化当前列的最大宽度为最小值
+                double maxWidth = 0.0;
+                // 初始化一个默认的文字高度，防止单元格高度未设置时出错
+                double defaultTextHeight = 2.5;
+
+                // 遍历该列的每一行
+                for (int row = 0; row < numRows; row++)
+                {
+                    // 获取当前单元格的文本内容
+                    string cellText = table.Cells[row, col].TextString;
+
+                    // 如果单元格为空，跳过
+                    if (string.IsNullOrWhiteSpace(cellText)) continue;
+
+                    // 获取当前单元格的文字高度
+                    var textHeight = Convert.ToDouble(table.Cells[row, col].TextHeight);
+
+                    // 如果文字高度无效，使用默认值
+                    if (textHeight <= 0) textHeight = defaultTextHeight;
+
+                    // 估算文本宽度
+                    // 简单算法：字符数 * 文字高度 * 系数
+                    double estimatedWidth = 0.0;
+
+                    // 检查是否包含中文字符
+                    bool hasChinese = System.Text.RegularExpressions.Regex.IsMatch(cellText, @"[\u4e00-\u9fff]");
+
+                    if (hasChinese)
+                    {
+                        // 如果有中文，使用较大系数 1.1（汉字较宽）
+                        estimatedWidth = cellText.Length * textHeight * 1.1;
+                    }
+                    else
+                    {
+                        // 如果全是英文/数字，使用较小系数 0.7
+                        estimatedWidth = cellText.Length * textHeight * 0.7;
+                    }
+
+                    // 更新当前列的最大宽度
+                    if (estimatedWidth > maxWidth)
+                    {
+                        maxWidth = estimatedWidth;
+                    }
+                }
+
+                // 设置列宽
+                // 增加一定的边距（Padding），例如左右各加 1.0 倍文字高度，避免文字贴边
+                double padding = defaultTextHeight * 2.0;
+
+                // 如果计算出的最大宽度大于0，则设置列宽
+                if (maxWidth > 0)
+                {
+                    // 设置列宽为最大内容宽度加上边距
+                    table.Columns[col].Width = maxWidth + padding;
+                }
+                else
+                {
+                    // 如果列中没有有效内容，设置一个默认最小宽度
+                    table.Columns[col].Width = defaultTextHeight * 10.0;
+                }
+            }
+
+            // 强制重新生成表格布局，使列宽生效
+            table.GenerateLayout();
         }
         #endregion
     }

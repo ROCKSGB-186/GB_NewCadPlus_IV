@@ -1925,7 +1925,7 @@ namespace GB_NewCadPlus_IV
         public void button_排水沟_Click(object sender, EventArgs e)
         {
             VariableDictionary.winForm_Status = true;
-            //VariableDictionary.entityRotateAngle = 0;
+            VariableDictionary.entityRotateAngle = 0;
             //VariableDictionary.btnFileName = "JZTJ_排水沟";
             //VariableDictionary.buttonText = "JZTJ_排水沟";
             //VariableDictionary.btnFileName_blockName = "$TWTSYS$00000508";
@@ -2471,7 +2471,7 @@ namespace GB_NewCadPlus_IV
         public void button_S_水平荷载_Click(object sender, EventArgs e)
         {
             VariableDictionary.winForm_Status = true;
-            //VariableDictionary.entityRotateAngle = 0;textBox_荷载数据
+            VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "TJ(结构专业JG)";
             VariableDictionary.layerName = "TJ(结构专业JG)";
             VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
@@ -2997,7 +2997,7 @@ namespace GB_NewCadPlus_IV
         public void button_DQ_220V插座_Click(object sender, EventArgs e)
         {
             VariableDictionary.winForm_Status = true;
-            //VariableDictionary.entityRotateAngle = 0;
+            VariableDictionary.entityRotateAngle = 0;
             //VariableDictionary.btnFileName = "DQTJ_EQUIP_单相插座";
             //VariableDictionary.btnFileName_blockName = "HC002694005706";
             ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
@@ -3014,7 +3014,7 @@ namespace GB_NewCadPlus_IV
         public void button_DQ_三相380V插座_Click(object sender, EventArgs e)
         {
             VariableDictionary.winForm_Status = true;
-            //VariableDictionary.entityRotateAngle = 0;
+            VariableDictionary.entityRotateAngle = 0;
             //VariableDictionary.btnFileName = "DQTJ_EQUIP_三相380V插座";
             //VariableDictionary.btnFileName_blockName = "HC002696005706";
             ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
@@ -3031,7 +3031,7 @@ namespace GB_NewCadPlus_IV
         public void button_DQ_潮湿插座_Click(object sender, EventArgs e)
         {
             VariableDictionary.winForm_Status = true;
-            //VariableDictionary.entityRotateAngle = 0;
+            VariableDictionary.entityRotateAngle = 0;
             //VariableDictionary.btnFileName = "DQTJ_EQUIP_潮湿插座";
             //VariableDictionary.btnFileName_blockName = "HC002695005706";
             ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
@@ -3048,7 +3048,7 @@ namespace GB_NewCadPlus_IV
         public void button_DQ_三相潮湿插座_Click(object sender, EventArgs e)
         {
             VariableDictionary.winForm_Status = true;
-            //VariableDictionary.entityRotateAngle = 0;
+            VariableDictionary.entityRotateAngle = 0;
             //VariableDictionary.btnFileName = "DQTJ_EQUIP_三相潮湿插座";
             //VariableDictionary.btnFileName_blockName = "HC002697005706";
             ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;

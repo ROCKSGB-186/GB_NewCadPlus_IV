@@ -1,4 +1,4 @@
-using Autodesk.AutoCAD.Internal.Calculator;
+using GB_NewCadPlus_IV.DisplayPages;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
@@ -9,7 +9,6 @@ using System.ComponentModel;
 using System.Data;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
@@ -18,8 +17,6 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Xml.Linq;
-using static Autodesk.AutoCAD.DatabaseServices.TextEditor;
 using static GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Binding = System.Windows.Data.Binding;
@@ -29,19 +26,16 @@ using Button = System.Windows.Controls.Button;
 using ComboBox = System.Windows.Controls.ComboBox;
 using DataGrid = System.Windows.Controls.DataGrid;
 using DataTable = System.Data.DataTable;
+using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
+using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
 using FontFamily = System.Windows.Media.FontFamily;
 using Image = System.Windows.Controls.Image;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MessageBox = System.Windows.MessageBox;
 using Panel = System.Windows.Controls.Panel;
 using Pen = System.Windows.Media.Pen;
 using Point = System.Windows.Point;
-using TabControl = System.Windows.Controls.TabControl;
 using TextBox = System.Windows.Controls.TextBox;
 using UserControl = System.Windows.Controls.UserControl;
-using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
-
 
 namespace GB_NewCadPlus_IV
 {
@@ -1620,7 +1614,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                // 中文注释：双击优先处理，双击时不进入拖拽流程
+                // 双击优先处理，双击时不进入拖拽流程
                 if (e.ClickCount == 2)
                 {
                     _isButtonMouseDown = false;
@@ -1632,7 +1626,7 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 中文注释：仅记录“左键按下”的起点，等待后续拖拽判断
+                // 仅记录“左键按下”的起点，等待后续拖拽判断
                 _isButtonMouseDown = true;
                 _isButtonDragging = false;
                 _buttonDragStartPoint = e.GetPosition(null); // 与 MouseMove 使用同一坐标系
@@ -1774,10 +1768,10 @@ namespace GB_NewCadPlus_IV
             var btn = sender as Button;
             if (btn == null) return;
 
-            // 中文注释：未按下鼠标，或不是当前拖拽源，直接退出（悬停不触发）
+            // 未按下鼠标，或不是当前拖拽源，直接退出（悬停不触发）
             if (!_isButtonMouseDown || _dragSourceButton != btn) return;
 
-            // 中文注释：必须保持左键按住，避免普通移动误触发
+            // 必须保持左键按住，避免普通移动误触发
             if (e.LeftButton != MouseButtonState.Pressed)
             {
                 _isButtonMouseDown = false;
@@ -1792,7 +1786,7 @@ namespace GB_NewCadPlus_IV
                 if (Math.Abs(currentPos.X - _buttonDragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
                     Math.Abs(currentPos.Y - _buttonDragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
                 {
-                    return; // 中文注释：未超过拖拽阈值，不触发命令
+                    return; // 未超过拖拽阈值，不触发命令
                 }
 
                 _isButtonDragging = true;
@@ -1807,7 +1801,7 @@ namespace GB_NewCadPlus_IV
                     LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次拖拽触发。");
                     return;
                 }
-                // 中文注释：以下保持你原有插入逻辑
+                // 以下保持你原有插入逻辑
                 var tagInfo = btn.Tag as ButtonTagCommandInfo;
                 string? tempPath = null;
 
@@ -1847,7 +1841,7 @@ namespace GB_NewCadPlus_IV
             }
             finally
             {
-                // 中文注释：一次拖拽只触发一次命令，避免移动过程中重复触发
+                // 一次拖拽只触发一次命令，避免移动过程中重复触发
                 _isButtonMouseDown = false;
                 _isButtonDragging = false;
                 _dragSourceButton = null;
@@ -3885,55 +3879,55 @@ namespace GB_NewCadPlus_IV
         // 为单个 DataGridRow 动态创建 ContextMenu（新增“删除图元”）
         private void EnsureRowContextMenu(System.Windows.Controls.DataGridRow row)
         {
-            // 中文注释：空行保护，避免空引用异常
+            // 空行保护，避免空引用异常
             if (row == null) return;
 
-            // 中文注释：如果行已存在右键菜单则不重复创建，避免重复绑定事件
+            // 如果行已存在右键菜单则不重复创建，避免重复绑定事件
             if (row.ContextMenu != null) return;
 
-            // 中文注释：创建右键菜单容器
+            // 创建右键菜单容器
             var cm = new System.Windows.Controls.ContextMenu();
 
-            // 中文注释：创建“更新图元”菜单项（保留原功能）
+            // 创建“更新图元”菜单项（保留原功能）
             var miReplace = new System.Windows.Controls.MenuItem
             {
                 Header = "更新图元"
             };
 
-            // 中文注释：把当前行对象放入参数，点击时优先读取该参数
+            // 把当前行对象放入参数，点击时优先读取该参数
             miReplace.CommandParameter = row.Item;
 
-            // 中文注释：绑定替换事件处理器
+            // 绑定替换事件处理器
             miReplace.Click += ReplaceFileMenuItem_Click;
 
-            // 中文注释：加入菜单
+            // 加入菜单
             cm.Items.Add(miReplace);
 
-            // 中文注释：创建“更新预览图”菜单项（新增）
+            // 创建“更新预览图”菜单项（新增）
             var miReplacePreview = new System.Windows.Controls.MenuItem { Header = "更新预览图" };
-            // 中文注释：把当前行对象放入参数，便于精确定位记录
+            // 把当前行对象放入参数，便于精确定位记录
             miReplacePreview.CommandParameter = row.Item;
-            // 中文注释：绑定更新预览图事件
+            // 绑定更新预览图事件
             miReplacePreview.Click += ReplacePreviewMenuItem_Click;
-            // 中文注释：加入菜单
+            // 加入菜单
             cm.Items.Add(miReplacePreview);
 
-            // 中文注释：创建“删除图元”菜单项（新增）
+            // 创建“删除图元”菜单项（新增）
             var miDelete = new System.Windows.Controls.MenuItem
             {
                 Header = "删除图元"
             };
 
-            // 中文注释：同样把当前行对象放入参数，便于精确删除当前行图元
+            // 同样把当前行对象放入参数，便于精确删除当前行图元
             miDelete.CommandParameter = row.Item;
 
-            // 中文注释：绑定删除事件处理器
+            // 绑定删除事件处理器
             miDelete.Click += DeleteRowGraphicMenuItem_Click;
 
-            // 中文注释：加入菜单
+            // 加入菜单
             cm.Items.Add(miDelete);
 
-            // 中文注释：将菜单挂到当前行
+            // 将菜单挂到当前行
             row.ContextMenu = cm;
         }
 
@@ -4092,12 +4086,12 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                // 中文注释：获取菜单项对象
+                // 获取菜单项对象
                 var mi = sender as System.Windows.Controls.MenuItem;
-                // 中文注释：优先从 CommandParameter 获取当前行对象
+                // 优先从 CommandParameter 获取当前行对象
                 object? storageObj = mi?.CommandParameter;
 
-                // 中文注释：兜底回退到 DataContext / PlacementTarget
+                // 兜底回退到 DataContext / PlacementTarget
                 if (storageObj == null && mi != null)
                 {
                     storageObj = mi.DataContext;
@@ -4116,16 +4110,16 @@ namespace GB_NewCadPlus_IV
                     }
                 }
 
-                // 中文注释：强类型转换为 FileStorage
+                // 强类型转换为 FileStorage
                 var storage = storageObj as FileStorage;
-                // 中文注释：未识别到记录则提示
+                // 未识别到记录则提示
                 if (storage == null)
                 {
                     MessageBox.Show("未能识别要替换预览图的记录。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                // 中文注释：权限校验（与替换图元保持一致）
+                // 权限校验（与替换图元保持一致）
                 var userName = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
                 if (!IsAdminUser(userName))
                 {
@@ -4133,54 +4127,54 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 中文注释：选择本地图片文件
+                // 选择本地图片文件
                 using (var ofd = new System.Windows.Forms.OpenFileDialog())
                 {
-                    // 中文注释：图片过滤器
+                    // 图片过滤器
                     ofd.Filter = "图片文件 (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|所有文件 (*.*)|*.*";
-                    // 中文注释：对话框标题
+                    // 对话框标题
                     ofd.Title = "选择要替换的预览图";
-                    // 中文注释：用户取消则返回
+                    // 用户取消则返回
                     if (ofd.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
-                    // 中文注释：本地选择路径
+                    // 本地选择路径
                     var localPreviewPath = ofd.FileName;
-                    // 中文注释：文件存在性校验
+                    // 文件存在性校验
                     if (!System.IO.File.Exists(localPreviewPath))
                     {
                         MessageBox.Show("所选图片不存在。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                         return;
                     }
 
-                    // 中文注释：删除确认
+                    // 删除确认
                     var confirm = MessageBox.Show(
                         $"确认将图片\n{System.IO.Path.GetFileName(localPreviewPath)}\n替换为该图元的预览图吗？",
                         "确认替换预览图",
                         MessageBoxButton.OKCancel,
                         MessageBoxImage.Question);
 
-                    // 中文注释：取消则返回
+                    // 取消则返回
                     if (confirm != MessageBoxResult.OK) return;
 
-                    // 中文注释：执行替换预览图核心逻辑
+                    // 执行替换预览图核心逻辑
                     var (success, error) = await TryInvokeReplacePreviewApisAsync(storage, localPreviewPath);
-                    // 中文注释：失败提示
+                    // 失败提示
                     if (!success)
                     {
                         MessageBox.Show($"替换预览图失败: {error}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                         return;
                     }
 
-                    // 中文注释：清理内存与磁盘预览缓存，保证立刻显示新图
+                    // 清理内存与磁盘预览缓存，保证立刻显示新图
                     try
                     {
-                        // 中文注释：清理内存缓存（键规则与 GetPreviewImageAsync 保持一致）
+                        // 清理内存缓存（键规则与 GetPreviewImageAsync 保持一致）
                         string keyByPath = storage.FilePath ?? string.Empty;
                         string keyById = storage.Id.ToString();
                         if (!string.IsNullOrWhiteSpace(keyByPath) && _imageCache.ContainsKey(keyByPath)) _imageCache.Remove(keyByPath);
                         if (_imageCache.ContainsKey(keyById)) _imageCache.Remove(keyById);
 
-                        // 中文注释：清理本地预览缓存目录中该图元的缓存文件（按 Id 前缀）
+                        // 清理本地预览缓存目录中该图元的缓存文件（按 Id 前缀）
                         if (!string.IsNullOrWhiteSpace(_previewCachePath) && System.IO.Directory.Exists(_previewCachePath))
                         {
                             foreach (var f in System.IO.Directory.GetFiles(_previewCachePath, storage.Id + "_*.png", SearchOption.TopDirectoryOnly))
@@ -4194,24 +4188,24 @@ namespace GB_NewCadPlus_IV
                         LogManager.Instance.LogWarning($"替换预览图后清理缓存失败: {exCache.Message}");
                     }
 
-                    // 中文注释：刷新管理区文件列表
+                    // 刷新管理区文件列表
                     await RefreshFilesForCurrentCategoryAsync();
-                    // 中文注释：刷新主界面按钮数据源（与替换图元一致）
+                    // 刷新主界面按钮数据源（与替换图元一致）
                     await ReloadButtonsDataSourceAfterReplaceAsync();
 
-                    // 中文注释：若当前就是该图元，主动刷新右侧预览与详情
+                    // 若当前就是该图元，主动刷新右侧预览与详情
                     DisplayFileStorageInfo(storage);
                     var bmp = await GetPreviewImageAsync(storage);
                     if (预览 != null) 预览.Source = bmp;
                     if (ViewImage != null) ViewImage.Source = bmp;
 
-                    // 中文注释：成功提示
+                    // 成功提示
                     MessageBox.Show("替换预览图成功。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             catch (Exception ex)
             {
-                // 中文注释：异常保护
+                // 异常保护
                 MessageBox.Show($"替换预览图过程中发生异常: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -4221,14 +4215,14 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private async Task<bool> DeleteGraphicCoreAsync(FileStorage selected, bool needAdminCheck, string entryName)
         {
-            // 中文注释：空对象保护
+            // 空对象保护
             if (selected == null)
             {
                 MessageBox.Show("未选中要删除的图元。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 return false;
             }
 
-            // 中文注释：右键入口可选管理员校验
+            // 右键入口可选管理员校验
             if (needAdminCheck)
             {
                 var userName = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
@@ -4239,14 +4233,14 @@ namespace GB_NewCadPlus_IV
                 }
             }
 
-            // 中文注释：数据库可用性检查
+            // 数据库可用性检查
             if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
             {
                 MessageBox.Show("数据库不可用，无法删除图元。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 return false;
             }
 
-            // 中文注释：确认提示
+            // 确认提示
             string selectedName = selected.DisplayName ?? selected.FileName ?? $"ID={selected.Id}";
             var confirm = MessageBox.Show(
                 $"确定删除图元：{selectedName} ?\n该操作将删除主记录、属性JSON、标签/日志及关联物理文件，且不可恢复。",
@@ -4257,7 +4251,7 @@ namespace GB_NewCadPlus_IV
             if (confirm != MessageBoxResult.Yes)
                 return false;
 
-            // 中文注释：执行级联删除
+            // 执行级联删除
             bool ok = await _databaseManager.DeleteCadGraphicCascadeAsync(selected.Id, physicalDelete: true);
             if (!ok)
             {
@@ -4266,7 +4260,7 @@ namespace GB_NewCadPlus_IV
                 return false;
             }
 
-            // 中文注释：清理预览缓存
+            // 清理预览缓存
             try
             {
                 string keyByPath = selected.FilePath ?? string.Empty;
@@ -4279,7 +4273,7 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogWarning($"清理预览缓存失败: {exCache.Message}");
             }
 
-            // 中文注释：清理当前选择状态
+            // 清理当前选择状态
             if ((_selectedFileStorage != null && _selectedFileStorage.Id == selected.Id) ||
                 (_currentFileStorage != null && _currentFileStorage.Id == selected.Id))
             {
@@ -4290,7 +4284,7 @@ namespace GB_NewCadPlus_IV
                 _selectedPreviewImagePath = null;
             }
 
-            // 中文注释：清空详情区
+            // 清空详情区
             CategoryPropertiesDataGrid.ItemsSource = null;
             PropertiesDataGrid.ItemsSource = null;
             if (预览 != null) 预览.Source = null;
@@ -4301,7 +4295,7 @@ namespace GB_NewCadPlus_IV
             File_Type.Text = string.Empty;
             view_File_Path.Text = string.Empty;
 
-            // 中文注释：刷新列表与按钮面板
+            // 刷新列表与按钮面板
             await RefreshFilesForCurrentCategoryAsync();
             if (_useDatabaseMode && _databaseManager.IsDatabaseAvailable)
             {
@@ -4319,98 +4313,98 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private async Task<(bool success, string error)> TryInvokeReplacePreviewApisAsync(FileStorage storage, string localPreviewPath)
         {
-            // 中文注释：参数校验
+            // 参数校验
             if (storage == null) return (false, "storage 为空。");
-            // 中文注释：路径校验
+            // 路径校验
             if (string.IsNullOrWhiteSpace(localPreviewPath) || !System.IO.File.Exists(localPreviewPath))
                 return (false, "本地预览图不存在或路径无效。");
-            // 中文注释：数据库管理器校验
+            // 数据库管理器校验
             if (_databaseManager == null) return (false, "数据库管理器未初始化。");
 
             try
             {
-                // 中文注释：记录旧预览路径（用于缺失时兜底）
+                // 记录旧预览路径（用于缺失时兜底）
                 string oldPreviewPath = storage.PreviewImagePath ?? string.Empty;
-                // 中文注释：确定目标目录：优先旧预览目录，回退到图元文件目录
+                // 确定目标目录：优先旧预览目录，回退到图元文件目录
                 string targetDir = string.Empty;
 
-                // 中文注释：若旧预览路径可用，则用其目录
+                // 若旧预览路径可用，则用其目录
                 if (!string.IsNullOrWhiteSpace(oldPreviewPath))
                     targetDir = System.IO.Path.GetDirectoryName(oldPreviewPath) ?? string.Empty;
 
-                // 中文注释：若旧目录不可用，则回退到图元文件目录
+                // 若旧目录不可用，则回退到图元文件目录
                 if (string.IsNullOrWhiteSpace(targetDir) && !string.IsNullOrWhiteSpace(storage.FilePath))
                     targetDir = System.IO.Path.GetDirectoryName(storage.FilePath) ?? string.Empty;
 
-                // 中文注释：再兜底到本地应用目录
+                // 再兜底到本地应用目录
                 if (string.IsNullOrWhiteSpace(targetDir))
                     targetDir = System.IO.Path.Combine(AppPath, "PreviewImages");
 
-                // 中文注释：确保目标目录存在
+                // 确保目标目录存在
                 if (!System.IO.Directory.Exists(targetDir))
                     System.IO.Directory.CreateDirectory(targetDir);
 
-                // 中文注释：确定目标文件名（优先沿用原预览文件名，保持“替换逻辑”一致）
+                // 确定目标文件名（优先沿用原预览文件名，保持“替换逻辑”一致）
                 string ext = System.IO.Path.GetExtension(localPreviewPath);
                 if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
 
-                // 中文注释：优先沿用旧预览名称，若无则生成新名称
+                // 优先沿用旧预览名称，若无则生成新名称
                 string previewName = storage.PreviewImageName ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(previewName))
                 {
-                    // 中文注释：若旧路径有文件名则沿用
+                    // 若旧路径有文件名则沿用
                     if (!string.IsNullOrWhiteSpace(oldPreviewPath))
                         previewName = System.IO.Path.GetFileName(oldPreviewPath);
                 }
                 if (string.IsNullOrWhiteSpace(previewName))
                     previewName = $"{Guid.NewGuid():N}{ext}";
 
-                // 中文注释：若文件名无扩展，补上扩展
+                // 若文件名无扩展，补上扩展
                 if (string.IsNullOrWhiteSpace(System.IO.Path.GetExtension(previewName)))
                     previewName = System.IO.Path.GetFileNameWithoutExtension(previewName) + ext;
 
-                // 中文注释：目标全路径
+                // 目标全路径
                 string targetPreviewPath = System.IO.Path.Combine(targetDir, previewName);
 
-                // 中文注释：若目标文件已存在，先备份一份
+                // 若目标文件已存在，先备份一份
                 if (System.IO.File.Exists(targetPreviewPath))
                 {
                     try
                     {
-                        // 中文注释：备份文件路径
+                        // 备份文件路径
                         string bak = targetPreviewPath + ".bak";
-                        // 中文注释：覆盖式备份
+                        // 覆盖式备份
                         System.IO.File.Copy(targetPreviewPath, bak, true);
                     }
                     catch
                     {
-                        // 中文注释：备份失败不阻断主流程
+                        // 备份失败不阻断主流程
                     }
                 }
 
-                // 中文注释：复制新预览图到目标路径（覆盖）
+                // 复制新预览图到目标路径（覆盖）
                 System.IO.File.Copy(localPreviewPath, targetPreviewPath, true);
 
-                // 中文注释：回写内存对象字段
+                // 回写内存对象字段
                 storage.PreviewImagePath = targetPreviewPath;
                 storage.PreviewImageName = System.IO.Path.GetFileName(targetPreviewPath);
                 storage.UpdatedAt = DateTime.Now;
 
-                // 中文注释：更新数据库（与现有文件更新逻辑一致）
+                // 更新数据库（与现有文件更新逻辑一致）
                 bool dbOk = await _databaseManager.UpdateFileStorageAsync(storage);
                 if (!dbOk)
                     return (false, "数据库更新失败（UpdateFileStorageAsync 返回 false）。");
 
-                // 中文注释：成功返回
+                // 成功返回
                 return (true, string.Empty);
             }
             catch (Exception ex)
             {
-                // 中文注释：异常返回
+                // 异常返回
                 return (false, ex.Message);
             }
         }
-       
+
 
         // 2) 在 WpfMainWindow 类中新增这组辅助方法（建议放在 ReplaceFileMenuItem_Click 附近）
 
@@ -4574,7 +4568,7 @@ namespace GB_NewCadPlus_IV
             {
                 try
                 {
-                    // 中文注释：CadFiles 根目录（与 DynamicButton_Click 缓存规则保持一致）
+                    // CadFiles 根目录（与 DynamicButton_Click 缓存规则保持一致）
                     string cacheRoot = string.IsNullOrWhiteSpace(_cadStoragePath)
                         ? System.IO.Path.Combine(AppPath, "CadFiles")
                         : _cadStoragePath;
@@ -4582,7 +4576,7 @@ namespace GB_NewCadPlus_IV
                     if (!System.IO.Directory.Exists(cacheRoot))
                         return;
 
-                    // 中文注释：优先按 storage 计算缓存文件名（最精确）
+                    // 优先按 storage 计算缓存文件名（最精确）
                     string storageFileName = GetStorageStringProperty(storageObj, "FileName");
                     string storageFilePath = GetStorageStringProperty(storageObj, "FilePath");
 
@@ -4619,12 +4613,12 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                // 中文注释：优先从 storage.FilePath 取扩展名，其次用本地替换文件扩展名
+                // 优先从 storage.FilePath 取扩展名，其次用本地替换文件扩展名
                 string ext = System.IO.Path.GetExtension(storageFilePath);
                 if (string.IsNullOrWhiteSpace(ext))
                     ext = System.IO.Path.GetExtension(localPath);
 
-                // 中文注释：文件名优先 storage.FileName；若缺失则回退 localPath 文件名
+                // 文件名优先 storage.FileName；若缺失则回退 localPath 文件名
                 string realName = storageFileName;
                 if (string.IsNullOrWhiteSpace(realName))
                     realName = System.IO.Path.GetFileNameWithoutExtension(localPath);
@@ -4632,7 +4626,7 @@ namespace GB_NewCadPlus_IV
                 if (string.IsNullOrWhiteSpace(realName))
                     return null;
 
-                // 中文注释：若 FileName 没有扩展名，按规则补上
+                // 若 FileName 没有扩展名，按规则补上
                 if (string.IsNullOrWhiteSpace(System.IO.Path.GetExtension(realName)) && !string.IsNullOrWhiteSpace(ext))
                 {
                     realName = System.IO.Path.GetFileNameWithoutExtension(realName) + ext;
@@ -6368,24 +6362,24 @@ namespace GB_NewCadPlus_IV
 
         public async Task UploadFileAndSaveToDatabase()
         {
-            // 中文注释：从 UI 状态构造 DTO，然后委托到核心方法
+            // 从 UI 状态构造 DTO，然后委托到核心方法
             try
             {
-                // 中文注释：校验分类是否已选择
+                // 校验分类是否已选择
                 if (_selectedCategoryNode == null)
                 {
                     MessageBox.Show("请先在分类树中选择目标分类。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                // 中文注释：校验文件是否已选择
+                // 校验文件是否已选择
                 if (string.IsNullOrEmpty(_selectedFilePath) || !File.Exists(_selectedFilePath))
                 {
                     MessageBox.Show("请选择并缓存要上传的文件。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                // 中文注释：初始化 DTO（只保留 FileStorage + AttributesJson 作为上传主数据）
+                // 初始化 DTO（只保留 FileStorage + AttributesJson 作为上传主数据）
                 var dto = new ImportEntityDto
                 {
                     FileStorage = new FileStorage
@@ -6401,11 +6395,11 @@ namespace GB_NewCadPlus_IV
                     PreviewImagePath = _selectedPreviewImagePath
                 };
 
-                // 中文注释：读取属性网格，分别写入 FileStorage 字段和 JSON 字典
+                // 读取属性网格，分别写入 FileStorage 字段和 JSON 字典
                 var gridProps = CategoryPropertiesDataGrid?.ItemsSource as List<CategoryPropertyEditModel>;
                 if (gridProps != null)
                 {
-                    // 中文注释：局部函数，属性名和值都有效时写入字典
+                    // 局部函数，属性名和值都有效时写入字典
                     void AddAttr(string key, string value)
                     {
                         if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return;
@@ -6414,23 +6408,23 @@ namespace GB_NewCadPlus_IV
 
                     foreach (var p in gridProps)
                     {
-                        // 中文注释：先让 FileStorage 吃掉其认识的系统字段（如图层、标题、描述等）
+                        // 先让 FileStorage 吃掉其认识的系统字段（如图层、标题、描述等）
                         SetFileStorageProperty(dto.FileStorage, p.PropertyName1 ?? string.Empty, p.PropertyValue1 ?? string.Empty);
                         SetFileStorageProperty(dto.FileStorage, p.PropertyName2 ?? string.Empty, p.PropertyValue2 ?? string.Empty);
 
-                        // 中文注释：再把所有网格项写入 JSON 字典（动态属性主入口）
+                        // 再把所有网格项写入 JSON 字典（动态属性主入口）
                         AddAttr(p.PropertyName1 ?? string.Empty, p.PropertyValue1 ?? string.Empty);
                         AddAttr(p.PropertyName2 ?? string.Empty, p.PropertyValue2 ?? string.Empty);
                     }
                 }
 
-                // 中文注释：补充基础元数据到 JSON
+                // 补充基础元数据到 JSON
                 dto.AttributesJson["FileName"] = dto.FileStorage.FileName ?? string.Empty;
                 dto.AttributesJson["DisplayName"] = dto.FileStorage.DisplayName ?? string.Empty;
                 dto.AttributesJson["CreatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 dto.AttributesJson["UpdatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-                // 中文注释：进入统一上传核心方法
+                // 进入统一上传核心方法
                 await UploadFileAndSaveToDatabase(dto).ConfigureAwait(true);
             }
             catch (Exception ex)
@@ -6452,14 +6446,14 @@ namespace GB_NewCadPlus_IV
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             if (dto.FileStorage == null) throw new ArgumentException("dto.FileStorage 不能为空", nameof(dto));
 
-            // 中文注释：数据库可用性检查
+            // 数据库可用性检查
             if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
             {
                 MessageBox.Show("数据库未连接或不可用，无法保存。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            // 中文注释：文件管理器可用性检查
+            // 文件管理器可用性检查
             if (_fileManager == null)
             {
                 MessageBox.Show("文件管理器未初始化，无法上传文件。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -6468,22 +6462,22 @@ namespace GB_NewCadPlus_IV
 
             await _uploadSemaphore.WaitAsync().ConfigureAwait(false);
 
-            // 中文注释：记录已落盘文件，失败时用于物理回滚
+            // 记录已落盘文件，失败时用于物理回滚
             var uploadedFiles = new List<string>();
 
-            // 中文注释：记录数据库主键，失败时用于级联回滚
+            // 记录数据库主键，失败时用于级联回滚
             int savedStorageId = 0;
 
             try
             {
                 LogManager.Instance.LogInfo("开始上传文件并保存到数据库（JSON链路）");
 
-                // 中文注释：校验源文件
+                // 校验源文件
                 var sourcePath = dto.FileStorage.FilePath;
                 if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
                     throw new FileNotFoundException("要上传的文件不存在", sourcePath);
 
-                // 中文注释：1) 上传主文件到存储目录，返回完整 FileStorage 元数据
+                // 1) 上传主文件到存储目录，返回完整 FileStorage 元数据
                 using (var fs = File.OpenRead(sourcePath))
                 {
                     var uploaded = await _fileManager.UploadFileAsync(
@@ -6499,21 +6493,21 @@ namespace GB_NewCadPlus_IV
                     if (uploaded == null)
                         throw new Exception("文件上传失败，返回信息为空。");
 
-                    // 中文注释：回填上传后字段
+                    // 回填上传后字段
                     dto.FileStorage.FileStoredName = uploaded.FileStoredName;
                     dto.FileStorage.FilePath = uploaded.FilePath;
                     dto.FileStorage.FileHash = uploaded.FileHash;
                     dto.FileStorage.FileSize = uploaded.FileSize;
                     dto.FileStorage.FileType = uploaded.FileType;
 
-                    // 中文注释：记录物理文件路径（回滚用）
+                    // 记录物理文件路径（回滚用）
                     if (!string.IsNullOrWhiteSpace(dto.FileStorage.FilePath))
                         uploadedFiles.Add(dto.FileStorage.FilePath);
 
                     LogManager.Instance.LogInfo($"文件上传成功: {dto.FileStorage.FilePath}");
                 }
 
-                // 中文注释：2) 复制预览图（若存在）
+                // 2) 复制预览图（若存在）
                 if (!string.IsNullOrEmpty(dto.PreviewImagePath) && File.Exists(dto.PreviewImagePath))
                 {
                     try
@@ -6527,19 +6521,19 @@ namespace GB_NewCadPlus_IV
                         dto.FileStorage.PreviewImageName = previewStoredName;
                         dto.FileStorage.PreviewImagePath = previewStoredPath;
 
-                        // 中文注释：记录预览图路径（回滚用）
+                        // 记录预览图路径（回滚用）
                         uploadedFiles.Add(previewStoredPath);
 
                         LogManager.Instance.LogInfo($"预览图片复制成功: {previewStoredPath}");
                     }
                     catch (Exception exPreview)
                     {
-                        // 中文注释：预览图失败不阻断主流程
+                        // 预览图失败不阻断主流程
                         LogManager.Instance.LogWarning($"复制预览图片失败（继续）：{exPreview.Message}");
                     }
                 }
 
-                // 中文注释：3) 准备 JSON 属性字典
+                // 3) 准备 JSON 属性字典
                 var attrs = dto.AttributesJson ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 attrs["FileName"] = dto.FileStorage.FileName ?? string.Empty;
                 attrs["DisplayName"] = dto.FileStorage.DisplayName ?? string.Empty;
@@ -6548,18 +6542,18 @@ namespace GB_NewCadPlus_IV
                 attrs["CreatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 attrs["UpdatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-                // 中文注释：4) 统一新写库链路：主表 + JSON 属性表（事务）
+                // 4) 统一新写库链路：主表 + JSON 属性表（事务）
                 var (storageId, attrId) = await _databaseManager.AddFileStorageAndAttributesJsonAsync(dto.FileStorage, attrs, "default").ConfigureAwait(false);
 
                 if (storageId <= 0 || attrId <= 0)
                     throw new Exception("数据库写入失败：未返回有效的存储/属性 Id");
 
-                // 中文注释：记录主键
+                // 记录主键
                 savedStorageId = storageId;
                 dto.FileStorage.Id = storageId;
                 dto.FileStorage.FileAttributeId = attrId.ToString();
 
-                // 中文注释：5) 刷新分类统计
+                // 5) 刷新分类统计
                 try
                 {
                     await _databaseManager.UpdateCategoryStatisticsAsync(dto.FileStorage.CategoryId, dto.FileStorage.CategoryType ?? "sub").ConfigureAwait(false);
@@ -6569,7 +6563,7 @@ namespace GB_NewCadPlus_IV
                     LogManager.Instance.LogWarning($"更新分类统计失败（非致命）：{exStat.Message}");
                 }
 
-                // 中文注释：6) 刷新UI
+                // 6) 刷新UI
                 await Dispatcher.InvokeAsync(async () =>
                 {
                     try
@@ -6590,7 +6584,7 @@ namespace GB_NewCadPlus_IV
             {
                 LogManager.Instance.LogError($"UploadFileAndSaveToDatabase(dto) 失败: {ex.Message}");
 
-                // 中文注释：优先数据库级联回滚（已落库时）
+                // 优先数据库级联回滚（已落库时）
                 if (savedStorageId > 0)
                 {
                     try
@@ -6605,10 +6599,10 @@ namespace GB_NewCadPlus_IV
                 }
                 else
                 {
-                    // 中文注释：未落库时仅删除已上传文件
+                    // 未落库时仅删除已上传文件
                     try
                     {
-                        // 中文注释：这里 FileAttribute 传 null，仅作为兼容旧签名，不再依赖旧属性表
+                        // 这里 FileAttribute 传 null，仅作为兼容旧签名，不再依赖旧属性表
                         await FileManager.RollbackFileUpload(_databaseManager, uploadedFiles, dto.FileStorage, null).ConfigureAwait(false);
                         LogManager.Instance.LogInfo("已执行文件回滚。");
                     }
@@ -7403,15 +7397,15 @@ namespace GB_NewCadPlus_IV
         /// <returns>属性编辑行列表</returns>
         public List<CategoryPropertyEditModel> PrepareFileDisplayData(FileStorage fileStorage, Dictionary<string, string> attributesJson)
         {
-            // 中文注释：最终返回给界面的属性行集合
+            // 最终返回给界面的属性行集合
             var propertyRows = new List<CategoryPropertyEditModel>();
 
             try
             {
-                // 中文注释：用于按顺序收集所有要显示的属性
+                // 用于按顺序收集所有要显示的属性
                 var allProperties = new List<KeyValuePair<string, string>>();
 
-                // 中文注释：先显示主表中的关键字段
+                // 先显示主表中的关键字段
                 if (fileStorage != null)
                 {
                     allProperties.Add(new KeyValuePair<string, string>("文件信息.FileName", fileStorage.FileName ?? string.Empty));
@@ -7422,7 +7416,7 @@ namespace GB_NewCadPlus_IV
                     allProperties.Add(new KeyValuePair<string, string>("文件信息.Scale", fileStorage.Scale?.ToString() ?? string.Empty));
                 }
 
-                // 中文注释：再显示 JSON 属性字典中的动态属性
+                // 再显示 JSON 属性字典中的动态属性
                 if (attributesJson != null)
                 {
                     foreach (var kv in attributesJson)
@@ -7432,7 +7426,7 @@ namespace GB_NewCadPlus_IV
                     }
                 }
 
-                // 中文注释：转换成两列显示
+                // 转换成两列显示
                 for (int i = 0; i < allProperties.Count; i += 2)
                 {
                     var row = new CategoryPropertyEditModel();
@@ -7451,7 +7445,7 @@ namespace GB_NewCadPlus_IV
                     propertyRows.Add(row);
                 }
 
-                // 中文注释：保证至少有几行空白可编辑
+                // 保证至少有几行空白可编辑
                 while (propertyRows.Count < 5)
                 {
                     propertyRows.Add(new CategoryPropertyEditModel());
@@ -8554,12 +8548,12 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         public void SetSelectedFileForImport(ImportEntityDto dto)
         {
-            // 中文注释：把确认后的导入对象回写到主窗口状态
+            // 把确认后的导入对象回写到主窗口状态
             _selectedFilePath = dto.FileStorage.FilePath;
             _selectedPreviewImagePath = dto.PreviewImagePath;
             _currentFileStorage = dto.FileStorage;
 
-            // 中文注释：旧 FileAttribute 仅保留兼容，不再作为主写库来源
+            // 旧 FileAttribute 仅保留兼容，不再作为主写库来源
             _currentFileAttribute = dto.FileAttribute;
         }
         /// <summary>
@@ -12171,6 +12165,123 @@ namespace GB_NewCadPlus_IV
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
+
+        #region 优化后的CSV导出（增强版）：
+
+        /// <summary>
+        /// 【最终版】公式合法性批量校验
+        /// </summary>
+        //private List<string> ValidateCalcSectionsFormulaReferences(List<ExcelCalcSection> sections)
+        //{
+        //    var errors = new List<string>();
+        //    var availableCells = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        //    // 1. 收集所有标准化的 Sheet 名称，用于后续修复公式
+        //    var allNormalizedSheets = new List<string>();
+        //    var sheetNameMap = new Dictionary<string, string>(); // 原始 -> 标准化
+
+        //    foreach (var sec in sections)
+        //    {
+        //        string normSheet = GB_NewCadPlus_IV.Helpers.CalcFormulaHelper.NormalizeSheetName(sec.GridName);
+        //        if (!sheetNameMap.ContainsKey(sec.GridName))
+        //        {
+        //            sheetNameMap[sec.GridName] = normSheet;
+        //            allNormalizedSheets.Add(sec.GridName); // 传入原始名称，让正则去匹配
+        //        }
+
+        //        foreach (var row in sec.Rows)
+        //        {
+        //            if (!string.IsNullOrWhiteSpace(row.Address))
+        //            {
+        //                string cellId = $"{normSheet}!{row.Address.ToUpperInvariant()}";
+        //                availableCells.Add(cellId);
+        //            }
+        //        }
+        //    }
+
+        //    LogManager.Instance.LogInfo($"[校验] 加载 {availableCells.Count} 个单元格，{allNormalizedSheets.Count} 个Sheet用于公式修复。");
+
+        //    // 2. 遍历校验
+        //    foreach (var sec in sections)
+        //    {
+        //        string currentNormSheet = GB_NewCadPlus_IV.Helpers.CalcFormulaHelper.NormalizeSheetName(sec.GridName);
+
+        //        foreach (var row in sec.Rows)
+        //        {
+        //            if (string.IsNullOrWhiteSpace(row.Formula) || !row.Formula.Trim().StartsWith("="))
+        //                continue;
+
+        //            // 【关键调用】使用修复后的提取方法
+        //            var refs = GB_NewCadPlus_IV.Helpers.CalcFormulaHelper.RepairAndExtractReferences(
+        //                row.Formula,
+        //                sec.GridName,
+        //                allNormalizedSheets // 传入所有Sheet名，帮助识别哪里缺了感叹号
+        //            );
+
+        //            foreach (var refId in refs)
+        //            {
+        //                if (!availableCells.Contains(refId))
+        //                {
+        //                    // 如果修复后还是找不到，才报错
+        //                    string errorMsg = $"{refId} (原始Sheet: {sec.GridName}, 单元格: {row.Address}) -> 公式: {row.Formula}";
+        //                    errors.Add(errorMsg);
+
+        //                    if (errors.Count > 50)
+        //                    {
+        //                        errors.Add("... (错误过多，已截断)");
+        //                        return errors;
+        //                    }
+        //                }
+        //            }
+        //        }
+        //    }
+
+        //    return errors;
+        //}
+
+        /// <summary>
+        /// 模糊匹配：当标准化匹配失败时，尝试去除所有非字母数字字符后进行匹配
+        /// 用于处理极端命名不一致情况
+        /// </summary>
+        private bool FuzzyMatchCell(string missingRefId, HashSet<string> availableCells)
+        {
+            int idx = missingRefId.IndexOf('!');
+            if (idx < 0) return false;
+
+            string missingSheet = missingRefId.Substring(0, idx);
+            string missingCell = missingRefId.Substring(idx + 1);
+
+            // 生成极简 Key：只保留字母和数字
+            string cleanMissingSheet = Regex.Replace(missingSheet, @"[^a-zA-Z0-9\u4e00-\u9fff]", "");
+            string cleanMissingCell = missingCell.Replace("$", ""); // 去除 $
+
+            foreach (var avail in availableCells)
+            {
+                int availIdx = avail.IndexOf('!');
+                if (availIdx < 0) continue;
+
+                string availSheet = avail.Substring(0, availIdx);
+                string availCell = avail.Substring(availIdx + 1);
+
+                string cleanAvailSheet = Regex.Replace(availSheet, @"[^a-zA-Z0-9\u4e00-\u9fff]", "");
+                string cleanAvailCell = availCell.Replace("$", "");
+
+                // 如果 Sheet 和 Cell 的纯字母数字部分都一致，则认为匹配
+                if (cleanMissingCell.Equals(cleanAvailCell, StringComparison.OrdinalIgnoreCase) &&
+                    cleanMissingSheet.Equals(cleanAvailSheet, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        #endregion
+
+
+
+
         /// <summary>
         /// 归一化公式字符串（用于校验，不改原公式）
         ///— 主要处理全角符号、中文引号、OCR 产生的异形符号
@@ -12267,14 +12378,14 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private void LoadFromMasterExcelAndBuildUi(string excelPath, bool exportCsv = true)
         {
-            var sections = ParseMasterExcelSections(excelPath);
+            var sections = ParseMasterExcelSections(excelPath);// 解析 Excel 分段
 
-            var formulaErrors = ValidateCalcSectionsFormulaReferences(sections);
-            if (formulaErrors.Count > 0)
+            var formulaErrors = ValidateCalcSectionsFormulaReferences(sections);// 公式合法性批量校验
+            if (formulaErrors.Count > 0)// 如果有错误，弹窗显示前40条，并提示修正 Excel
             {
-                string preview = string.Join("\n", formulaErrors.Take(40));
-                if (formulaErrors.Count > 40)
-                    preview += $"\n... 其余 {formulaErrors.Count - 40} 条省略";
+                string preview = string.Join("\n", formulaErrors.Take(40));// 40条预览限制，避免过长
+                if (formulaErrors.Count > 40)// 超过40条时提示省略
+                    preview += $"\n... 其余 {formulaErrors.Count - 40} 条省略";// 提示剩余数量
 
                 MessageBox.Show(
                     "公式校验未通过，请先修正 Excel：\n\n" + preview,
@@ -12285,14 +12396,14 @@ namespace GB_NewCadPlus_IV
                 return;
             }
 
-            BuildDynamicCalcGrids(sections);
-
+            BuildDynamicCalcGrids(sections);// 根据分段构建动态页面
+            // 导出总 CSV（如果需要）
             if (exportCsv)
             {
-                string csvPath = ExportSectionsToMasterCsv(sections);
-                LogManager.Instance.LogInfo($"Excel 转总CSV完成: {csvPath}");
+                string csvPath = ExportSectionsToMasterCsv(sections);// 导出总 CSV
+                LogManager.Instance.LogInfo($"Excel 转总CSV完成: {csvPath}");// 可选：弹窗提示 CSV 已生成，并提供路径
             }
-
+            // 重新计算所有计算表格
             RecalculateAllCalcCsvTables();
         }
 
@@ -14428,7 +14539,7 @@ namespace GB_NewCadPlus_IV
 
                 if (ofd.ShowDialog() != true)
                     return;
-
+                // 加载Excel并生成页面
                 LoadFromMasterExcelAndBuildUi(ofd.FileName, exportCsv: true);
 
                 MessageBox.Show("已按Excel动态生成页面并导出总CSV。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -14443,26 +14554,40 @@ namespace GB_NewCadPlus_IV
 
 
         /// <summary>
-        /// 生成“计算表整体”临时DWG并返回（文件路径, 块名）
+        /// 构建计算表/设备表的临时 DWG 文件
         /// </summary>
+        /// <returns>元组：(临时DWG文件路径, 生成的块名称)</returns>
         private (string dwgPath, string blockName) BuildCalcTablesTempDwg()
         {
-            // 1) 收集当前所有计算表数据（优先按界面顺序）
+            // ================== 第一步：收集界面数据 ==================
+
+            // 定义一个列表，用于存储各个分表的数据结构：(Grid名称, 表头标题, 行数据列表)
             var sections = new List<(string GridName, string Header, List<CalcCsvTableRow> Rows)>();
+
+            // 获取当前 CAD 的绘图比例，用于后续计算文字高度和行列尺寸
+            // 注意：AutoCadHelper.GetScale() 通常返回的是比例分母（例如 100 代表 1:100）
+            var scale = AutoCadHelper.GetScale();
 
             try
             {
-                // 若动态容器已有内容，按 GroupBox 顺序收集，保证插入顺序与界面一致
+                // 优先从界面的动态容器 CalcDynamicHost 中收集数据，保证顺序与用户看到的界面一致
                 if (CalcDynamicHost != null && CalcDynamicHost.Children.Count > 0)
                 {
+                    // 遍历容器中的每一个子控件
                     foreach (var child in CalcDynamicHost.Children)
                     {
+                        // 判断子控件是否是 GroupBox（分组框），且其内容是 DataGrid（数据网格）
                         if (child is System.Windows.Controls.GroupBox gb && gb.Content is DataGrid dg && dg.ItemsSource is IEnumerable<CalcCsvTableRow> src)
                         {
+                            // 提取分组框的标题作为表格的大标题
                             string header = (gb.Header?.ToString() ?? string.Empty).Trim();
+                            // 提取 DataGrid 的名称作为内部标识
                             string gridName = (dg.Name ?? string.Empty).Trim();
+
+                            // 将数据源转换为列表，并按 Sequence（序号）排序，保证行顺序正确
                             var rows = src.OrderBy(r => r.Sequence).ToList();
 
+                            // 只有当 Grid 有名称且包含数据时，才加入收集列表
                             if (!string.IsNullOrWhiteSpace(gridName) && rows.Count > 0)
                             {
                                 sections.Add((gridName, header, rows));
@@ -14471,14 +14596,17 @@ namespace GB_NewCadPlus_IV
                     }
                 }
 
-                // 容器为空时，回退到内存数据源
+                // 如果界面容器为空（例如还没加载完），则回退到内存中的数据源 _calcCsvTableSources
                 if (sections.Count == 0 && _calcCsvTableSources != null)
                 {
+                    // 遍历内存中的数据源，按 Key 排序以保证稳定性
                     foreach (var kv in _calcCsvTableSources.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
                     {
+                        // 获取行数据并排序
                         var rows = kv.Value?.OrderBy(r => r.Sequence).ToList() ?? new List<CalcCsvTableRow>();
-                        if (rows.Count == 0) continue;
+                        if (rows.Count == 0) continue; // 跳过空表
 
+                        // 根据 GridName 获取对应的显示标题
                         string header = GetCalcGroupHeaderByGridName(kv.Key);
                         sections.Add((kv.Key, header, rows));
                     }
@@ -14486,128 +14614,180 @@ namespace GB_NewCadPlus_IV
             }
             catch (Exception ex)
             {
+                // 记录收集数据过程中的异常，防止程序崩溃
                 LogManager.Instance.LogWarning($"收集计算表数据失败: {ex.Message}");
             }
 
+            // 如果没有收集到任何数据，抛出异常，终止后续操作
             if (sections.Count == 0)
                 throw new InvalidOperationException("当前没有可插入的计算表数据。");
 
-            // 2) 创建临时DWG路径
+            // ================== 第二步：准备临时文件路径 ==================
+
+            // 定义临时文件夹路径：系统临时目录 + 插件名称 + CalcTables
             string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", "CalcTables");
+            // 如果目录不存在，则创建
             if (!Directory.Exists(tempDir))
                 Directory.CreateDirectory(tempDir);
 
+            // 生成唯一的文件名，包含时间戳，避免冲突
             string fileName = $"CalcTables_{DateTime.Now:yyyyMMdd_HHmmss}.dwg";
             string fullPath = Path.Combine(tempDir, fileName);
+
+            // 块名称通常与文件名一致（不含扩展名）
             string blockName = Path.GetFileNameWithoutExtension(fileName);
 
-            // 3) 在临时数据库中创建一个块，块内纵向排布多个 AutoCAD Table
+            // ================== 第三步：在内存数据库中构建表格 ==================
+
+            // 创建一个新的、空的 AutoCAD 数据库对象 (true: 无文档关联, true: 使用默认单位)
             using (var tempDb = new Autodesk.AutoCAD.DatabaseServices.Database(true, true))
             {
+                // 开启事务，用于操作这个临时数据库
                 using (var tr = tempDb.TransactionManager.StartTransaction())
                 {
-                    // 确保图层存在
-                    const string calcLayer = "TJ(计算表)";
+                    // --- 3.1 确保图层存在 ---
+                    const string calcLayer = "TJ(计算表)"; // 定义图层名称
+
+                    // 获取图层表，以写模式打开
                     var lt = (Autodesk.AutoCAD.DatabaseServices.LayerTable)tr.GetObject(
                         tempDb.LayerTableId, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForWrite);
 
+                    // 如果图层不存在，则创建新图层
                     if (!lt.Has(calcLayer))
                     {
                         var ltr = new Autodesk.AutoCAD.DatabaseServices.LayerTableRecord { Name = calcLayer };
                         lt.Add(ltr);
-                        tr.AddNewlyCreatedDBObject(ltr, true);
+                        tr.AddNewlyCreatedDBObject(ltr, true); // 注册到事务
                     }
 
-                    // 创建块定义
+                    // --- 3.2 创建块定义 ---
+                    // 获取块表，以写模式打开
                     var bt = (Autodesk.AutoCAD.DatabaseServices.BlockTable)tr.GetObject(
                         tempDb.BlockTableId, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForWrite);
 
+                    // 创建新的块定义记录
                     var btr = new Autodesk.AutoCAD.DatabaseServices.BlockTableRecord
                     {
-                        Name = blockName
+                        Name = blockName // 设置块名
                     };
-                    bt.Add(btr);
-                    tr.AddNewlyCreatedDBObject(btr, true);
+                    bt.Add(btr); // 将块定义添加到块表
+                    tr.AddNewlyCreatedDBObject(btr, true); // 注册到事务
 
-                    // 版式参数（单位按你项目当前常用值，和管道表逻辑一致的数量级）
-                    double rowHeight = 300.0;
-                    double gap = 600.0;
-                    double[] colWidths = { 700.0, 4200.0, 2000.0, 1200.0 }; // 序号/参数名称/值/单位
+                    // --- 3.3 定义表格样式参数 ---
 
-                    // Y 方向累计偏移（向下堆叠）
+                    // 【关键需求】设置文字高度
+                    // 基础打印高度设为 2.5mm，乘以比例 scale 得到模型空间中的实际高度
+                    // 例如：比例 1:100，则 textHeight = 2.5 * 100 = 250.0
+                    double baseTextHeight = 2.5;
+                    double textHeight = baseTextHeight * scale;
+
+                    // 行高：通常比文字高度稍大，设为文字高度的 1.5~2 倍，这里沿用原逻辑 5 * scale
+                    double rowHeight = 6 * scale;
+
+                    // 表格之间的垂直间距
+                    double gap = 6 * scale;
+
+                    // 列宽定义：{序号, 参数名称, 值, 单位}，单位均为绘图单位
+                    double[] colWidths = { 12 * scale, 55 * scale, 28 * scale, 18 * scale };
+
+                    // Y 方向累计偏移量，用于让多个表格纵向堆叠，不重叠
                     double yOffset = 0.0;
 
+                    // --- 3.4 遍历每个分表，生成 AutoCAD Table 对象 ---
                     foreach (var sec in sections)
                     {
                         int dataCount = sec.Rows.Count;
-                        if (dataCount <= 0) continue;
+                        if (dataCount <= 0) continue; // 跳过无数据的表
 
-                        // 每个分表：标题行 + 列头行 + 数据行
+                        // 计算总行数：1行标题 + 1行列头 + N行数据
                         int rows = dataCount + 2;
-                        int cols = 4;
+                        int cols = 4; // 固定4列
 
+                        // 创建新的 Table 对象
                         var table = new Autodesk.AutoCAD.DatabaseServices.Table();
+
+                        // 应用数据库默认设置（字体、颜色等）
                         table.SetDatabaseDefaults(tempDb);
+
+                        // 设置表格所属图层
                         table.Layer = calcLayer;
+
+                        // 设置表格的行数和列数
                         table.SetSize(rows, cols);
+
+                        // 设置表格插入点位置：X=0, Y=-yOffset (向下排列), Z=0
                         table.Position = new Autodesk.AutoCAD.Geometry.Point3d(0.0, -yOffset, 0.0);
 
-                        // 行高、列宽
+                        // 【关键修改】更稳健地设置文字高度
+                        // 旧方法 table.SetTextHeight 已过时或有时不生效，建议直接设置 Cells 的属性
+                        // 这里我们遍历所有单元格进行设置，确保万无一失
+                        for (int r = 0; r < rows; r++)
+                        {
+                            for (int c = 0; c < cols; c++)
+                            {
+                                // 设置单元格文字高度
+                                table.Cells[r, c].TextHeight = textHeight;
+
+                                // 设置单元格对齐方式：居中
+                                table.Cells[r, c].Alignment = Autodesk.AutoCAD.DatabaseServices.CellAlignment.MiddleCenter;
+                            }
+                        }
+
+                        // 可选：如果你想让标题行文字更大，可以单独设置第0行
+                        // for (int c = 0; c < cols; c++) { table.Cells[0, c].TextHeight = textHeight * 1.2; }
+
+                        // 设置行高
                         table.SetRowHeight(rowHeight);
+
+                        // 设置每列的宽度
                         for (int c = 0; c < cols; c++)
                             table.SetColumnWidth(c, colWidths[c]);
 
-                        // 标题行（不做合并，避免不同版本API差异）
-                        table.Cells[0, 0].TextString = string.IsNullOrWhiteSpace(sec.Header) ? sec.GridName : sec.Header;
-                        table.Cells[0, 1].TextString = "";
-                        table.Cells[0, 2].TextString = "";
-                        table.Cells[0, 3].TextString = "";
+                        // --- 填充内容 ---
 
-                        // 列头
+                        // 1. 标题行 (Row 0)
+                        // 如果有自定义 Header 则用 Header，否则用 GridName
+                        string titleText = string.IsNullOrWhiteSpace(sec.Header) ? sec.GridName : sec.Header;
+                        table.Cells[0, 0].TextString = titleText;
+                        // 标题行通常合并单元格，但为了兼容性和简单起见，这里只填第一个格，或者你可以选择合并
+                        // table.MergeCells(CellRange.Create(table, 0, 0, 0, 3)); // 如果需要合并取消注释
+
+                        // 2. 列头行 (Row 1)
                         table.Cells[1, 0].TextString = "序号";
                         table.Cells[1, 1].TextString = "参数名称";
                         table.Cells[1, 2].TextString = "值";
                         table.Cells[1, 3].TextString = "单位";
 
-                        // 数据
+                        // 3. 数据行 (Row 2 开始)
                         for (int i = 0; i < sec.Rows.Count; i++)
                         {
-                            int r = i + 2;
-                            var row = sec.Rows[i];
+                            int r = i + 2; // 数据行索引从2开始
+                            var row = sec.Rows[i]; // 获取当前行数据对象
 
-                            table.Cells[r, 0].TextString = row.Sequence.ToString();
-                            table.Cells[r, 1].TextString = row.ParameterName ?? string.Empty;
-                            table.Cells[r, 2].TextString = row.ValueText ?? string.Empty;
-                            table.Cells[r, 3].TextString = row.Unit ?? string.Empty;
+                            table.Cells[r, 0].TextString = row.Sequence.ToString();       // 序号
+                            table.Cells[r, 1].TextString = row.ParameterName ?? string.Empty; // 参数名
+                            table.Cells[r, 2].TextString = row.ValueText ?? string.Empty;     // 值
+                            table.Cells[r, 3].TextString = row.Unit ?? string.Empty;          // 单位
                         }
 
-                        // 对齐
-                        for (int r = 0; r < rows; r++)
-                        {
-                            for (int c = 0; c < cols; c++)
-                            {
-                                try
-                                {
-                                    table.Cells[r, c].Alignment = Autodesk.AutoCAD.DatabaseServices.CellAlignment.MiddleCenter;
-                                }
-                                catch { /* 忽略单格设置失败 */ }
-                            }
-                        }
+                        // --- 将表格添加到块定义中 ---
+                        btr.AppendEntity(table); // 附加实体
+                        tr.AddNewlyCreatedDBObject(table, true); // 注册到事务
 
-                        // 加入块定义
-                        btr.AppendEntity(table);
-                        tr.AddNewlyCreatedDBObject(table, true);
-
-                        // 计算下一个分表偏移
+                        // --- 更新下一个表格的偏移量 ---
+                        // 当前表格高度 + 间距
                         yOffset += rows * rowHeight + gap;
                     }
 
+                    // 提交事务，保存对临时数据库的修改
                     tr.Commit();
                 }
 
+                // 将内存中的临时数据库保存为磁盘上的 .dwg 文件
                 tempDb.SaveAs(fullPath, Autodesk.AutoCAD.DatabaseServices.DwgVersion.Current);
             }
 
+            // 返回文件路径和块名，供调用者使用
             return (fullPath, blockName);
         }
 
@@ -14674,8 +14854,34 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+
         #endregion
 
+        #region 新管道设备表WPF页面相关代码
+
+        private void 管道设备表开关_Btn_Click(object sender, RoutedEventArgs e)
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+
+            var generator = new UnifiedTableGenerator();
+            // 调用新提取的方法
+            var data = generator.ExtractPipeDataFromSelection(doc.Editor, doc.Database);
+
+            if (data != null && data.Count > 0)
+            {
+                var window = new PipeDriver_Tabel_WpfWindows();
+                window.InitializeWithData(data, "管道明细表");
+                window.Show();
+            }
+            else
+            {
+                MessageBox.Show("未选择有效图元或提取数据失败。", "提示");
+            }
+        }
+
+
+        #endregion
     }
     /// <summary>
     /// DataGrid 绑定使用的行模型（用于 LayerDictionary_DataGrid）

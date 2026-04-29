@@ -108,22 +108,22 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static bool TryGetEntityExtents(Entity entity, out Extents3d extents)
         {
-            // 中文注释：先给 out 参数一个默认值，避免未赋值异常
+            // 先给 out 参数一个默认值，避免未赋值异常
             extents = default;
-            // 中文注释：空实体直接返回失败
+            // 空实体直接返回失败
             if (entity == null) return false;
-            // 中文注释：已擦除实体直接返回失败
+            // 已擦除实体直接返回失败
             if (entity.IsErased) return false;
             try
             {
-                // 中文注释：读取几何包围盒
+                // 读取几何包围盒
                 extents = entity.GeometricExtents;
-                // 中文注释：读取成功返回 true
+                // 读取成功返回 true
                 return true;
             }
             catch
             {
-                // 中文注释：读取失败返回 false
+                // 读取失败返回 false
                 return false;
             }
         }
@@ -133,19 +133,19 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static bool IsExtentsIntersect(Extents3d a, Extents3d b, double tol = 1e-6)
         {
-            // 中文注释：X 轴左侧分离
+            // X 轴左侧分离
             if (a.MaxPoint.X < b.MinPoint.X - tol) return false;
-            // 中文注释：X 轴右侧分离
+            // X 轴右侧分离
             if (a.MinPoint.X > b.MaxPoint.X + tol) return false;
-            // 中文注释：Y 轴下侧分离
+            // Y 轴下侧分离
             if (a.MaxPoint.Y < b.MinPoint.Y - tol) return false;
-            // 中文注释：Y 轴上侧分离
+            // Y 轴上侧分离
             if (a.MinPoint.Y > b.MaxPoint.Y + tol) return false;
-            // 中文注释：Z 轴后侧分离
+            // Z 轴后侧分离
             if (a.MaxPoint.Z < b.MinPoint.Z - tol) return false;
-            // 中文注释：Z 轴前侧分离
+            // Z 轴前侧分离
             if (a.MinPoint.Z > b.MaxPoint.Z + tol) return false;
-            // 中文注释：通过所有分离轴检测则视为相交
+            // 通过所有分离轴检测则视为相交
             return true;
         }
 
@@ -154,32 +154,32 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static bool IsEntityOverlap(Entity source, Entity target)
         {
-            // 中文注释：源实体包围盒获取失败，直接不重叠
+            // 源实体包围盒获取失败，直接不重叠
             if (!TryGetEntityExtents(source, out var e1)) return false;
-            // 中文注释：目标实体包围盒获取失败，直接不重叠
+            // 目标实体包围盒获取失败，直接不重叠
             if (!TryGetEntityExtents(target, out var e2)) return false;
-            // 中文注释：包围盒不相交直接返回
+            // 包围盒不相交直接返回
             if (!IsExtentsIntersect(e1, e2)) return false;
 
-            // 中文注释：当两者都是曲线时，追加一次更精确的求交判定
+            // 当两者都是曲线时，追加一次更精确的求交判定
             if (source is Curve c1 && target is Curve c2)
             {
                 try
                 {
-                    // 中文注释：用于接收交点集合
+                    // 用于接收交点集合
                     var pts = new Point3dCollection();
-                    // 中文注释：执行曲线求交
+                    // 执行曲线求交
                     c1.IntersectWith(c2, Intersect.OnBothOperands, pts, IntPtr.Zero, IntPtr.Zero);
-                    // 中文注释：有交点则确认重叠/相交
+                    // 有交点则确认重叠/相交
                     if (pts.Count > 0) return true;
                 }
                 catch
                 {
-                    // 中文注释：曲线求交异常时，保留包围盒相交结论继续走
+                    // 曲线求交异常时，保留包围盒相交结论继续走
                 }
             }
 
-            // 中文注释：非曲线场景，包围盒相交即视为重叠
+            // 非曲线场景，包围盒相交即视为重叠
             return true;
         }
 
@@ -188,16 +188,16 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static double CalcOverlapVolume(Extents3d a, Extents3d b)
         {
-            // 中文注释：计算 X 方向交叠长度
+            // 计算 X 方向交叠长度
             double dx = Math.Min(a.MaxPoint.X, b.MaxPoint.X) - Math.Max(a.MinPoint.X, b.MinPoint.X);
-            // 中文注释：计算 Y 方向交叠长度
+            // 计算 Y 方向交叠长度
             double dy = Math.Min(a.MaxPoint.Y, b.MaxPoint.Y) - Math.Max(a.MinPoint.Y, b.MinPoint.Y);
-            // 中文注释：计算 Z 方向交叠长度
+            // 计算 Z 方向交叠长度
             double dz = Math.Min(a.MaxPoint.Z, b.MaxPoint.Z) - Math.Max(a.MinPoint.Z, b.MinPoint.Z);
 
-            // 中文注释：任一方向非正即无交叠体积
+            // 任一方向非正即无交叠体积
             if (dx <= 0 || dy <= 0 || dz <= 0) return 0.0;
-            // 中文注释：返回交叠体积
+            // 返回交叠体积
             return dx * dy * dz;
         }
 
@@ -206,7 +206,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static Point3d GetExtentsCenter(Extents3d e)
         {
-            // 中文注释：按最小点与最大点中点计算中心
+            // 按最小点与最大点中点计算中心
             return new Point3d(
                 (e.MinPoint.X + e.MaxPoint.X) * 0.5,
                 (e.MinPoint.Y + e.MaxPoint.Y) * 0.5,
@@ -218,24 +218,24 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static string NormalizePropertyKey(string raw)
         {
-            // 中文注释：空值直接返回空串
+            // 空值直接返回空串
             if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
 
-            // 中文注释：转大写并去掉首尾空白
+            // 转大写并去掉首尾空白
             string s = raw.Trim().ToUpperInvariant();
 
-            // 中文注释：只保留字母数字（中文字符会被 IsLetter 识别保留）
+            // 只保留字母数字（中文字符会被 IsLetter 识别保留）
             var sb = new StringBuilder(s.Length);
             foreach (char ch in s)
             {
-                // 中文注释：保留字母与数字，丢弃空格/下划线/符号
+                // 保留字母与数字，丢弃空格/下划线/符号
                 if (char.IsLetterOrDigit(ch))
                 {
                     sb.Append(ch);
                 }
             }
 
-            // 中文注释：返回归一化结果
+            // 返回归一化结果
             return sb.ToString();
         }
 
@@ -244,19 +244,19 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static bool ShouldSkipInheritedValue(string raw)
         {
-            // 中文注释：null 转空，避免空引用
+            // null 转空，避免空引用
             string text = (raw ?? string.Empty).Trim();
 
-            // 中文注释：空串直接跳过
+            // 空串直接跳过
             if (string.IsNullOrWhiteSpace(text)) return true;
 
-            // 中文注释：兼容全角 ０
+            // 兼容全角 ０
             text = text.Replace('０', '0');
 
-            // 中文注释：纯字符串 "0" 直接跳过
+            // 纯字符串 "0" 直接跳过
             if (string.Equals(text, "0", StringComparison.OrdinalIgnoreCase)) return true;
 
-            // 中文注释：数值可解析且等于 0（如 0.0、0.00、+0、-0）则跳过
+            // 数值可解析且等于 0（如 0.0、0.00、+0、-0）则跳过
             double numeric;
             if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out numeric))
             {
@@ -267,7 +267,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 if (Math.Abs(numeric) < 1e-12) return true;
             }
 
-            // 中文注释：其余值允许继承
+            // 其余值允许继承
             return false;
         }
 
@@ -276,25 +276,25 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static string GetEntityTypeToken(Entity e)
         {
-            // 中文注释：空实体返回空串
+            // 空实体返回空串
             if (e == null) return string.Empty;
 
-            // 中文注释：块参照优先读取块名
+            // 块参照优先读取块名
             if (e is BlockReference br)
             {
                 try
                 {
-                    // 中文注释：Name 通常可直接拿到块名
+                    // Name 通常可直接拿到块名
                     return (br.Name ?? string.Empty).Trim();
                 }
                 catch
                 {
-                    // 中文注释：读取失败回退到类型名
+                    // 读取失败回退到类型名
                     return e.GetType().Name;
                 }
             }
 
-            // 中文注释：非块参照返回类型名
+            // 非块参照返回类型名
             return e.GetType().Name;
         }
 
@@ -303,17 +303,17 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static double ComputeOverlapCandidateScore(BlockReference insertingBr, Entity candidate)
         {
-            // 中文注释：空对象直接最低分
+            // 空对象直接最低分
             if (insertingBr == null || candidate == null) return double.MinValue;
 
-            // 中文注释：包围盒读取失败直接最低分
+            // 包围盒读取失败直接最低分
             if (!TryGetEntityExtents(insertingBr, out var srcExt)) return double.MinValue;
             if (!TryGetEntityExtents(candidate, out var dstExt)) return double.MinValue;
 
-            // 中文注释：必须先满足相交
+            // 必须先满足相交
             if (!IsExtentsIntersect(srcExt, dstExt)) return double.MinValue;
 
-            // 中文注释：交叠体积比例分（越大越好）
+            // 交叠体积比例分（越大越好）
             double overlapVol = CalcOverlapVolume(srcExt, dstExt);
             double srcVol = Math.Max(
                 (srcExt.MaxPoint.X - srcExt.MinPoint.X) *
@@ -321,13 +321,13 @@ namespace GB_NewCadPlus_IV.Helpers
                 (srcExt.MaxPoint.Z - srcExt.MinPoint.Z), 1e-9);
             double overlapRatio = overlapVol / srcVol;
 
-            // 中文注释：中心点距离分（越近越好）
+            // 中心点距离分（越近越好）
             var c1 = GetExtentsCenter(srcExt);
             var c2 = GetExtentsCenter(dstExt);
             double distance = c1.DistanceTo(c2);
             double distanceScore = 1.0 / (1.0 + distance);
 
-            // 中文注释：同层加权（工程里同层通常更可能是正确来源）
+            // 同层加权（工程里同层通常更可能是正确来源）
             double layerScore = 0.0;
             try
             {
@@ -343,10 +343,10 @@ namespace GB_NewCadPlus_IV.Helpers
             }
             catch
             {
-                // 中文注释：层名读取失败不影响主流程
+                // 层名读取失败不影响主流程
             }
 
-            // 中文注释：类型相似度（块名一致或类型一致）
+            // 类型相似度（块名一致或类型一致）
             double typeScore = 0.0;
             string t1 = GetEntityTypeToken(insertingBr);
             string t2 = GetEntityTypeToken(candidate);
@@ -356,10 +356,10 @@ namespace GB_NewCadPlus_IV.Helpers
                     typeScore = 0.20;
             }
 
-            // 中文注释：组合总分（可按项目实际继续调权重）
+            // 组合总分（可按项目实际继续调权重）
             double score = overlapRatio * 0.55 + distanceScore * 0.25 + layerScore + typeScore;
 
-            // 中文注释：返回最终评分
+            // 返回最终评分
             return score;
         }
 
@@ -368,23 +368,23 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static bool IsPropertyKeyAllowed(string rawKey, HashSet<string> activeWhitelist)
         {
-            // 中文注释：空键直接不允许，避免脏数据进入
+            // 空键直接不允许，避免脏数据进入
             if (string.IsNullOrWhiteSpace(rawKey)) return false;
 
-            // 中文注释：黑名单先拦截（绝对禁止）
+            // 黑名单先拦截（绝对禁止）
             if (IsBlacklistedPropertyKey(rawKey)) return false;
 
-            // 中文注释：未启用白名单时，黑名单外都允许
+            // 未启用白名单时，黑名单外都允许
             if (!_propertySyncUseWhitelistTemplate) return true;
 
-            // 中文注释：白名单为空时，不允许任何字段（安全兜底）
+            // 白名单为空时，不允许任何字段（安全兜底）
             if (activeWhitelist == null || activeWhitelist.Count == 0) return false;
 
-            // 中文注释：归一化后比对白名单
+            // 归一化后比对白名单
             string nKey = NormalizePropertyKey(rawKey);
             if (string.IsNullOrWhiteSpace(nKey)) return false;
 
-            // 中文注释：命中白名单才允许
+            // 命中白名单才允许
             return activeWhitelist.Contains(nKey);
         }
 
@@ -393,37 +393,37 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static Dictionary<string, string> ReadEntityPropertyMap(DBTrans tr, Entity entity)
         {
-            // 中文注释：创建不区分大小写字典，降低字段大小写差异影响
+            // 创建不区分大小写字典，降低字段大小写差异影响
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // 中文注释：空参数直接返回空字典
+            // 空参数直接返回空字典
             if (tr == null || entity == null) return map;
 
             // 1) 读取块属性（AttributeReference）
             if (entity is BlockReference br)
             {
-                // 中文注释：遍历块属性集合
+                // 遍历块属性集合
                 foreach (ObjectId attId in br.AttributeCollection)
                 {
-                    // 中文注释：读取属性引用
+                    // 读取属性引用
                     var ar = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                    // 中文注释：无效属性跳过
+                    // 无效属性跳过
                     if (ar == null) continue;
 
-                    // 中文注释：读取标签名并清洗
+                    // 读取标签名并清洗
                     string tag = (ar.Tag ?? string.Empty).Trim();
-                    // 中文注释：空标签跳过
+                    // 空标签跳过
                     if (string.IsNullOrWhiteSpace(tag)) continue;
 
-                    // 中文注释：读取属性值
+                    // 读取属性值
                     string value = ar.TextString ?? string.Empty;
-                    // 中文注释：值为 0 或空时不加入映射（核心修复）
+                    // 值为 0 或空时不加入映射（核心修复）
                     if (ShouldSkipInheritedValue(value)) continue;
 
-                    // 中文注释：保存原键
+                    // 保存原键
                     map[tag] = value;
 
-                    // 中文注释：保存归一化键（增强同名匹配稳定性）
+                    // 保存归一化键（增强同名匹配稳定性）
                     string nTag = NormalizePropertyKey(tag);
                     if (!string.IsNullOrWhiteSpace(nTag) && !map.ContainsKey(nTag))
                     {
@@ -435,38 +435,38 @@ namespace GB_NewCadPlus_IV.Helpers
             // 2) 读取扩展字典中的 XRecord（键名作为属性名）
             if (entity.ExtensionDictionary != ObjectId.Null)
             {
-                // 中文注释：打开扩展字典
+                // 打开扩展字典
                 var dict = tr.GetObject(entity.ExtensionDictionary, OpenMode.ForRead) as DBDictionary;
-                // 中文注释：字典有效才继续
+                // 字典有效才继续
                 if (dict != null)
                 {
-                    // 中文注释：遍历扩展字典项
+                    // 遍历扩展字典项
                     foreach (DBDictionaryEntry entry in dict)
                     {
-                        // 中文注释：读取 XRecord
+                        // 读取 XRecord
                         var xrec = tr.GetObject(entry.Value, OpenMode.ForRead) as Xrecord;
-                        // 中文注释：无数据跳过
+                        // 无数据跳过
                         if (xrec?.Data == null) continue;
 
-                        // 中文注释：读取 TypedValue 数组
+                        // 读取 TypedValue 数组
                         var values = xrec.Data.AsArray();
-                        // 中文注释：空数组跳过
+                        // 空数组跳过
                         if (values == null || values.Length == 0) continue;
 
-                        // 中文注释：读取键名
+                        // 读取键名
                         string key = (entry.Key ?? string.Empty).Trim();
-                        // 中文注释：空键跳过
+                        // 空键跳过
                         if (string.IsNullOrWhiteSpace(key)) continue;
 
-                        // 中文注释：优先取首值作为当前同步值
+                        // 优先取首值作为当前同步值
                         string val = values[0].Value?.ToString() ?? string.Empty;
-                        // 中文注释：值为 0 或空时不加入映射（核心修复）
+                        // 值为 0 或空时不加入映射（核心修复）
                         if (ShouldSkipInheritedValue(val)) continue;
 
-                        // 中文注释：保存原键
+                        // 保存原键
                         map[key] = val;
 
-                        // 中文注释：保存归一化键
+                        // 保存归一化键
                         string nKey = NormalizePropertyKey(key);
                         if (!string.IsNullOrWhiteSpace(nKey) && !map.ContainsKey(nKey))
                         {
@@ -476,7 +476,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
             }
 
-            // 中文注释：返回属性映射结果
+            // 返回属性映射结果
             return map;
         }
 
@@ -485,26 +485,26 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static void SyncCommonPropertiesToBlockReference(DBTrans tr, BlockReference targetBr, Dictionary<string, string> sourceMap)
         {
-            // 中文注释：参数校验
+            // 参数校验
             if (tr == null || targetBr == null || sourceMap == null || sourceMap.Count == 0) return;
 
-            // 中文注释：遍历目标块的属性引用
+            // 遍历目标块的属性引用
             foreach (ObjectId attId in targetBr.AttributeCollection)
             {
-                // 中文注释：以写模式打开属性
+                // 以写模式打开属性
                 var ar = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
-                // 中文注释：无效属性跳过
+                // 无效属性跳过
                 if (ar == null) continue;
 
-                // 中文注释：读取目标标签
+                // 读取目标标签
                 string tag = (ar.Tag ?? string.Empty).Trim();
-                // 中文注释：空标签跳过
+                // 空标签跳过
                 if (string.IsNullOrWhiteSpace(tag)) continue;
 
-                // 中文注释：优先按原键查找
+                // 优先按原键查找
                 bool found = sourceMap.TryGetValue(tag, out string val);
 
-                // 中文注释：原键未命中时按归一化键兜底查找
+                // 原键未命中时按归一化键兜底查找
                 if (!found)
                 {
                     string nTag = NormalizePropertyKey(tag);
@@ -514,19 +514,19 @@ namespace GB_NewCadPlus_IV.Helpers
                     }
                 }
 
-                // 中文注释：未命中同名字段则跳过
+                // 未命中同名字段则跳过
                 if (!found) continue;
 
-                // 中文注释：null 统一转空串
+                // null 统一转空串
                 string newValue = val ?? string.Empty;
 
-                // 中文注释：值为 0 或空时，不继承赋值（核心修复）
+                // 值为 0 或空时，不继承赋值（核心修复）
                 if (ShouldSkipInheritedValue(newValue)) continue;
 
-                // 中文注释：值没变化就不写，减少无效写事务
+                // 值没变化就不写，减少无效写事务
                 if (string.Equals(ar.TextString ?? string.Empty, newValue, StringComparison.Ordinal)) continue;
 
-                // 中文注释：执行覆盖写入
+                // 执行覆盖写入
                 ar.TextString = newValue;
             }
         }
@@ -536,36 +536,36 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static object ConvertValueByTypeCode(int typeCode, string raw)
         {
-            // 中文注释：空值统一按空串处理
+            // 空值统一按空串处理
             string text = raw ?? string.Empty;
 
-            // 中文注释：整型类型码分支
+            // 整型类型码分支
             if (typeCode == (int)DxfCode.Int16 ||
                 typeCode == (int)DxfCode.Int32 ||
                 typeCode == (int)DxfCode.Int64 ||
                 typeCode == (int)DxfCode.ExtendedDataInteger16 ||
                 typeCode == (int)DxfCode.ExtendedDataInteger32)
             {
-                // 中文注释：尽量转整型，失败回退原字符串
+                // 尽量转整型，失败回退原字符串
                 if (int.TryParse(text, out int iv)) return iv;
                 return text;
             }
 
-            // 中文注释：实数类型码分支
+            // 实数类型码分支
             if (typeCode == (int)DxfCode.Real ||
                 typeCode == (int)DxfCode.ExtendedDataReal)
             {
-                // 中文注释：先按不变文化解析
+                // 先按不变文化解析
                 if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double dv))
                     return dv;
-                // 中文注释：再按当前文化解析
+                // 再按当前文化解析
                 if (double.TryParse(text, out dv))
                     return dv;
-                // 中文注释：失败回退字符串
+                // 失败回退字符串
                 return text;
             }
 
-            // 中文注释：默认按字符串写入
+            // 默认按字符串写入
             return text;
         }
 
@@ -574,28 +574,28 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static void SyncCommonPropertiesToEntityXRecord(DBTrans tr, Entity targetEntity, Dictionary<string, string> sourceMap)
         {
-            // 中文注释：参数校验
+            // 参数校验
             if (tr == null || targetEntity == null || sourceMap == null || sourceMap.Count == 0) return;
-            // 中文注释：目标无扩展字典直接返回
+            // 目标无扩展字典直接返回
             if (targetEntity.ExtensionDictionary == ObjectId.Null) return;
 
-            // 中文注释：打开目标扩展字典
+            // 打开目标扩展字典
             var dict = tr.GetObject(targetEntity.ExtensionDictionary, OpenMode.ForWrite) as DBDictionary;
-            // 中文注释：打开失败返回
+            // 打开失败返回
             if (dict == null) return;
 
-            // 中文注释：遍历目标扩展字典键
+            // 遍历目标扩展字典键
             foreach (DBDictionaryEntry entry in dict)
             {
-                // 中文注释：读取当前键名
+                // 读取当前键名
                 string key = (entry.Key ?? string.Empty).Trim();
-                // 中文注释：空键跳过
+                // 空键跳过
                 if (string.IsNullOrWhiteSpace(key)) continue;
 
-                // 中文注释：先按原键匹配
+                // 先按原键匹配
                 bool found = sourceMap.TryGetValue(key, out string val);
 
-                // 中文注释：原键未命中时按归一化键匹配
+                // 原键未命中时按归一化键匹配
                 if (!found)
                 {
                     string nKey = NormalizePropertyKey(key);
@@ -605,43 +605,43 @@ namespace GB_NewCadPlus_IV.Helpers
                     }
                 }
 
-                // 中文注释：源中无同名字段跳过
+                // 源中无同名字段跳过
                 if (!found) continue;
 
-                // 中文注释：值为 0 或空时，不继承赋值（核心修复）
+                // 值为 0 或空时，不继承赋值（核心修复）
                 if (ShouldSkipInheritedValue(val)) continue;
 
-                // 中文注释：打开目标 XRecord
+                // 打开目标 XRecord
                 var xrec = tr.GetObject(entry.Value, OpenMode.ForWrite) as Xrecord;
-                // 中文注释：无效 XRecord 跳过
+                // 无效 XRecord 跳过
                 if (xrec == null) continue;
 
-                // 中文注释：读取原始数据数组（用于保留类型）
+                // 读取原始数据数组（用于保留类型）
                 var oldArray = xrec.Data?.AsArray();
 
-                // 中文注释：如果原本没有数据，则创建一个文本 TypedValue
+                // 如果原本没有数据，则创建一个文本 TypedValue
                 if (oldArray == null || oldArray.Length == 0)
                 {
                     xrec.Data = new ResultBuffer(new TypedValue((int)DxfCode.Text, val ?? string.Empty));
                     continue;
                 }
 
-                // 中文注释：复制原数组用于构建新数组
+                // 复制原数组用于构建新数组
                 var newArray = oldArray.ToArray();
 
-                // 中文注释：取首项类型码并按类型转换新值
+                // 取首项类型码并按类型转换新值
                 int firstCode = newArray[0].TypeCode;
                 object firstObj = ConvertValueByTypeCode(firstCode, val ?? string.Empty);
 
-                // 中文注释：若值未变化，直接跳过写入
+                // 若值未变化，直接跳过写入
                 string oldText = newArray[0].Value?.ToString() ?? string.Empty;
                 string newText = firstObj?.ToString() ?? string.Empty;
                 if (string.Equals(oldText, newText, StringComparison.Ordinal)) continue;
 
-                // 中文注释：只替换首项值，保留其余 TypedValue，降低破坏性
+                // 只替换首项值，保留其余 TypedValue，降低破坏性
                 newArray[0] = new TypedValue(firstCode, firstObj);
 
-                // 中文注释：回写 XRecord 数据
+                // 回写 XRecord 数据
                 xrec.Data = new ResultBuffer(newArray);
             }
         }
@@ -651,22 +651,22 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static void SyncCommonPropertiesToInsertedEntities(DBTrans tr, List<Entity> insertedEntities, Dictionary<string, string> sourceMap)
         {
-            // 中文注释：参数校验
+            // 参数校验
             if (tr == null || insertedEntities == null || sourceMap == null || sourceMap.Count == 0) return;
 
-            // 中文注释：遍历每个新实体
+            // 遍历每个新实体
             foreach (var ent in insertedEntities)
             {
-                // 中文注释：空实体跳过
+                // 空实体跳过
                 if (ent == null) continue;
 
-                // 中文注释：若是块参照，先同步块属性
+                // 若是块参照，先同步块属性
                 if (ent is BlockReference br)
                 {
                     SyncCommonPropertiesToBlockReference(tr, br, sourceMap);
                 }
 
-                // 中文注释：同步扩展字典同名键
+                // 同步扩展字典同名键
                 SyncCommonPropertiesToEntityXRecord(tr, ent, sourceMap);
             }
         }
@@ -685,76 +685,76 @@ namespace GB_NewCadPlus_IV.Helpers
             List<OverlapCandidate> candidates,
             HashSet<string> activeWhitelist)
         {
-            // 中文注释：返回字典（不区分大小写）
+            // 返回字典（不区分大小写）
             var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // 中文注释：记录已写入归一化键，避免后来源覆盖先来源
+            // 记录已写入归一化键，避免后来源覆盖先来源
             var takenNormalizedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // 中文注释：参数校验
+            // 参数校验
             if (tr == null || candidates == null || candidates.Count == 0) return merged;
 
-            // 中文注释：遍历候选来源（已排序）
+            // 遍历候选来源（已排序）
             foreach (var candidate in candidates)
             {
-                // 中文注释：空候选跳过
+                // 空候选跳过
                 if (candidate?.Entity == null) continue;
 
-                // 中文注释：读取该候选的属性映射
+                // 读取该候选的属性映射
                 var sourceMap = ReadEntityPropertyMap(tr, candidate.Entity);
-                // 中文注释：无属性跳过
+                // 无属性跳过
                 if (sourceMap == null || sourceMap.Count == 0) continue;
 
-                // 中文注释：统计来源贡献字段数
+                // 统计来源贡献字段数
                 int acceptedCount = 0;
 
-                // 中文注释：逐字段合并
+                // 逐字段合并
                 foreach (var kv in sourceMap)
                 {
-                    // 中文注释：原始键值
+                    // 原始键值
                     string rawKey = kv.Key ?? string.Empty;
                     string rawVal = kv.Value ?? string.Empty;
 
-                    // 中文注释：值为 0 或空时跳过（核心修复）
+                    // 值为 0 或空时跳过（核心修复）
                     if (ShouldSkipInheritedValue(rawVal)) continue;
 
-                    // 中文注释：按白名单/黑名单统一判定
+                    // 按白名单/黑名单统一判定
                     if (!IsPropertyKeyAllowed(rawKey, activeWhitelist)) continue;
 
-                    // 中文注释：归一化键用于去重
+                    // 归一化键用于去重
                     string nKey = NormalizePropertyKey(rawKey);
                     if (string.IsNullOrWhiteSpace(nKey)) continue;
 
-                    // 中文注释：更高优先级来源已经写过同键则跳过
+                    // 更高优先级来源已经写过同键则跳过
                     if (takenNormalizedKeys.Contains(nKey)) continue;
 
-                    // 中文注释：写入合并结果（使用归一化键）
+                    // 写入合并结果（使用归一化键）
                     merged[nKey] = rawVal;
 
-                    // 中文注释：登记占用
+                    // 登记占用
                     takenNormalizedKeys.Add(nKey);
 
-                    // 中文注释：贡献计数
+                    // 贡献计数
                     acceptedCount++;
 
-                    // 中文注释：达到上限提前结束
+                    // 达到上限提前结束
                     if (merged.Count >= _propertySyncMaxMergedFields)
                         break;
                 }
 
-                // 中文注释：记录来源贡献日志
+                // 记录来源贡献日志
                 try
                 {
                     LogManager.Instance.LogInfo($"\n来源实体贡献字段: {acceptedCount}, {candidate.Identity}");
                 }
                 catch { }
 
-                // 中文注释：达到上限终止后续来源
+                // 达到上限终止后续来源
                 if (merged.Count >= _propertySyncMaxMergedFields)
                     break;
             }
 
-            // 中文注释：总结果日志
+            // 总结果日志
             try
             {
                 LogManager.Instance.LogInfo($"\n多来源属性合并完成（白名单模式={_propertySyncUseWhitelistTemplate}），合并字段数={merged.Count}");
@@ -771,16 +771,16 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 属性同步策略配置（第二版增强）
         /// </summary>
-        // 中文注释：是否优先同层来源（true 时同层会加权，且可额外筛选）
+        // 是否优先同层来源（true 时同层会加权，且可额外筛选）
         private static readonly bool _propertySyncPreferSameLayer = true;
 
-        // 中文注释：最多参与合并的重叠候选数量（防止大图性能波动）
+        // 最多参与合并的重叠候选数量（防止大图性能波动）
         private static readonly int _propertySyncMaxCandidates = 8;
 
-        // 中文注释：最多合并字段数量（防止异常图元导致字段爆炸）
+        // 最多合并字段数量（防止异常图元导致字段爆炸）
         private static readonly int _propertySyncMaxMergedFields = 200;
 
-        // 中文注释：黑名单字段（这些字段不参与“交叠继承”）
+        // 黑名单字段（这些字段不参与“交叠继承”）
         private static readonly HashSet<string> _propertySyncBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {   "ID","GUID","UUID","OBJECTID","HANDLE",
             "CREATEDAT","UPDATEDAT","CREATETIME","UPDATETIME","TIMESTAMP",
@@ -788,8 +788,8 @@ namespace GB_NewCadPlus_IV.Helpers
             "VERSION","REVISION","REV",
             "FILENAME","FILEPATH","FILEHASH","PREVIEWIMAGEPATH","PREVIEWIMAGENAME",
             "BLOCKNAME","LAYERNAME",
-            "NAME", // 中文注释：新增：禁止继承“名称”字段
-            "名称"  // 中文注释：新增：禁止继承中文“名称”字段
+            "NAME", // 新增：禁止继承“名称”字段
+            "名称"  // 新增：禁止继承中文“名称”字段
         };
 
         /// <summary>
@@ -797,16 +797,16 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private sealed class OverlapCandidate
         {
-            // 中文注释：候选实体对象
+            // 候选实体对象
             public Entity Entity { get; set; }
 
-            // 中文注释：候选评分（越高越优先）
+            // 候选评分（越高越优先）
             public double Score { get; set; }
 
-            // 中文注释：是否与插入对象同层
+            // 是否与插入对象同层
             public bool IsSameLayer { get; set; }
 
-            // 中文注释：实体标识字符串（日志用）
+            // 实体标识字符串（日志用）
             public string Identity { get; set; } = string.Empty;
         }
 
@@ -815,20 +815,20 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static bool IsBlacklistedPropertyKey(string rawKey)
         {
-            // 中文注释：空键直接当黑名单处理
+            // 空键直接当黑名单处理
             if (string.IsNullOrWhiteSpace(rawKey)) return true;
 
-            // 中文注释：原始键去空白
+            // 原始键去空白
             string key = rawKey.Trim();
 
-            // 中文注释：原始键命中黑名单
+            // 原始键命中黑名单
             if (_propertySyncBlacklist.Contains(key)) return true;
 
-            // 中文注释：归一化键命中黑名单
+            // 归一化键命中黑名单
             string nKey = NormalizePropertyKey(key);
             if (!string.IsNullOrWhiteSpace(nKey) && _propertySyncBlacklist.Contains(nKey)) return true;
 
-            // 中文注释：未命中黑名单
+            // 未命中黑名单
             return false;
         }
 
@@ -837,34 +837,34 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static List<OverlapCandidate> FindOverlappedCandidates(DBTrans tr, BlockReference insertingBr, int maxCandidates = 8)
         {
-            // 中文注释：准备结果集合
+            // 准备结果集合
             var list = new List<OverlapCandidate>();
 
-            // 中文注释：参数校验
+            // 参数校验
             if (tr == null || insertingBr == null) return list;
 
-            // 中文注释：读取插入对象图层
+            // 读取插入对象图层
             string insertLayer = string.Empty;
             try { insertLayer = (insertingBr.Layer ?? string.Empty).Trim(); } catch { insertLayer = string.Empty; }
 
-            // 中文注释：遍历当前空间全部实体
+            // 遍历当前空间全部实体
             foreach (ObjectId id in tr.CurrentSpace)
             {
-                // 中文注释：跳过自身
+                // 跳过自身
                 if (id == insertingBr.ObjectId) continue;
 
-                // 中文注释：读取候选实体
+                // 读取候选实体
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                // 中文注释：无效实体跳过
+                // 无效实体跳过
                 if (ent == null || ent.IsErased) continue;
 
-                // 中文注释：重叠判定，未重叠跳过
+                // 重叠判定，未重叠跳过
                 if (!IsEntityOverlap(insertingBr, ent)) continue;
 
-                // 中文注释：计算候选分数
+                // 计算候选分数
                 double score = ComputeOverlapCandidateScore(insertingBr, ent);
 
-                // 中文注释：记录同层标识
+                // 记录同层标识
                 bool sameLayer = false;
                 try
                 {
@@ -878,7 +878,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     sameLayer = false;
                 }
 
-                // 中文注释：组装候选对象
+                // 组装候选对象
                 var candidate = new OverlapCandidate
                 {
                     Entity = ent,
@@ -887,11 +887,11 @@ namespace GB_NewCadPlus_IV.Helpers
                     Identity = $"Id={ent.ObjectId},Type={ent.GetType().Name},Layer={ent.Layer}"
                 };
 
-                // 中文注释：加入候选列表
+                // 加入候选列表
                 list.Add(candidate);
             }
 
-            // 中文注释：排序规则：优先同层（可配置）+ 再按评分降序
+            // 排序规则：优先同层（可配置）+ 再按评分降序
             IEnumerable<OverlapCandidate> ordered = list;
             if (_propertySyncPreferSameLayer)
             {
@@ -904,10 +904,10 @@ namespace GB_NewCadPlus_IV.Helpers
                 ordered = ordered.OrderByDescending(c => c.Score);
             }
 
-            // 中文注释：截断候选数量，控制性能
+            // 截断候选数量，控制性能
             var result = ordered.Take(Math.Max(1, maxCandidates)).ToList();
 
-            // 中文注释：输出候选日志
+            // 输出候选日志
             try
             {
                 LogManager.Instance.LogInfo($"\n重叠候选数量: 原始={list.Count}, 参与合并={result.Count}");
@@ -919,10 +919,10 @@ namespace GB_NewCadPlus_IV.Helpers
             }
             catch
             {
-                // 中文注释：日志异常不影响流程
+                // 日志异常不影响流程
             }
 
-            // 中文注释：返回候选集合
+            // 返回候选集合
             return result;
         }
 
@@ -930,7 +930,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 白名单模板配置（第三版增强）
         /// 说明：键使用“归一化字段名”（NormalizePropertyKey 后）
         /// </summary>
-        // 中文注释：是否启用白名单模板控制（启用后，仅允许白名单字段被继承）
+        // 是否启用白名单模板控制（启用后，仅允许白名单字段被继承）
         private static readonly bool _propertySyncUseWhitelistTemplate = false;
 
         /// <summary>
@@ -938,37 +938,37 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static string ResolvePropertySyncTemplateKey(BlockReference insertingBr)
         {
-            // 中文注释：优先从按钮名推断（你项目里按钮名语义最明确）
+            // 优先从按钮名推断（你项目里按钮名语义最明确）
             string btnName = (VariableDictionary.btnFileName ?? string.Empty).Trim().ToUpperInvariant();
-            // 中文注释：其次从图层名推断
+            // 其次从图层名推断
             string layer = string.Empty;
             try { layer = (insertingBr?.Layer ?? string.Empty).Trim().ToUpperInvariant(); } catch { layer = string.Empty; }
 
-            // 中文注释：拼接统一判断文本
+            // 拼接统一判断文本
             string text = $"{btnName}|{layer}";
 
-            // 中文注释：工艺
+            // 工艺
             if (text.Contains("GY") || text.Contains("工艺")) return "GY";
-            // 中文注释：暖通
+            // 暖通
             if (text.Contains("NT") || text.Contains("暖通")) return "NT";
-            // 中文注释：给排水
+            // 给排水
             if (text.Contains("GPS") || text.Contains("给排水") || text.Contains("水")) return "GPS";
-            // 中文注释：电气
+            // 电气
             if (text.Contains("DQ") || text.Contains("电气")) return "DQ";
-            // 中文注释：自控
+            // 自控
             if (text.Contains("ZK") || text.Contains("自控")) return "ZK";
-            // 中文注释：建筑
+            // 建筑
             if (text.Contains("JZ") || text.Contains("建筑")) return "JZ";
-            // 中文注释：结构
+            // 结构
             if (text.Contains("JG") || text.Contains("结构")) return "JG";
 
-            // 中文注释：无法识别时走默认模板
+            // 无法识别时走默认模板
             return "DEFAULT";
         }
 
         #region 第三版
         /// <summary>
-        /// 中文注释：白名单模板 JSON 路径（可手工编辑）
+        /// 白名单模板 JSON 路径（可手工编辑）
         /// </summary>
         private static readonly string _propertySyncWhitelistJsonPath = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -976,18 +976,18 @@ namespace GB_NewCadPlus_IV.Helpers
                 "property-sync-whitelist.json");
 
         /// <summary>
-        /// 中文注释：白名单模板缓存（热加载后存这里）
+        /// 白名单模板缓存（热加载后存这里）
         /// </summary>
         private static Dictionary<string, HashSet<string>> _propertySyncWhitelistTemplatesRuntime =
             new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// 中文注释：白名单文件最近写入时间（用于热加载判断）
+        /// 白名单文件最近写入时间（用于热加载判断）
         /// </summary>
         private static DateTime _propertySyncWhitelistJsonLastWriteUtc = DateTime.MinValue;
 
         /// <summary>
-        /// 中文注释：白名单热加载锁，避免并发读写冲突
+        /// 白名单热加载锁，避免并发读写冲突
         /// </summary>
         private static readonly object _propertySyncWhitelistLock = new object();
 
@@ -996,64 +996,64 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static Dictionary<string, HashSet<string>> BuildDefaultWhitelistTemplates()
         {
-            // 中文注释：创建默认模板字典
+            // 创建默认模板字典
             var dict = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-            // 中文注释：默认模板
+            // 默认模板
             dict["DEFAULT"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","DISPLAYNAME","TYPE","MODEL","SPEC","MATERIAL",
         "DN","PN","QTY","UNIT","REMARK","CODE","NO"
     };
 
-            // 中文注释：工艺模板
+            // 工艺模板
             dict["GY"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","MODEL","SPEC","MATERIAL","DN","PN","QTY","UNIT","REMARK",
         "PIPEMATERIAL","PIPESPEC","VALVEMODEL","PUMPMODEL","WORKINGPRESSURE"
     };
 
-            // 中文注释：暖通模板
+            // 暖通模板
             dict["NT"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","MODEL","SPEC","MATERIAL","DN","QTY","UNIT","REMARK",
         "AIRVOLUME","WINDSPEED","PIPEMATERIAL","INSULATIONTHICKNESS"
     };
 
-            // 中文注释：给排水模板
+            // 给排水模板
             dict["GPS"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","MODEL","SPEC","MATERIAL","DN","QTY","UNIT","REMARK",
         "PRESSURE","PIPEMATERIAL","PIPELEVEL"
     };
 
-            // 中文注释：电气模板
+            // 电气模板
             dict["DQ"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","MODEL","SPEC","QTY","UNIT","REMARK",
         "POWERRATING","VOLTAGE","CABLESPEC","CABLEMODEL"
     };
 
-            // 中文注释：自控模板
+            // 自控模板
             dict["ZK"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","MODEL","SPEC","QTY","UNIT","REMARK",
         "SIGNALTYPE","IOPOINT","CONTROLMODE"
     };
 
-            // 中文注释：建筑模板
+            // 建筑模板
             dict["JZ"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","TYPE","SPEC","QTY","UNIT","REMARK","ROOMNO","LEVEL"
     };
 
-            // 中文注释：结构模板
+            // 结构模板
             dict["JG"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "TAG","NAME","TYPE","SPEC","QTY","UNIT","REMARK","CONCRETEGRADE","STEELGRADE"
     };
 
-            // 中文注释：返回默认模板
+            // 返回默认模板
             return dict;
         }
 
@@ -1062,11 +1062,11 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static HashSet<string> NormalizeWhitelistFields(IEnumerable<string> fields)
         {
-            // 中文注释：创建结果集合
+            // 创建结果集合
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (fields == null) return set;
 
-            // 中文注释：逐个归一化后入集合
+            // 逐个归一化后入集合
             foreach (var f in fields)
             {
                 string n = NormalizePropertyKey(f ?? string.Empty);
@@ -1084,22 +1084,22 @@ namespace GB_NewCadPlus_IV.Helpers
         {
             try
             {
-                // 中文注释：文件已存在则不覆盖
+                // 文件已存在则不覆盖
                 if (System.IO.File.Exists(_propertySyncWhitelistJsonPath)) return;
 
-                // 中文注释：确保目录存在
+                // 确保目录存在
                 string dir = System.IO.Path.GetDirectoryName(_propertySyncWhitelistJsonPath) ?? string.Empty;
                 if (!string.IsNullOrWhiteSpace(dir) && !System.IO.Directory.Exists(dir))
                     System.IO.Directory.CreateDirectory(dir);
 
-                // 中文注释：取默认模板（写出原始键，不做归一化，便于人读）
+                // 取默认模板（写出原始键，不做归一化，便于人读）
                 var defaults = BuildDefaultWhitelistTemplates()
                     .ToDictionary(k => k.Key, v => v.Value.ToList(), StringComparer.OrdinalIgnoreCase);
 
-                // 中文注释：序列化为缩进 JSON
+                // 序列化为缩进 JSON
                 string json = Newtonsoft.Json.JsonConvert.SerializeObject(defaults, Newtonsoft.Json.Formatting.Indented);
 
-                // 中文注释：写文件（UTF-8）
+                // 写文件（UTF-8）
                 System.IO.File.WriteAllText(_propertySyncWhitelistJsonPath, json, Encoding.UTF8);
             }
             catch (Exception ex)
@@ -1113,23 +1113,23 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static Dictionary<string, HashSet<string>> LoadWhitelistTemplatesFromJson()
         {
-            // 中文注释：准备返回字典
+            // 准备返回字典
             var result = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-            // 中文注释：文件不存在直接返回空（上层会兜底）
+            // 文件不存在直接返回空（上层会兜底）
             if (!System.IO.File.Exists(_propertySyncWhitelistJsonPath))
                 return result;
 
-            // 中文注释：读取 JSON 文本
+            // 读取 JSON 文本
             string json = System.IO.File.ReadAllText(_propertySyncWhitelistJsonPath, Encoding.UTF8);
 
-            // 中文注释：反序列化为 字典<模板名, 字段列表>
+            // 反序列化为 字典<模板名, 字段列表>
             var raw = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, List<string>>>(json);
 
-            // 中文注释：空配置直接返回空
+            // 空配置直接返回空
             if (raw == null || raw.Count == 0) return result;
 
-            // 中文注释：逐模板归一化
+            // 逐模板归一化
             foreach (var kv in raw)
             {
                 string key = (kv.Key ?? string.Empty).Trim();
@@ -1150,24 +1150,24 @@ namespace GB_NewCadPlus_IV.Helpers
         {
             lock (_propertySyncWhitelistLock)
             {
-                // 中文注释：先确保有种子文件（首次）
+                // 先确保有种子文件（首次）
                 EnsureWhitelistSeedJson();
 
-                // 中文注释：获取当前文件写入时间
+                // 获取当前文件写入时间
                 DateTime lastWrite = DateTime.MinValue;
                 if (System.IO.File.Exists(_propertySyncWhitelistJsonPath))
                     lastWrite = System.IO.File.GetLastWriteTimeUtc(_propertySyncWhitelistJsonPath);
 
-                // 中文注释：缓存为空或文件已更新时才重载
+                // 缓存为空或文件已更新时才重载
                 bool needReload = _propertySyncWhitelistTemplatesRuntime.Count == 0 || lastWrite > _propertySyncWhitelistJsonLastWriteUtc;
                 if (!needReload) return;
 
                 try
                 {
-                    // 中文注释：优先读 JSON
+                    // 优先读 JSON
                     var loaded = LoadWhitelistTemplatesFromJson();
 
-                    // 中文注释：JSON 无有效模板时使用默认模板
+                    // JSON 无有效模板时使用默认模板
                     if (loaded.Count == 0)
                     {
                         var fallback = BuildDefaultWhitelistTemplates();
@@ -1177,19 +1177,19 @@ namespace GB_NewCadPlus_IV.Helpers
                     else
                     {
                         _propertySyncWhitelistTemplatesRuntime = loaded;
-                        // 中文注释：确保 DEFAULT 存在
+                        // 确保 DEFAULT 存在
                         if (!_propertySyncWhitelistTemplatesRuntime.ContainsKey("DEFAULT"))
                             _propertySyncWhitelistTemplatesRuntime["DEFAULT"] = NormalizeWhitelistFields(BuildDefaultWhitelistTemplates()["DEFAULT"]);
                     }
 
-                    // 中文注释：更新版本时间戳
+                    // 更新版本时间戳
                     _propertySyncWhitelistJsonLastWriteUtc = lastWrite;
 
                     LogManager.Instance.LogInfo($"\n白名单模板热加载成功: {_propertySyncWhitelistJsonPath}");
                 }
                 catch (Exception ex)
                 {
-                    // 中文注释：异常时回退默认模板
+                    // 异常时回退默认模板
                     var fallback = BuildDefaultWhitelistTemplates();
                     _propertySyncWhitelistTemplatesRuntime = fallback
                         .ToDictionary(k => k.Key, v => NormalizeWhitelistFields(v.Value), StringComparer.OrdinalIgnoreCase);
@@ -1204,21 +1204,21 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static HashSet<string> GetActiveWhitelist(BlockReference insertingBr)
         {
-            // 中文注释：先执行热加载
+            // 先执行热加载
             EnsureWhitelistTemplatesHotLoaded();
 
-            // 中文注释：按专业解析模板键（你已有 ResolvePropertySyncTemplateKey）
+            // 按专业解析模板键（你已有 ResolvePropertySyncTemplateKey）
             string key = ResolvePropertySyncTemplateKey(insertingBr);
 
-            // 中文注释：命中专业模板优先
+            // 命中专业模板优先
             if (_propertySyncWhitelistTemplatesRuntime.TryGetValue(key, out var set) && set != null && set.Count > 0)
                 return set;
 
-            // 中文注释：兜底 DEFAULT
+            // 兜底 DEFAULT
             if (_propertySyncWhitelistTemplatesRuntime.TryGetValue("DEFAULT", out var def) && def != null)
                 return def;
 
-            // 中文注释：最终兜底空集合
+            // 最终兜底空集合
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -1325,292 +1325,388 @@ namespace GB_NewCadPlus_IV.Helpers
             }
         }
 
-
         /// <summary>
         /// 以“整图复制”的方式，将指定 DWG 文件的模型空间全部图元一次性克隆到当前图纸空间，
         /// 等效于在源图里全选 Ctrl+C，再在当前图 Ctrl+V，能够保留天正等自定义实体的附加属性。
         /// 新增功能：如果插入点与现有图元重叠，自动继承重叠图元的业务属性（如压力、介质等）。
         /// </summary>
-        [CommandMethod("COPYDWGALLFAST")] // 注册 CAD 命令名，允许命令行调用
-        public static void CopyDwgAllFast(string sourceFilePath) // 整图插入主方法，参数为源DWG文件路径
+        [CommandMethod("COPYDWGALLFAST")] // 注册 CAD 命令名，允许在命令行输入 COPYDWGALLFAST 调用
+        public static void CopyDwgAllFast(string sourceFilePath) // 整图插入主方法，参数 sourceFilePath 为源 DWG 文件的路径
         {
-            // 中文注释：获取当前活动的 AutoCAD 文档对象
+            // 获取 LogManager 的单例实例，用于记录日志
+            var logger = LogManager.Instance;
+            // 在日志文件中记录命令开始执行
+            logger.LogInfo(">>> [DEBUG] 开始执行 COPYDWGALLFAST 命令");
+
+            // 获取当前活动的 AutoCAD 文档对象
             var doc = Application.DocumentManager.MdiActiveDocument;
-            // 中文注释：如果未找到活动文档，提示错误并退出
+            // 如果未找到活动文档，说明 CAD 环境异常，记录错误并退出
             if (doc == null)
             {
-                RaiseCopyDwgAllFastCompleted(false, "未找到活动文档。"); // 回调通知上层调用者失败
-                return; // 结束方法执行
+                // 记录严重错误日志
+                logger.LogError("错误：未找到活动文档。");
+                // 回调通知上层调用者失败
+                RaiseCopyDwgAllFastCompleted(false, "未找到活动文档。");
+                // 结束方法执行
+                return;
             }
 
-            // 中文注释：获取编辑器对象，用于向命令行发送调试信息
+            // 获取编辑器对象 ed，用于向 CAD 命令行发送提示消息
             var ed = doc.Editor;
 
-            // 中文注释：尝试进入互斥锁，防止命令重入导致崩溃
+            // 尝试进入互斥锁，防止命令重入（即防止在上一次没结束时再次触发）导致崩溃
             if (!TryEnterCopyDwgAllFastBusy())
             {
-                ed.WriteMessage("\n当前插入命令正在执行中，请先完成当前插入（左键落点或 Esc）。"); // 命令行提示用户
-                RaiseCopyDwgAllFastCompleted(false, "当前命令忙碌中。"); // 回调通知上层调用者失败
-                return; // 结束方法执行
+                // 记录警告日志
+                logger.LogWarning("警告：当前命令忙碌中。");
+                // 在 CAD 命令行提示用户
+                ed.WriteMessage("\n当前插入命令正在执行中，请先完成当前插入（左键落点或 Esc）。");
+                // 回调通知上层调用者失败
+                RaiseCopyDwgAllFastCompleted(false, "当前命令忙碌中。");
+                // 结束方法执行
+                return;
             }
 
-            // 中文注释：获取当前文档的数据库对象（目标数据库）
+            // 获取当前文档的数据库对象 destDb，这是我们要插入图元的目标数据库
             var destDb = doc.Database;
-            // 中文注释：标记是否需要在成功后删除源文件（通常用于临时文件）
+            // 标记 deleteAfter，判断是否需要在成功后删除源文件（通常用于临时文件）
             bool deleteAfter = false;
-            // 中文注释：标记插入操作是否成功
+            // 标记 insertSuccess，记录本次插入操作最终是否成功
             bool insertSuccess = false;
-            // 中文注释：记录失败时的具体原因
+            // 变量 failReason，用于记录如果失败时的具体原因字符串
             string? failReason = null;
 
-            try // 主流程异常捕获块
+            try // 主流程异常捕获块，包裹整个插入逻辑
             {
-                // 中文注释：判断源文件是否为临时文件，如果是则标记后续删除
+                // 内部 try-catch，专门用于判断源文件是否为临时文件
                 try
                 {
+                    // 如果传入了有效的源文件路径
                     if (!string.IsNullOrEmpty(sourceFilePath))
                     {
+                        // 获取系统临时文件夹的路径
                         var tempDir = Path.GetTempPath();
+                        // 如果源文件路径以临时目录开头，则视为临时文件
                         if (!string.IsNullOrEmpty(tempDir) && sourceFilePath.StartsWith(tempDir, StringComparison.OrdinalIgnoreCase))
                         {
-                            deleteAfter = true; // 标记为需要删除
+                            // 标记为需要删除
+                            deleteAfter = true;
+                            // 记录日志，说明识别到了临时文件
+                            logger.LogInfo($"源文件识别为临时文件: {sourceFilePath}");
                         }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    // 如果判断路径时发生异常，记录错误日志
+                    logger.LogError($"判断临时文件异常: {ex.Message}");
+                    // 发生异常时保守处理，不删除文件
                     deleteAfter = false;
                 }
 
+                // 初始化插入点 targetPoint 为原点 (0,0,0)，后续拖拽会更新此值
                 Point3d targetPoint = Point3d.Origin;
 
+                // 锁定文档以确保线程安全的数据库写操作
                 using (doc.LockDocument())
+                // 创建一个新的数据库对象 sourceDb 用于读取源 DWG 文件
                 using (var sourceDb = new Autodesk.AutoCAD.DatabaseServices.Database(false, true))
                 {
+                    // 从磁盘读取源 DWG 文件内容到内存数据库 sourceDb
                     sourceDb.ReadDwgFile(sourceFilePath, FileShare.Read, true, null);
+                    // 关闭输入流，释放文件占用，允许其他进程访问该文件
                     sourceDb.CloseInput(true);
 
+                    // 开启针对目标数据库的事务处理 tr
                     using (var tr = new DBTrans())
                     {
+                        // 将源数据库作为匿名块定义插入到目标数据库 destDb 中
                         var blkDefId = destDb.Insert("*U", sourceDb, false);
+                        // 基于插入的块定义创建一个新的块参照实体 br
                         var br = new BlockReference(targetPoint, blkDefId);
 
+                        // 初始化缩放比例 scale 为 1.0
                         double scale = 1.0;
-                        if (VariableDictionary.winForm_Status)
+                        // 根据当前界面状态（WinForm 或 WPF）获取用户设置的缩放比例
+                        if (VariableDictionary.winForm_Status) // 如果是 WinForm 模式
                         {
-                            try { scale = VariableDictionary.textBoxScale; }
-                            catch { scale = 1.0; }
+                            try { scale = VariableDictionary.textBoxScale; } // 尝试读取 WinForm 的比例值
+                            catch { scale = 1.0; } // 读取失败则使用默认值 1.0
                         }
-                        else
+                        else // 如果是 WPF 模式
                         {
-                            try { scale = VariableDictionary.wpfTextBoxScale; }
-                            catch { scale = 1.0; }
+                            try { scale = VariableDictionary.wpfTextBoxScale; } // 尝试读取 WPF 的比例值
+                            catch { scale = 1.0; } // 读取失败则使用默认值 1.0
                         }
+                        // 如果比例值非法（NaN 或小于等于 0），强制重置为 1.0
                         if (double.IsNaN(scale) || scale <= 0) scale = 1.0;
 
+                        // 设置块参照 br 的初始缩放比例
                         br.ScaleFactors = new Scale3d(scale);
+                        // 将块参照 br 添加到当前空间的模型空间中
                         var entityObjectId = tr.CurrentSpace.AddEntity(br);
+                        // 以写模式打开刚刚添加的块参照 fileEntity，以便后续修改属性或变换
                         var fileEntity = (BlockReference)tr.GetObject(entityObjectId, OpenMode.ForWrite);
 
+                        // 记录当前的旋转角度 tempAngle，用于拖拽过程中的增量计算
                         double tempAngle = VariableDictionary.entityRotateAngle;
+                        // 记录当前的缩放比例 tempScale，用于拖拽过程中的增量计算
                         double tempScale = scale;
 
+                        // 如果初始旋转角度不为 0，则预先应用旋转，确保预览方向正确
                         if (Math.Abs(tempAngle) > 1e-12)
                         {
+                            // 绕 Z 轴旋转块参照 fileEntity
                             fileEntity.TransformBy(Matrix3d.Rotation(tempAngle, Vector3d.ZAxis, targetPoint));
                         }
 
+                        // 创建自定义拖拽类 JigEx，用于实现鼠标跟随效果
                         var entityBlock = new JigEx((mpw, _) =>
                         {
+                            // 移动块参照从旧位置到新鼠标位置 mpw
                             fileEntity.Move(targetPoint, mpw);
+                            // 更新全局记录的插入点 targetPoint
                             targetPoint = mpw;
 
+                            // 检查外部设置的旋转角度是否发生变化
                             if (VariableDictionary.entityRotateAngle != tempAngle)
                             {
+                                // 先逆向旋转抵消之前的角度
                                 fileEntity.TransformBy(Matrix3d.Rotation(-tempAngle, Vector3d.ZAxis, targetPoint));
+                                // 更新缓存的角度值 tempAngle
                                 tempAngle = VariableDictionary.entityRotateAngle;
+                                // 应用新的旋转角度
                                 fileEntity.TransformBy(Matrix3d.Rotation(tempAngle, Vector3d.ZAxis, targetPoint));
                             }
 
+                            // 获取当前界面实时设置的缩放比例 currentUiScale
                             double currentUiScale = scale;
-                            if (VariableDictionary.winForm_Status)
+                            if (VariableDictionary.winForm_Status) // WinForm 模式
                             {
-                                try { currentUiScale = VariableDictionary.textBoxScale; }
-                                catch { currentUiScale = tempScale; }
+                                try { currentUiScale = VariableDictionary.textBoxScale; } // 读取实时比例
+                                catch { currentUiScale = tempScale; } // 失败则沿用上次有效值
                             }
-                            else
+                            else // WPF 模式
                             {
-                                try { currentUiScale = VariableDictionary.wpfTextBoxScale; }
-                                catch { currentUiScale = tempScale; }
+                                try { currentUiScale = VariableDictionary.wpfTextBoxScale; } // 读取实时比例
+                                catch { currentUiScale = tempScale; } // 失败则沿用上次有效值
                             }
+                            // 校验比例值合法性
                             if (double.IsNaN(currentUiScale) || currentUiScale <= 0) currentUiScale = 1.0;
 
+                            // 如果比例发生变化，则更新块参照的缩放
                             if (Math.Abs(currentUiScale - tempScale) > 1e-9)
                             {
+                                // 设置新比例
                                 fileEntity.ScaleFactors = new Scale3d(currentUiScale);
+                                // 更新缓存比例 tempScale
                                 tempScale = currentUiScale;
                             }
                         });
 
+                        // 执行图形绘制，显示拖拽预览
                         entityBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(fileEntity));
+                        // 设置命令行提示文字
                         entityBlock.SetOptions(msg: "\n指定插入点");
+                        // 确保绘图区域获得焦点，以便接收鼠标事件
                         EnsureDwgViewFocus();
 
+                        // 声明变量 endPoint 用于接收拖拽结果
                         PromptResult endPoint;
+                        // 标记当前处于拖拽交互状态
                         _isCopyDwgAllFastDragging = true;
                         try
                         {
+                            // 启动编辑器拖拽交互，等待用户点击确认或取消
                             endPoint = Env.Editor.Drag(entityBlock);
                         }
                         finally
                         {
+                            // 无论拖拽成功与否，都清除拖拽状态标记
                             _isCopyDwgAllFastDragging = false;
                         }
 
+                        // 如果用户按 Esc 取消或拖拽失败
                         if (endPoint.Status != PromptStatus.OK)
                         {
+                            // 记录失败原因
                             failReason = "用户取消插入。";
+                            // 记录日志
+                            logger.LogInfo("用户取消了插入操作。");
+                            // 回滚事务，不保存任何更改
                             tr.Abort();
+                            // 退出方法
                             return;
                         }
 
-                        // ================== 核心新功能：重叠检测与属性继承（带命令行调试） ==================
+                        // 记录日志，表示拖拽结束，开始核心逻辑
+                        logger.LogInfo("拖拽结束，开始执行重叠检测与属性继承逻辑...");
 
-                        ed.WriteMessage("\n[调试] >>> 开始执行重叠检测与属性继承逻辑...");
+                        // ================== 核心新功能：重叠检测与属性继承（带 LogManager 日志） ==================
 
-                        // 中文注释：初始化用于存储从重叠图元读取到的属性映射表
+                        // 初始化字典 overlapSourcePropertyMap，用于存储从重叠图元读取到的属性
                         var overlapSourcePropertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                        // 中文注释：查找当前插入点附近所有可能重叠的候选图元
+                        // 调用 FindOverlappedCandidates 查找当前插入点附近所有可能重叠的候选图元
                         var overlapCandidates = FindOverlappedCandidates(tr, fileEntity, _propertySyncMaxCandidates);
 
-                        // 中文注释：在命令行输出找到的候选数量
-                        ed.WriteMessage($"\n[调试] 找到重叠候选图元数量: {overlapCandidates.Count}");
+                        // 记录日志，输出找到的候选图元数量
+                        logger.LogInfo($"[DEBUG] 找到重叠候选图元数量: {overlapCandidates.Count}");
 
+                        // 如果找到了重叠候选图元
                         if (overlapCandidates.Count > 0)
                         {
-                            // 中文注释：根据当前图元的专业类型，获取对应的属性白名单
+                            // 调用 GetActiveWhitelist 根据当前图元的专业类型获取对应的属性白名单
                             var activeWhitelist = GetActiveWhitelist(fileEntity);
 
-                            // 中文注释：从所有候选图元中合并属性，并应用白名单/黑名单过滤
+                            // 调用 BuildMergedPropertyMapFromCandidates 从候选图元中合并属性，并应用白名单/黑名单过滤
                             overlapSourcePropertyMap = BuildMergedPropertyMapFromCandidates(tr, overlapCandidates, activeWhitelist);
 
-                            // 中文注释：在命令行输出过滤后的属性数量
-                            ed.WriteMessage($"\n[调试] 过滤后待同步属性数量: {overlapSourcePropertyMap.Count}");
+                            // 记录日志，输出过滤后待同步的属性数量
+                            logger.LogInfo($"[DEBUG] 过滤后待同步属性数量: {overlapSourcePropertyMap.Count}");
 
-                            // 中文注释：如果有属性，打印前3个属性的键值对，方便排查
+                            // 如果有属性，打印前 5 个属性的键值对，方便排查
                             if (overlapSourcePropertyMap.Count > 0)
                             {
-                                int debugCount = 0;
-                                foreach (var kv in overlapSourcePropertyMap)
+                                int debugCount = 0; // 计数器
+                                foreach (var kv in overlapSourcePropertyMap) // 遍历属性字典
                                 {
-                                    ed.WriteMessage($"\n  [调试] 属性名: {kv.Key}, 属性值: {kv.Value}");
-                                    debugCount++;
-                                    if (debugCount >= 3) break; // 只打印前3个，避免刷屏
+                                    // 记录每个属性的名称和值
+                                    logger.LogInfo($"[DEBUG]   属性名: [{kv.Key}], 属性值: [{kv.Value}]");
+                                    debugCount++; // 计数器加 1
+                                    if (debugCount >= 5) break; // 只打印前 5 个，避免日志过多
                                 }
                             }
                             else
                             {
-                                // 中文注释：如果数量为0，提示可能是白名单过滤掉了
-                                ed.WriteMessage("\n[调试] 警告：未找到可同步属性。请检查白名单配置或原图元是否有扩展数据/块属性。");
+                                // 如果数量为 0，记录警告日志，提示可能是白名单过滤掉了
+                                logger.LogWarning("[DEBUG] 警告：未找到可同步属性。请检查白名单配置或原图元是否有扩展数据/块属性。");
                             }
                         }
                         else
                         {
-                            // 中文注释：如果没有重叠，提示用户检查插入位置
-                            ed.WriteMessage("\n[调试] 未检测到重叠图元。请确保新图元与旧图元有几何交集。");
+                            // 如果没有重叠，记录警告日志，提示用户检查插入位置
+                            logger.LogWarning("[DEBUG] 未检测到重叠图元。请确保新图元与旧图元有几何交集。");
                         }
 
-                        // 中文注释：如果成功读取到有效的重叠属性
+                        // 如果成功读取到有效的重叠属性
                         if (overlapSourcePropertyMap.Count > 0)
                         {
-                            // 中文注释：第一步：将属性同步到当前的块参照（BlockReference）本身
+                            // 第一步：调用 SyncCommonPropertiesToBlockReference 将属性同步到当前的块参照本身
                             SyncCommonPropertiesToBlockReference(tr, fileEntity, overlapSourcePropertyMap);
+                            // 第二步：调用 SyncCommonPropertiesToEntityXRecord 将属性同步到块参照的扩展字典
                             SyncCommonPropertiesToEntityXRecord(tr, fileEntity, overlapSourcePropertyMap);
 
-                            ed.WriteMessage($"\n[调试] 已向块参照同步 {overlapSourcePropertyMap.Count} 个属性。");
+                            // 记录日志，说明已向块参照同步了多少个属性
+                            logger.LogInfo($"[DEBUG] 已向块参照同步 {overlapSourcePropertyMap.Count} 个属性。");
                         }
 
                         // ================== 结束核心新功能 ==================
 
-                        // 中文注释：创建集合用于存储分解后产生的所有新实体
+                        // 创建集合 newIds 用于存储分解后产生的所有新实体
                         var newIds = new DBObjectCollection();
 
-                        // 中文注释：执行分解操作
+                        // 执行分解操作，将块参照 fileEntity 炸开为独立的图元
                         fileEntity.Explode(newIds);
 
-                        // 中文注释：删除原始的块参照实体
+                        // 删除原始的块参照实体 fileEntity，因为已经被分解替代
                         fileEntity.Erase();
 
-                        // 中文注释：创建列表用于跟踪所有新加入到图纸中的实体
+                        // 创建列表 insertedEntities 用于跟踪所有新加入到图纸中的实体
                         var insertedEntities = new List<Entity>();
+                        // 遍历分解产生的每一个实体 ent
                         foreach (Entity ent in newIds)
                         {
+                            // 将实体 ent 添加到当前空间，使其在图纸中可见
                             tr.CurrentSpace.AddEntity(ent);
+                            // 将实体 ent 加入跟踪列表 insertedEntities
                             insertedEntities.Add(ent);
                         }
 
-                        // 中文注释：如果之前读取到了重叠属性，需要将这些属性进一步同步到分解后的子实体上
+                        // 如果之前读取到了重叠属性，需要将这些属性进一步同步到分解后的子实体上
                         if (overlapSourcePropertyMap.Count > 0)
                         {
-                            ed.WriteMessage($"\n[调试] 正在向 {insertedEntities.Count} 个分解后的实体同步属性...");
+                            // 记录日志，说明正在向多少个分解后的实体同步属性
+                            logger.LogInfo($"[DEBUG] 正在向 {insertedEntities.Count} 个分解后的实体同步属性...");
 
-                            // 中文注释：遍历分解后的实体，将属性同步到它们的扩展数据或嵌套块中
+                            // 调用 SyncCommonPropertiesToInsertedEntities 遍历分解后的实体，将属性同步到它们的扩展数据或嵌套块中
                             SyncCommonPropertiesToInsertedEntities(tr, insertedEntities, overlapSourcePropertyMap);
 
-                            ed.WriteMessage("\n[调试] 属性同步流程结束。请选中新图元输入 LIST 命令查看扩展数据。");
+                            // 记录日志，说明属性同步流程结束
+                            logger.LogInfo("[DEBUG] 属性同步流程结束。");
                         }
 
-                        // 中文注释：检查是否有待创建的标注文本
+                        // 检查是否有待创建的标注文本 dimString
                         if (VariableDictionary.dimString != null)
                         {
                             try
                             {
+                                // 调用 Command.DDimLinear 创建线性标注
                                 Command.DDimLinear(tr, entityBlock.MousePointWcsLast, VariableDictionary.dimString);
+                                // 清空标注缓存，防止重复创建
                                 VariableDictionary.dimString = null;
                             }
                             catch (Exception ex)
                             {
-                                LogManager.Instance.LogInfo($"\n设置标注样式失败: {ex.Message}");
+                                // 如果标注创建失败，记录错误日志，但不影响主流程
+                                logger.LogError($"设置标注样式失败: {ex.Message}");
                             }
                         }
 
-                        // 中文注释：提交事务
+                        // 提交事务 tr，将所有数据库更改永久保存
                         tr.Commit();
+                        // 刷新屏幕显示，让用户立即看到结果
                         Env.Editor.Redraw();
+                        // 标记操作成功
                         insertSuccess = true;
+                        // 记录日志，说明事务提交成功
+                        logger.LogInfo("事务提交成功，插入完成。");
                     }
                 }
 
+                // 如果标记为临时文件且插入成功，则清理临时文件
                 if (deleteAfter && insertSuccess && !string.IsNullOrEmpty(sourceFilePath))
                 {
                     try
                     {
+                        // 再次确认文件存在
                         if (System.IO.File.Exists(sourceFilePath))
                         {
+                            // 删除临时 DWG 文件，释放磁盘空间
                             System.IO.File.Delete(sourceFilePath);
-                            LogManager.Instance.LogInfo($"\n已删除临时 DWG 文件: {sourceFilePath}");
+                            // 记录日志，说明已删除临时文件
+                            logger.LogInfo($"已删除临时 DWG 文件: {sourceFilePath}");
                         }
                     }
                     catch (Exception ex)
                     {
-                        LogManager.Instance.LogInfo($"\n尝试删除临时 DWG 失败: {ex.Message}");
+                        // 如果删除失败，记录错误日志，不影响主流程
+                        logger.LogError($"尝试删除临时 DWG 失败: {ex.Message}");
                     }
                 }
 
+                // 重置 WinForm 状态标志
                 VariableDictionary.winForm_Status = false;
             }
-            catch (Exception ex)
+            catch (Exception ex) // 捕获整个执行过程中的任何未预期异常
             {
+                // 记录异常消息到 failReason
                 failReason = ex.Message;
-                LogManager.Instance.LogInfo($"\nCOPYDWGALLFAST 执行失败: {ex.Message}");
-                LogManager.Instance.LogInfo($"\n堆栈跟踪: {ex.StackTrace}");
+                // 记录错误日志
+                logger.LogError($"COPYDWGALLFAST 执行失败: {ex.Message}");
+                // 记录堆栈跟踪日志，方便排查深层错误
+                logger.LogError($"堆栈跟踪: {ex.StackTrace}");
             }
-            finally
+            finally // 无论成功失败都会执行的收尾工作
             {
+                // 确保拖拽状态被清除
                 _isCopyDwgAllFastDragging = false;
+                // 释放互斥锁，允许下次执行
                 ExitCopyDwgAllFastBusy();
+                // 通知上层调用者最终结果
                 RaiseCopyDwgAllFastCompleted(insertSuccess, insertSuccess ? null : failReason);
+                // 记录命令执行结束日志
+                logger.LogInfo("<<< [DEBUG] 命令执行结束");
             }
         }
 

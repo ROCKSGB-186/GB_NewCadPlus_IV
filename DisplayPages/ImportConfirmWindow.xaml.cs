@@ -78,16 +78,16 @@ namespace GB_NewCadPlus_IV.Views
         {
             try
             {
-                // 中文注释：优先使用 DTO 顶层预览路径，如果没有则回退到 FileStorage 中的预览路径
+                // 优先使用 DTO 顶层预览路径，如果没有则回退到 FileStorage 中的预览路径
                 string previewPath = _dto?.PreviewImagePath;
 
-                // 中文注释：如果 DTO 顶层路径为空，则尝试读取 FileStorage 中的预览路径
+                // 如果 DTO 顶层路径为空，则尝试读取 FileStorage 中的预览路径
                 if (string.IsNullOrWhiteSpace(previewPath))
                 {
                     previewPath = _dto?.FileStorage?.PreviewImagePath;
                 }
 
-                // 中文注释：如果最终路径为空或文件不存在，则清空图片并记录日志
+                // 如果最终路径为空或文件不存在，则清空图片并记录日志
                 if (string.IsNullOrWhiteSpace(previewPath) || !System.IO.File.Exists(previewPath))
                 {
                     PreviewImage.Source = null;
@@ -95,10 +95,10 @@ namespace GB_NewCadPlus_IV.Views
                     return;
                 }
 
-                // 中文注释：读取文件字节到内存，避免文件锁问题
+                // 读取文件字节到内存，避免文件锁问题
                 byte[] bytes = System.IO.File.ReadAllBytes(previewPath);
 
-                // 中文注释：如果文件为空，则不显示
+                // 如果文件为空，则不显示
                 if (bytes == null || bytes.Length == 0)
                 {
                     PreviewImage.Source = null;
@@ -117,7 +117,7 @@ namespace GB_NewCadPlus_IV.Views
                     PreviewImage.Source = bitmap;
                 }
 
-                // 中文注释：确保图片控件可见并刷新布局
+                // 确保图片控件可见并刷新布局
                 PreviewImage.Visibility = System.Windows.Visibility.Visible;
                 PreviewImage.InvalidateVisual();
                 PreviewImage.UpdateLayout();
@@ -136,7 +136,7 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private void BindPropertiesToGrid()
         {
-            // 中文注释：优先使用 DTO 中的 JSON 属性字典来生成展示数据
+            // 优先使用 DTO 中的 JSON 属性字典来生成展示数据
             var displayData = _mainWindow.PrepareFileDisplayData(_dto.FileStorage, _dto.AttributesJson);
             PropertiesGrid.ItemsSource = displayData;
         }
@@ -207,15 +207,15 @@ namespace GB_NewCadPlus_IV.Views
         {
             try
             {
-                // 中文注释：先把界面编辑值回写到 DTO
+                // 先把界面编辑值回写到 DTO
                 UpdateDtoFromGrid();
 
-                // 中文注释：生成模板表
+                // 生成模板表
                 var dt = _mainWindow.CreateTemplateDataTable();
                 dt.Rows.Clear();
                 DataRow newRow = dt.NewRow();
 
-                // 中文注释：先填充 FileStorage 固定字段
+                // 先填充 FileStorage 固定字段
                 foreach (PropertyInfo prop in typeof(FileStorage).GetProperties())
                 {
                     if (dt.Columns.Contains(prop.Name))
@@ -224,28 +224,28 @@ namespace GB_NewCadPlus_IV.Views
                     }
                 }
 
-                // 中文注释：构建 JSON 属性字典（优先 DTO 里的 Attributes 字典；没有则从旧 FileAttribute 桥接）
+                // 构建 JSON 属性字典（优先 DTO 里的 Attributes 字典；没有则从旧 FileAttribute 桥接）
                 var attrDict = BuildExportAttributesDictionary();
 
-                // 中文注释：动态列导出——模板里没有的字段自动补列
+                // 动态列导出——模板里没有的字段自动补列
                 foreach (var kv in attrDict)
                 {
                     if (string.IsNullOrWhiteSpace(kv.Key)) continue;
 
-                    // 中文注释：如果模板不存在该列，则动态新增
+                    // 如果模板不存在该列，则动态新增
                     if (!dt.Columns.Contains(kv.Key))
                     {
                         dt.Columns.Add(kv.Key, typeof(string));
                     }
 
-                    // 中文注释：写入字段值
+                    // 写入字段值
                     newRow[kv.Key] = kv.Value ?? string.Empty;
                 }
 
-                // 中文注释：加入一行
+                // 加入一行
                 dt.Rows.Add(newRow);
 
-                // 中文注释：导出文件
+                // 导出文件
                 var saveFileDialog = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "Excel 文件 (*.xlsx)|*.xlsx",
@@ -271,13 +271,13 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private Dictionary<string, string> BuildExportAttributesDictionary()
         {
-            // 中文注释：优先返回 DTO 中最新的 JSON 属性字典副本
+            // 优先返回 DTO 中最新的 JSON 属性字典副本
             if (_dto != null && _dto.AttributesJson != null && _dto.AttributesJson.Count > 0)
             {
                 return new Dictionary<string, string>(_dto.AttributesJson, StringComparer.OrdinalIgnoreCase);
             }
 
-            // 中文注释：兜底返回空字典，避免空引用
+            // 兜底返回空字典，避免空引用
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -369,13 +369,13 @@ namespace GB_NewCadPlus_IV.Views
             var items = PropertiesGrid.ItemsSource as List<CategoryPropertyEditModel>;
             if (items == null) return;
 
-            // 中文注释：确保 JSON 属性字典已初始化
+            // 确保 JSON 属性字典已初始化
             _dto.AttributesJson ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // 中文注释：每次重新采集前先清空，避免旧值残留
+            // 每次重新采集前先清空，避免旧值残留
             _dto.AttributesJson.Clear();
 
-            // 中文注释：把界面显示名统一映射为系统内部标准键名，避免后续 JSON 键混乱
+            // 把界面显示名统一映射为系统内部标准键名，避免后续 JSON 键混乱
             string NormalizeKey(string key)
             {
                 if (string.IsNullOrWhiteSpace(key)) return string.Empty;
@@ -418,12 +418,12 @@ namespace GB_NewCadPlus_IV.Views
                 }
             }
 
-            // 中文注释：局部函数，安全写入 JSON 属性字典
+            // 局部函数，安全写入 JSON 属性字典
             void AddAttr(string key, string value)
             {
                 if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return;
 
-                // 中文注释：统一键名后再写入
+                // 统一键名后再写入
                 var normalizedKey = NormalizeKey(key);
                 if (string.IsNullOrWhiteSpace(normalizedKey)) return;
 
@@ -432,16 +432,16 @@ namespace GB_NewCadPlus_IV.Views
 
             foreach (var item in items)
             {
-                // 中文注释：先回写 FileStorage 固定字段
+                // 先回写 FileStorage 固定字段
                 _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName1, item.PropertyValue1);
                 _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName2, item.PropertyValue2);
 
-                // 中文注释：再把两列属性写回 JSON 字典
+                // 再把两列属性写回 JSON 字典
                 AddAttr(item.PropertyName1, item.PropertyValue1);
                 AddAttr(item.PropertyName2, item.PropertyValue2);
             }
 
-            // 中文注释：补充主表关键字段，保证 JSON 中也有一份稳定数据
+            // 补充主表关键字段，保证 JSON 中也有一份稳定数据
             AddAttr("FileName", _dto.FileStorage.FileName ?? string.Empty);
             AddAttr("DisplayName", _dto.FileStorage.DisplayName ?? string.Empty);
             AddAttr("BlockName", _dto.FileStorage.BlockName ?? string.Empty);

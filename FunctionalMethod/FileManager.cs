@@ -34,10 +34,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// 是否使用D盘
         /// </summary>
         private readonly bool _useDPath;
-        // 中文注释：新方案主字段——当前选中的 JSON 属性字典
+        // 新方案主字段——当前选中的 JSON 属性字典
         private Dictionary<string, string> _selectedAttributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // 中文注释：兼容字段（旧代码还可能用到），逐步退役
+        // 兼容字段（旧代码还可能用到），逐步退役
         [Obsolete("过渡字段：请逐步改用 _selectedAttributes")]
         private FileAttribute _selectedFileAttribute;
                
@@ -255,22 +255,22 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns></returns>
         public static Dictionary<string, string> LoadLastPipeAttributes(bool isOutlet)
         {
-            // 中文注释：获取入口/出口属性文件路径
+            // 获取入口/出口属性文件路径
             var path = GetPipeAttrSavePath(isOutlet);
 
-            // 中文注释：若文件不存在，则自动创建一个“空结构”的XML文件，保证后续有物理文件
+            // 若文件不存在，则自动创建一个“空结构”的XML文件，保证后续有物理文件
             if (!File.Exists(path))
             {
                 try
                 {
-                    // 中文注释：确保目录存在
+                    // 确保目录存在
                     var dir = Path.GetDirectoryName(path);
                     if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
                     {
                         Directory.CreateDirectory(dir);
                     }
 
-                    // 中文注释：创建空列表并序列化到文件（不是空文本，避免反序列化失败）
+                    // 创建空列表并序列化到文件（不是空文本，避免反序列化失败）
                     var xsCreate = new XmlSerializer(typeof(List<PipeAttrEntry>));
                     var settings = new System.Xml.XmlWriterSettings
                     {
@@ -294,20 +294,20 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     System.Diagnostics.Debug.WriteLine($"[FileManager] Auto-create pipe attrs file failed: {exCreate.Message}");
                 }
 
-                // 中文注释：首次创建后返回空字典
+                // 首次创建后返回空字典
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
 
             try
             {
-                // 中文注释：按既有格式反序列化
+                // 按既有格式反序列化
                 var xs = new XmlSerializer(typeof(List<PipeAttrEntry>));
                 using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
                     var obj = xs.Deserialize(fs) as List<PipeAttrEntry>;
                     if (obj == null) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                    // 中文注释：构建不区分大小写字典
+                    // 构建不区分大小写字典
                     var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var e in obj)
                     {
@@ -324,7 +324,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
             catch (Exception ex)
             {
-                // 中文注释：读取失败时返回空字典，避免影响主流程
+                // 读取失败时返回空字典，避免影响主流程
                 System.Diagnostics.Debug.WriteLine($"[FileManager] LoadLastPipeAttributes failed: {ex.Message}");
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
@@ -336,25 +336,25 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="attrs"></param>
         public static void SaveLastPipeAttributes(bool isOutlet, Dictionary<string, string> attrs)
         {
-            // 中文注释：即使 attrs 为 null，也按“空字典”处理，确保文件可被重建
+            // 即使 attrs 为 null，也按“空字典”处理，确保文件可被重建
             if (attrs == null)
             {
                 attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
 
-            // 中文注释：获取保存路径
+            // 获取保存路径
             var path = GetPipeAttrSavePath(isOutlet);
 
             try
             {
-                // 中文注释：确保目录存在
+                // 确保目录存在
                 var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
                 {
                     Directory.CreateDirectory(dir);
                 }
 
-                // 中文注释：规范化键值，去空白并合并同名键
+                // 规范化键值，去空白并合并同名键
                 var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var kv in attrs)
                 {
@@ -364,16 +364,16 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     dict[k] = v;
                 }
 
-                // 中文注释：即使没有有效项，也写入“空列表XML”，而不是删除文件
+                // 即使没有有效项，也写入“空列表XML”，而不是删除文件
                 var list = dict.Select(kv => new PipeAttrEntry { Key = kv.Key, Value = kv.Value }).ToList();
 
-                // 中文注释：序列化器
+                // 序列化器
                 var xs = new XmlSerializer(typeof(List<PipeAttrEntry>));
 
-                // 中文注释：临时文件路径（先写临时，再替换，避免中间态损坏）
+                // 临时文件路径（先写临时，再替换，避免中间态损坏）
                 var tmpFile = path + ".tmp";
 
-                // 中文注释：写入设置（UTF8+BOM）
+                // 写入设置（UTF8+BOM）
                 var settings = new System.Xml.XmlWriterSettings
                 {
                     Indent = true,
@@ -381,7 +381,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     NewLineChars = "\r\n"
                 };
 
-                // 中文注释：写入临时文件
+                // 写入临时文件
                 using (var ofs = new FileStream(tmpFile, FileMode.Create, FileAccess.Write, FileShare.None))
                 using (var xw = System.Xml.XmlWriter.Create(ofs, settings))
                 {
@@ -390,7 +390,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     ofs.Flush(true);
                 }
 
-                // 中文注释：原子替换目标文件
+                // 原子替换目标文件
                 try
                 {
                     if (File.Exists(path))
@@ -400,7 +400,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
                 catch
                 {
-                    // 中文注释：回退覆盖策略
+                    // 回退覆盖策略
                     if (File.Exists(tmpFile))
                     {
                         File.Copy(tmpFile, path, true);
@@ -924,20 +924,20 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             WpfMainWindow wpfMainWindow
         )
         {
-            // 中文注释：记录已上传文件路径，用于异常时回滚物理文件
+            // 记录已上传文件路径，用于异常时回滚物理文件
             List<string> uploadedFiles = new List<string>();
-            // 中文注释：记录新插入的主表ID，用于异常时回滚数据库
+            // 记录新插入的主表ID，用于异常时回滚数据库
             int savedStorageId = 0;
-            // 中文注释：标记是否全流程成功
+            // 标记是否全流程成功
             bool transactionSuccess = false;
 
             try
             {
-                // 中文注释：参数校验，避免空路径或空分类导致后续异常
+                // 参数校验，避免空路径或空分类导致后续异常
                 if (string.IsNullOrWhiteSpace(_selectedFilePath) || _selectedCategoryNode == null)
                     throw new Exception("文件路径或分类节点为空");
 
-                // 中文注释：上传主文件到目标目录并生成 FileStorage 基础对象（仅内存）
+                // 上传主文件到目标目录并生成 FileStorage 基础对象（仅内存）
                 var fileInfo = new FileInfo(_selectedFilePath);
                 string fileName = fileInfo.Name;
                 string description = $"上传文件: {fileName}";
@@ -954,12 +954,12 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         Environment.UserName
                     );
 
-                    // 中文注释：记录已上传主文件，供回滚使用
+                    // 记录已上传主文件，供回滚使用
                     if (!string.IsNullOrWhiteSpace(_currentFileStorage?.FilePath))
                         uploadedFiles.Add(_currentFileStorage.FilePath);
                 }
 
-                // 中文注释：如果用户选择了预览图，则复制到与主文件同目录
+                // 如果用户选择了预览图，则复制到与主文件同目录
                 if (!string.IsNullOrWhiteSpace(_selectedPreviewImagePath) && File.Exists(_selectedPreviewImagePath))
                 {
                     var previewInfo = new FileInfo(_selectedPreviewImagePath);
@@ -973,14 +973,14 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     _currentFileStorage.PreviewImageName = previewStoredName;
                     _currentFileStorage.PreviewImagePath = previewStoredPath;
 
-                    // 中文注释：记录已上传预览图，供回滚使用
+                    // 记录已上传预览图，供回滚使用
                     uploadedFiles.Add(previewStoredPath);
                 }
 
-                // 中文注释：从属性编辑网格构建 JSON 属性字典
+                // 从属性编辑网格构建 JSON 属性字典
                 var attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 中文注释：局部函数：属性名和值都非空时才写入字典
+                // 局部函数：属性名和值都非空时才写入字典
                 void AddAttr(string key, string value)
                 {
                     if (string.IsNullOrWhiteSpace(key)) return;
@@ -988,7 +988,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     attrs[key.Trim()] = value.Trim();
                 }
 
-                // 中文注释：把分类属性编辑器中的双列属性写入 JSON 字典
+                // 把分类属性编辑器中的双列属性写入 JSON 字典
                 var gridProperties = categoryPropertiesDataGrid.ItemsSource as List<CategoryPropertyEditModel>;
                 if (gridProperties != null)
                 {
@@ -999,7 +999,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     }
                 }
 
-                // 中文注释：补充基础元数据，便于后续查询和排查
+                // 补充基础元数据，便于后续查询和排查
                 AddAttr("FileName", _currentFileStorage.FileName);
                 AddAttr("DisplayName", _currentFileStorage.DisplayName);
                 AddAttr("BlockName", _currentFileStorage.BlockName);
@@ -1007,37 +1007,37 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 AddAttr("CreatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
                 AddAttr("UpdatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
 
-                // 中文注释：调用新方法，一次性写入主表 + JSON属性表（事务）
+                // 调用新方法，一次性写入主表 + JSON属性表（事务）
                 var (storageId, attrId) = await _databaseManager.AddFileStorageAndAttributesJsonAsync(
                     _currentFileStorage,
                     attrs,
                     "default");
 
-                // 中文注释：校验插入结果
+                // 校验插入结果
                 if (storageId <= 0 || attrId <= 0)
                     throw new Exception("保存文件与JSON属性失败");
 
-                // 中文注释：记录已保存主键，后续失败可级联回滚
+                // 记录已保存主键，后续失败可级联回滚
                 savedStorageId = storageId;
                 _currentFileStorage.Id = storageId;
 
-                // 中文注释：回读主记录，确保界面层拿到数据库最新值
+                // 回读主记录，确保界面层拿到数据库最新值
                 var dbStorage = await _databaseManager.GetFileStorageAsync(_currentFileStorage.FileHash);
                 if (dbStorage != null)
                     _currentFileStorage = dbStorage;
 
-                // 中文注释：处理标签数据（沿用原有逻辑）
+                // 处理标签数据（沿用原有逻辑）
                 await ProcessFileTags(_currentFileStorage.Id, properties);
 
-                // 中文注释：刷新分类统计（沿用原有逻辑）
+                // 刷新分类统计（沿用原有逻辑）
                 await _databaseManager.UpdateCategoryStatisticsAsync(
                     _currentFileStorage.CategoryId,
                     _currentFileStorage.CategoryType);
 
-                // 中文注释：刷新界面显示
+                // 刷新界面显示
                 await wpfMainWindow.RefreshCurrentCategoryDisplayAsync(_selectedCategoryNode);
 
-                // 中文注释：标记成功
+                // 标记成功
                 transactionSuccess = true;
 
                 MessageBox.Show(
@@ -1048,7 +1048,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
             catch (Exception ex)
             {
-                // 中文注释：如果数据库记录已落地，则优先级联回滚数据库+文件
+                // 如果数据库记录已落地，则优先级联回滚数据库+文件
                 if (savedStorageId > 0)
                 {
                     try
@@ -1062,7 +1062,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
                 else
                 {
-                    // 中文注释：若数据库尚未落地，则仅删除已上传的物理文件
+                    // 若数据库尚未落地，则仅删除已上传的物理文件
                     foreach (var f in uploadedFiles)
                     {
                         try
@@ -1081,7 +1081,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
             finally
             {
-                // 中文注释：兜底日志，便于排查流程状态
+                // 兜底日志，便于排查流程状态
                 if (!transactionSuccess)
                     LogManager.Instance.LogWarning("UploadFileAndSaveToDatabase 未成功完成，已执行回滚逻辑。");
             }
@@ -1094,29 +1094,29 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
-                // 中文注释：记录开始日志
+                // 记录开始日志
                 LogManager.Instance.LogInfo($"开始批量导入图元: {excelFilePath}");
 
-                // 中文注释：读取Excel数据
+                // 读取Excel数据
                 DataTable dataTable = ReadExcelToDataTable(excelFilePath);
 
-                // 中文注释：空数据直接返回
+                // 空数据直接返回
                 if (dataTable == null || dataTable.Rows.Count == 0)
                 {
                     MessageBox.Show("Excel文件中没有数据", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                // 中文注释：成功失败计数
+                // 成功失败计数
                 int successCount = 0;
                 int failCount = 0;
 
-                // 中文注释：逐行导入
+                // 逐行导入
                 foreach (DataRow row in dataTable.Rows)
                 {
                     try
                     {
-                        // 中文注释：创建主表对象
+                        // 创建主表对象
                         var fileStorage = CreateFileStorageFromRow(row);
                         if (fileStorage == null)
                         {
@@ -1125,13 +1125,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             continue;
                         }
 
-                        // 中文注释：创建JSON属性字典
+                        // 创建JSON属性字典
                         var attrs = CreateFileAttributeFromRow(row, 0) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                        // 中文注释：事务写入主表+JSON属性表
+                        // 事务写入主表+JSON属性表
                         var (storageId, attrId) = await _databaseManager.AddFileStorageAndAttributesJsonAsync(fileStorage, attrs, "default");
 
-                        // 中文注释：结果判断
+                        // 结果判断
                         if (storageId > 0 && attrId > 0)
                         {
                             successCount++;
@@ -1145,19 +1145,19 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     }
                     catch (Exception exRow)
                     {
-                        // 中文注释：单行失败不影响整体
+                        // 单行失败不影响整体
                         failCount++;
                         LogManager.Instance.LogError($"导入单个图元时出错: {exRow.Message}");
                     }
                 }
 
-                // 中文注释：显示导入结果
+                // 显示导入结果
                 MessageBox.Show($"批量导入完成\n成功: {successCount} 个\n失败: {failCount} 个",
                     "完成", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 LogManager.Instance.LogInfo($"批量导入完成 - 成功: {successCount}, 失败: {failCount}");
 
-                // 中文注释：刷新分类树
+                // 刷新分类树
                 await _categoryManager.RefreshCategoryTreeAsync(_selectedCategoryNode, _categoryTreeView, _categoryTreeNodes, _databaseManager);
             }
             catch (Exception ex)
@@ -1214,21 +1214,21 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         private Dictionary<string, string> CreateFileAttributeFromRow(DataRow row, int storageFileId)
         {
-            // 中文注释：始终返回非空字典，避免上层空引用
+            // 始终返回非空字典，避免上层空引用
             var attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             try
             {
-                // 中文注释：防御式检查，避免传入空行导致异常
+                // 防御式检查，避免传入空行导致异常
                 if (row == null || row.Table == null)
                 {
                     return attrs;
                 }
 
-                // 中文注释：写入关联主键（字符串形式，便于JSON统一）
+                // 写入关联主键（字符串形式，便于JSON统一）
                 attrs["FileStorageId"] = storageFileId.ToString();
 
-                // 中文注释：局部函数，字符串有值才写入
+                // 局部函数，字符串有值才写入
                 void AddIfNotEmpty(string key, string value)
                 {
                     if (!string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(value))
@@ -1237,7 +1237,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     }
                 }
 
-                // 中文注释：局部函数，数值有效才写入，统一用英文小数点
+                // 局部函数，数值有效才写入，统一用英文小数点
                 void AddIfNumber(string key, double value)
                 {
                     if (Math.Abs(value) > 1e-12)
@@ -1246,7 +1246,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     }
                 }
 
-                // 中文注释：按你原有字段映射写入
+                // 按你原有字段映射写入
                 AddIfNumber("Width", GetDoubleValue(row, "宽度"));
                 AddIfNumber("Height", GetDoubleValue(row, "高度"));
                 AddIfNumber("Length", GetDoubleValue(row, "长度"));
@@ -1276,7 +1276,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 AddIfNotEmpty("Customize2", GetStringValue(row, "自定义2"));
                 AddIfNotEmpty("Customize3", GetStringValue(row, "自定义3"));
 
-                // 中文注释：写入时间戳，便于后续追踪
+                // 写入时间戳，便于后续追踪
                 attrs["CreatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 attrs["UpdatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
@@ -1284,7 +1284,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
             catch (Exception ex)
             {
-                // 中文注释：记录日志并返回当前已收集到的字典（不抛出，防止批量导入中断）
+                // 记录日志并返回当前已收集到的字典（不抛出，防止批量导入中断）
                 LogManager.Instance.LogError($"创建JSON属性字典时出错: {ex.Message}");
                 return attrs;
             }
@@ -1295,19 +1295,19 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         private Dictionary<string, string> ConvertFileAttributeToDictionary(FileAttribute fileAttribute)
         {
-            // 中文注释：创建不区分大小写字典
+            // 创建不区分大小写字典
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // 中文注释：空对象直接返回空字典
+            // 空对象直接返回空字典
             if (fileAttribute == null) return dict;
 
-            // 中文注释：通过反射遍历旧模型属性，自动收集非空值
+            // 通过反射遍历旧模型属性，自动收集非空值
             foreach (var p in typeof(FileAttribute).GetProperties())
             {
-                // 中文注释：只读取可读属性
+                // 只读取可读属性
                 if (!p.CanRead) continue;
 
-                // 中文注释：过滤技术字段（可按需扩展）
+                // 过滤技术字段（可按需扩展）
                 if (string.Equals(p.Name, "Id", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(p.Name, "CreatedAt", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(p.Name, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
@@ -1315,19 +1315,19 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     continue;
                 }
 
-                // 中文注释：获取属性值
+                // 获取属性值
                 var v = p.GetValue(fileAttribute);
 
-                // 中文注释：空值跳过
+                // 空值跳过
                 if (v == null) continue;
 
-                // 中文注释：转换字符串
+                // 转换字符串
                 var s = Convert.ToString(v);
 
-                // 中文注释：空字符串跳过
+                // 空字符串跳过
                 if (string.IsNullOrWhiteSpace(s)) continue;
 
-                // 中文注释：写入字典
+                // 写入字典
                 dict[p.Name] = s.Trim();
             }
 

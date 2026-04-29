@@ -17,12 +17,13 @@ using DataTable = System.Data.DataTable;
 using MessageBox = System.Windows.MessageBox;
 using TextBox = System.Windows.Controls.TextBox;
 using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
-// 中文注释：过渡期保留旧别名，后续全部改完可删除
+// 过渡期保留旧别名，后续全部改完可删除
 using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
 using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
 using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
 using FileTag = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileTag;
 using FileAccessLog = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAccessLog;
+using DeviceInfo = GB_NewCadPlus_IV.UniFiedStandards.DeviceInfo;
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
 {
@@ -102,7 +103,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public virtual async Task<int> AddFileAttributeAsync(FileAttribute attribute)
         {
             await Task.Yield();
-            // 中文注释：旧链路已废弃，返回0避免“假成功”
+            // 旧链路已废弃，返回0避免“假成功”
             LogManager.Instance.LogWarning("AddFileAttributeAsync 已废弃，请改用 AddFileStorageAndAttributesJsonAsync。");
             return 0;
         }
@@ -110,7 +111,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public virtual async Task<int> AddFileStorageAsync(FileStorage storage)
         {
             await Task.Yield();
-            // 中文注释：旧链路已废弃，返回0避免“假成功”
+            // 旧链路已废弃，返回0避免“假成功”
             LogManager.Instance.LogWarning("AddFileStorageAsync 旧写入链路已废弃，请改用 AddFileStorageAndAttributesJsonAsync。");
             return 0;
         }
@@ -323,7 +324,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 using (var conn = new MySqlConnection(masterConn))
                 {
                     conn.Open();
-                    // 中文注释：创建数据库（若不存在），统一字符集与排序规则，避免中文乱码
+                    // 创建数据库（若不存在），统一字符集与排序规则，避免中文乱码
                     var createDbSql = $"CREATE DATABASE IF NOT EXISTS `{database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
                     conn.Execute(createDbSql);
                 }
@@ -336,13 +337,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 {
                     conn.Open();
 
-                    // 中文注释：统一执行DDL的小工具，便于阅读和排错
+                    // 统一执行DDL的小工具，便于阅读和排错
                     void Exec(string sql)
                     {
                         conn.Execute(sql);
                     }
 
-                    // 中文注释：检查列是否存在
+                    // 检查列是否存在
                     bool ColumnExists(string tableName, string columnName)
                     {
                         const string sql = @"
@@ -354,7 +355,7 @@ WHERE table_schema = @schema
                         return conn.QuerySingle<int>(sql, new { schema = database, table = tableName, column = columnName }) > 0;
                     }
 
-                    // 中文注释：检查索引是否存在
+                    // 检查索引是否存在
                     bool IndexExists(string tableName, string indexName)
                     {
                         const string sql = @"
@@ -366,7 +367,7 @@ WHERE table_schema = @schema
                         return conn.QuerySingle<int>(sql, new { schema = database, table = tableName, index = indexName }) > 0;
                     }
 
-                    // 中文注释：检查外键约束是否存在
+                    // 检查外键约束是否存在
                     bool ForeignKeyExists(string tableName, string fkName)
                     {
                         const string sql = @"
@@ -619,7 +620,7 @@ CREATE TABLE IF NOT EXISTS `device_info` (
                     // 第4步：修复已有库的列/索引/外键（增量修复）
                     // =========================
 
-                    // 中文注释：确保 cad_file_storage 关键兼容列存在
+                    // 确保 cad_file_storage 关键兼容列存在
                     if (!ColumnExists("cad_file_storage", "file_attribute_id"))
                     {
                         Exec("ALTER TABLE `cad_file_storage` ADD COLUMN `file_attribute_id` VARCHAR(64) NULL COMMENT '兼容字段：属性配置名或业务ID';");
@@ -629,7 +630,7 @@ CREATE TABLE IF NOT EXISTS `device_info` (
                         Exec("ALTER TABLE `cad_file_storage` ADD COLUMN `category_type` VARCHAR(50) DEFAULT 'sub';");
                     }
 
-                    // 中文注释：确保常用索引存在
+                    // 确保常用索引存在
                     if (!IndexExists("cad_file_storage", "idx_cfs_category"))
                     {
                         Exec("ALTER TABLE `cad_file_storage` ADD INDEX `idx_cfs_category` (`category_id`, `category_type`);");
@@ -643,22 +644,22 @@ CREATE TABLE IF NOT EXISTS `device_info` (
                         Exec("ALTER TABLE `cad_file_storage` ADD INDEX `idx_cfs_file_hash` (`file_hash`);");
                     }
 
-                    // 中文注释：确保 departments 的 cad_category_id 索引存在（兼容 MySqlAuthService）
+                    // 确保 departments 的 cad_category_id 索引存在（兼容 MySqlAuthService）
                     if (!IndexExists("departments", "idx_cad_category_id"))
                     {
                         Exec("ALTER TABLE `departments` ADD INDEX `idx_cad_category_id` (`cad_category_id`);");
                     }
 
-                    // 中文注释：确保 JSON 属性表外键存在（file_id -> cad_file_storage.id）
+                    // 确保 JSON 属性表外键存在（file_id -> cad_file_storage.id）
                     if (!ForeignKeyExists("cad_block_attributes_json", "fk_file_id"))
                     {
-                        // 中文注释：先确保 file_id 有索引
+                        // 先确保 file_id 有索引
                         if (!IndexExists("cad_block_attributes_json", "idx_fileid"))
                         {
                             Exec("ALTER TABLE `cad_block_attributes_json` ADD INDEX `idx_fileid` (`file_id`);");
                         }
 
-                        // 中文注释：添加外键，启用级联删除，防止孤儿属性记录
+                        // 添加外键，启用级联删除，防止孤儿属性记录
                         Exec(@"
 ALTER TABLE `cad_block_attributes_json`
 ADD CONSTRAINT `fk_file_id`
@@ -670,8 +671,8 @@ ON UPDATE CASCADE;");
                     // =========================
                     // 第5步：可选清理提醒（不自动删旧表）
                     // =========================
-                    // 中文注释：这里不自动 DROP 旧 cad_file_attributes，避免误删历史数据。
-                    // 中文注释：若你确认旧表永不再用，可在数据库中手工删除。
+                    // 这里不自动 DROP 旧 cad_file_attributes，避免误删历史数据。
+                    // 若你确认旧表永不再用，可在数据库中手工删除。
 
                     return true;
                 }
@@ -1849,7 +1850,7 @@ ON UPDATE CASCADE;");
         /// <returns>兼容旧模型的 FileAttribute；找不到返回 null</returns>
         public async Task<FileAttribute?> GetFileAttributeByGraphicIdAsync(int fileStorageId)
         {
-            // 中文注释：防御式校验，避免无效主键触发无意义查询
+            // 防御式校验，避免无效主键触发无意义查询
             if (fileStorageId <= 0)
             {
                 return null;
@@ -1857,15 +1858,15 @@ ON UPDATE CASCADE;");
 
             try
             {
-                // 中文注释：复用“主表 + JSON属性表”聚合查询方法
+                // 复用“主表 + JSON属性表”聚合查询方法
                 var result = await GetFileWithAttributeAsync(fileStorageId).ConfigureAwait(false);
 
-                // 中文注释：返回属性对象（内部已完成 JSON -> FileAttribute 的兼容映射）
+                // 返回属性对象（内部已完成 JSON -> FileAttribute 的兼容映射）
                 return result.Attribute;
             }
             catch (Exception ex)
             {
-                // 中文注释：记录日志，避免上层崩溃
+                // 记录日志，避免上层崩溃
                 LogManager.Instance.LogInfo($"GetFileAttributeByGraphicIdAsync 出错: {ex.Message}");
                 return null;
             }
@@ -1882,7 +1883,7 @@ ON UPDATE CASCADE;");
                 await connection.OpenAsync().ConfigureAwait(false);
                 using var transaction = connection.BeginTransaction();
 
-                // 中文注释：先取主记录，便于后续删除物理文件
+                // 先取主记录，便于后续删除物理文件
                 var storage = await connection.QueryFirstOrDefaultAsync<FileStorage>(@"
 SELECT 
     id AS Id,
@@ -1905,27 +1906,27 @@ LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
                     return false;
                 }
 
-                // 中文注释：先删附属日志/标签等
+                // 先删附属日志/标签等
                 await connection.ExecuteAsync("DELETE FROM file_tags WHERE file_id = @Id", new { Id = fileId }, transaction).ConfigureAwait(false);
                 await connection.ExecuteAsync("DELETE FROM file_access_logs WHERE file_id = @Id", new { Id = fileId }, transaction).ConfigureAwait(false);
                 await connection.ExecuteAsync("DELETE FROM file_version_history WHERE file_id = @Id", new { Id = fileId }, transaction).ConfigureAwait(false);
 
-                // 中文注释：删除新属性表记录（核心）
+                // 删除新属性表记录（核心）
                 await connection.ExecuteAsync(
                     "DELETE FROM cad_block_attributes_json WHERE file_id = @Id",
                     new { Id = fileId },
                     transaction).ConfigureAwait(false);
 
-                // 中文注释：最后删主表
+                // 最后删主表
                 int affected = await connection.ExecuteAsync(
                     "DELETE FROM cad_file_storage WHERE id = @Id",
                     new { Id = fileId },
                     transaction).ConfigureAwait(false);
 
-                // 中文注释：提交数据库事务
+                // 提交数据库事务
                 transaction.Commit();
 
-                // 中文注释：按需删除物理文件
+                // 按需删除物理文件
                 if (physicalDelete)
                 {
                     try
@@ -2112,11 +2113,11 @@ LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
         /// </summary>
         public async Task<FileStorage> GetFileStorageAsync(string filehash)
         {
-            // 中文注释：防御式校验，避免空哈希查询
+            // 防御式校验，避免空哈希查询
             if (string.IsNullOrWhiteSpace(filehash))
                 return null;
 
-            // 中文注释：查询文件主表
+            // 查询文件主表
             const string fileSql = @"
 SELECT 
     id AS Id,
@@ -2152,7 +2153,7 @@ FROM cad_file_storage
 WHERE file_hash = @FileHash
 LIMIT 1;";
 
-            // 中文注释：当主表 file_attribute_id 为空时，回填 JSON 属性表中最新 config_name
+            // 当主表 file_attribute_id 为空时，回填 JSON 属性表中最新 config_name
             const string latestConfigSql = @"
 SELECT config_name
 FROM cad_block_attributes_json
@@ -2162,18 +2163,18 @@ LIMIT 1;";
 
             try
             {
-                // 中文注释：创建数据库连接
+                // 创建数据库连接
                 using var connection = new MySqlConnection(_connectionString);
 
-                // 中文注释：先查主表
+                // 先查主表
                 var fileStorageInfo = await connection.QueryFirstOrDefaultAsync<FileStorage>(
                     fileSql, new { FileHash = filehash }).ConfigureAwait(false);
 
-                // 中文注释：未查到主表记录，直接返回
+                // 未查到主表记录，直接返回
                 if (fileStorageInfo == null)
                     return null;
 
-                // 中文注释：若兼容字段为空，则尝试从 JSON 表回填配置名
+                // 若兼容字段为空，则尝试从 JSON 表回填配置名
                 if (string.IsNullOrWhiteSpace(fileStorageInfo.FileAttributeId))
                 {
                     var latestConfigName = await connection.QueryFirstOrDefaultAsync<string>(
@@ -2185,12 +2186,12 @@ LIMIT 1;";
                     }
                 }
 
-                // 中文注释：返回主记录
+                // 返回主记录
                 return fileStorageInfo;
             }
             catch (Exception ex)
             {
-                // 中文注释：记录错误日志并返回空
+                // 记录错误日志并返回空
                 LogManager.Instance.LogInfo($"获取文件详细信息时出错: {ex.Message}");
                 return null;
             }
@@ -2203,14 +2204,14 @@ LIMIT 1;";
             string filehash,
             string preferredConfigName = null)
         {
-            // 中文注释：先拿主记录（复用现有方法）
+            // 先拿主记录（复用现有方法）
             var file = await GetFileStorageAsync(filehash).ConfigureAwait(false);
 
-            // 中文注释：主记录不存在时，返回空元组内容
+            // 主记录不存在时，返回空元组内容
             if (file == null)
                 return (null, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
 
-            // 中文注释：准备查询属性 JSON 的 SQL（优先配置名）
+            // 准备查询属性 JSON 的 SQL（优先配置名）
             const string attrByConfigSql = @"
 SELECT config_name AS ConfigName, attributes_json AS AttributesJson
 FROM cad_block_attributes_json
@@ -2219,7 +2220,7 @@ WHERE file_id = @FileId
 ORDER BY attr_id DESC
 LIMIT 1;";
 
-            // 中文注释：兜底查询（取最新）
+            // 兜底查询（取最新）
             const string attrLatestSql = @"
 SELECT config_name AS ConfigName, attributes_json AS AttributesJson
 FROM cad_block_attributes_json
@@ -2229,46 +2230,46 @@ LIMIT 1;";
 
             try
             {
-                // 中文注释：创建数据库连接
+                // 创建数据库连接
                 using var connection = new MySqlConnection(_connectionString);
 
-                // 中文注释：确定优先配置名（参数优先，其次主表 file_attribute_id）
+                // 确定优先配置名（参数优先，其次主表 file_attribute_id）
                 var configName = string.IsNullOrWhiteSpace(preferredConfigName)
                     ? (file.FileAttributeId ?? string.Empty)
                     : preferredConfigName.Trim();
 
                 (string ConfigName, string AttributesJson)? row = null;
 
-                // 中文注释：优先按配置名查
+                // 优先按配置名查
                 if (!string.IsNullOrWhiteSpace(configName))
                 {
                     row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
                         attrByConfigSql, new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
                 }
 
-                // 中文注释：兜底查最新
+                // 兜底查最新
                 if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
                 {
                     row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
                         attrLatestSql, new { FileId = file.Id }).ConfigureAwait(false);
                 }
 
-                // 中文注释：没有属性记录时返回空字典
+                // 没有属性记录时返回空字典
                 if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
                 {
                     return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
                 }
 
-                // 中文注释：反序列化 JSON -> 字典
+                // 反序列化 JSON -> 字典
                 var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(row.Value.AttributesJson)
                            ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 中文注释：返回聚合结果
+                // 返回聚合结果
                 return (file, dict, row.Value.ConfigName ?? string.Empty);
             }
             catch (Exception ex)
             {
-                // 中文注释：异常时记录日志并返回主记录+空字典
+                // 异常时记录日志并返回主记录+空字典
                 LogManager.Instance.LogInfo($"GetFileStorageWithAttributesByHashAsync 出错: {ex.Message}");
                 return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
             }
@@ -2281,15 +2282,15 @@ LIMIT 1;";
         /// </summary>
         public async Task<FileAttribute> GetFileAttributeAsync(string fileName)
         {
-            // 中文注释：防御式处理，防止空输入
+            // 防御式处理，防止空输入
             if (string.IsNullOrWhiteSpace(fileName))
                 return null;
 
-            // 中文注释：提取文件名（带扩展名）和不带扩展名版本，用于模糊匹配
+            // 提取文件名（带扩展名）和不带扩展名版本，用于模糊匹配
             string noExtName = Path.GetFileNameWithoutExtension(fileName) ?? string.Empty;
             string rawName = Path.GetFileName(fileName) ?? string.Empty;
 
-            // 中文注释：先在主表里查目标文件（优先按 file_name / display_name / title）
+            // 先在主表里查目标文件（优先按 file_name / display_name / title）
             const string fileSql = @"
 SELECT
     id AS Id,
@@ -2334,7 +2335,7 @@ WHERE is_active = 1
 ORDER BY updated_at DESC, id DESC
 LIMIT 1;";
 
-            // 中文注释：优先按 config_name=file_attribute_id 精确查 JSON 属性
+            // 优先按 config_name=file_attribute_id 精确查 JSON 属性
             const string attrSqlByConfig = @"
 SELECT
     attr_id AS AttrId,
@@ -2349,7 +2350,7 @@ WHERE file_id = @FileId
 ORDER BY attr_id DESC
 LIMIT 1;";
 
-            // 中文注释：兜底按 file_id 取最新属性记录
+            // 兜底按 file_id 取最新属性记录
             const string attrSqlByLatest = @"
 SELECT
     attr_id AS AttrId,
@@ -2367,16 +2368,16 @@ LIMIT 1;";
             {
                 using var connection = new MySqlConnection(_connectionString);
 
-                // 中文注释：查询主表文件记录
+                // 查询主表文件记录
                 var file = await connection.QueryFirstOrDefaultAsync<FileStorage>(
                     fileSql,
                     new { Name1 = noExtName, Name2 = rawName }).ConfigureAwait(false);
 
-                // 中文注释：没有匹配到文件，直接返回 null
+                // 没有匹配到文件，直接返回 null
                 if (file == null)
                     return null;
 
-                // 中文注释：查询 JSON 属性记录
+                // 查询 JSON 属性记录
                 BlockAttributesJson jsonRow = null;
                 var configName = Convert.ToString(file.FileAttributeId)?.Trim();
 
@@ -2394,7 +2395,7 @@ LIMIT 1;";
                         new { FileId = file.Id }).ConfigureAwait(false);
                 }
 
-                // 中文注释：没有属性记录时，返回一个基础对象（兼容旧逻辑）
+                // 没有属性记录时，返回一个基础对象（兼容旧逻辑）
                 if (jsonRow == null || string.IsNullOrWhiteSpace(jsonRow.AttributesJson))
                 {
                     return new FileAttribute
@@ -2407,11 +2408,11 @@ LIMIT 1;";
                     };
                 }
 
-                // 中文注释：反序列化 JSON 到字典
+                // 反序列化 JSON 到字典
                 var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonRow.AttributesJson)
                            ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 中文注释：创建返回对象，先回填基础字段
+                // 创建返回对象，先回填基础字段
                 var attr = new FileAttribute
                 {
                     FileStorageId = file.Id,
@@ -2421,7 +2422,7 @@ LIMIT 1;";
                     UpdatedAt = jsonRow.UpdatedAt
                 };
 
-                // 中文注释：通过反射把字典按“属性名”回填到 FileAttribute 模型
+                // 通过反射把字典按“属性名”回填到 FileAttribute 模型
                 foreach (var p in typeof(FileAttribute).GetProperties())
                 {
                     if (!p.CanWrite) continue;
@@ -2486,7 +2487,7 @@ LIMIT 1;";
                     }
                     catch
                     {
-                        // 中文注释：单个字段解析失败不影响整体返回
+                        // 单个字段解析失败不影响整体返回
                     }
                 }
 
@@ -2505,7 +2506,7 @@ LIMIT 1;";
         /// </summary>
         public async Task<(FileStorage File, FileAttribute Attribute)> GetFileWithAttributeAsync(int fileId)
         {
-            // 中文注释：查询文件主表信息
+            // 查询文件主表信息
             const string fileSql = @"
 SELECT
     id AS Id,
@@ -2541,7 +2542,7 @@ FROM cad_file_storage
 WHERE id = @Id
 LIMIT 1;";
 
-            // 中文注释：优先按 config_name = storage.file_attribute_id 查 JSON 属性
+            // 优先按 config_name = storage.file_attribute_id 查 JSON 属性
             const string attrSqlByConfig = @"
 SELECT
     attr_id AS AttrId,
@@ -2556,7 +2557,7 @@ WHERE file_id = @FileId
 ORDER BY attr_id DESC
 LIMIT 1;";
 
-            // 中文注释：若按 config_name 查不到，则按 file_id 取最新一条兜底
+            // 若按 config_name 查不到，则按 file_id 取最新一条兜底
             const string attrSqlByLatest = @"
 SELECT
     attr_id AS AttrId,
@@ -2572,25 +2573,25 @@ LIMIT 1;";
 
             try
             {
-                // 中文注释：创建数据库连接
+                // 创建数据库连接
                 using var connection = new MySqlConnection(_connectionString);
 
-                // 中文注释：先取主表文件记录
+                // 先取主表文件记录
                 var file = await connection.QuerySingleOrDefaultAsync<FileStorage>(fileSql, new { Id = fileId }).ConfigureAwait(false);
 
-                // 中文注释：若文件不存在，直接返回空
+                // 若文件不存在，直接返回空
                 if (file == null)
                 {
                     return (null, null);
                 }
 
-                // 中文注释：准备读取 JSON 属性记录
+                // 准备读取 JSON 属性记录
                 BlockAttributesJson jsonRow = null;
 
-                // 中文注释：兼容字段 file_attribute_id，此处作为 config_name 优先匹配
+                // 兼容字段 file_attribute_id，此处作为 config_name 优先匹配
                 var configName = Convert.ToString(file.FileAttributeId)?.Trim();
 
-                // 中文注释：优先按 config_name 查
+                // 优先按 config_name 查
                 if (!string.IsNullOrWhiteSpace(configName))
                 {
                     jsonRow = await connection.QuerySingleOrDefaultAsync<BlockAttributesJson>(
@@ -2598,7 +2599,7 @@ LIMIT 1;";
                         new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
                 }
 
-                // 中文注释：兜底按最新记录查
+                // 兜底按最新记录查
                 if (jsonRow == null)
                 {
                     jsonRow = await connection.QuerySingleOrDefaultAsync<BlockAttributesJson>(
@@ -2606,17 +2607,17 @@ LIMIT 1;";
                         new { FileId = file.Id }).ConfigureAwait(false);
                 }
 
-                // 中文注释：没有属性记录时，返回 file + null（兼容旧逻辑）
+                // 没有属性记录时，返回 file + null（兼容旧逻辑）
                 if (jsonRow == null || string.IsNullOrWhiteSpace(jsonRow.AttributesJson))
                 {
                     return (file, null);
                 }
 
-                // 中文注释：反序列化 JSON 为键值字典
+                // 反序列化 JSON 为键值字典
                 var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonRow.AttributesJson)
                            ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 中文注释：构建兼容旧调用的 FileAttribute 对象
+                // 构建兼容旧调用的 FileAttribute 对象
                 var attr = new FileAttribute
                 {
                     FileStorageId = file.Id,
@@ -2626,45 +2627,45 @@ LIMIT 1;";
                     UpdatedAt = jsonRow.UpdatedAt
                 };
 
-                // 中文注释：遍历 FileAttribute 可写属性，按属性名从字典回填
+                // 遍历 FileAttribute 可写属性，按属性名从字典回填
                 foreach (var p in typeof(FileAttribute).GetProperties())
                 {
-                    // 中文注释：只处理可写属性
+                    // 只处理可写属性
                     if (!p.CanWrite) continue;
 
-                    // 中文注释：字典里没有同名键则跳过
+                    // 字典里没有同名键则跳过
                     if (!dict.TryGetValue(p.Name, out var raw)) continue;
 
-                    // 中文注释：空值跳过
+                    // 空值跳过
                     if (string.IsNullOrWhiteSpace(raw)) continue;
 
                     try
                     {
-                        // 中文注释：处理可空类型
+                        // 处理可空类型
                         var targetType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
 
-                        // 中文注释：字符串直接赋值
+                        // 字符串直接赋值
                         if (targetType == typeof(string))
                         {
                             p.SetValue(attr, raw);
                             continue;
                         }
 
-                        // 中文注释：整型转换
+                        // 整型转换
                         if (targetType == typeof(int))
                         {
                             if (int.TryParse(raw, out var v)) p.SetValue(attr, v);
                             continue;
                         }
 
-                        // 中文注释：长整型转换
+                        // 长整型转换
                         if (targetType == typeof(long))
                         {
                             if (long.TryParse(raw, out var v)) p.SetValue(attr, v);
                             continue;
                         }
 
-                        // 中文注释：decimal 转换（用不变文化，兼容小数点）
+                        // decimal 转换（用不变文化，兼容小数点）
                         if (targetType == typeof(decimal))
                         {
                             if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
@@ -2678,7 +2679,7 @@ LIMIT 1;";
                             continue;
                         }
 
-                        // 中文注释：double 转换（用不变文化，兼容小数点）
+                        // double 转换（用不变文化，兼容小数点）
                         if (targetType == typeof(double))
                         {
                             if (double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
@@ -2692,14 +2693,14 @@ LIMIT 1;";
                             continue;
                         }
 
-                        // 中文注释：DateTime 转换
+                        // DateTime 转换
                         if (targetType == typeof(DateTime))
                         {
                             if (DateTime.TryParse(raw, out var v)) p.SetValue(attr, v);
                             continue;
                         }
 
-                        // 中文注释：bool 转换（兼容 1/0 与 true/false）
+                        // bool 转换（兼容 1/0 与 true/false）
                         if (targetType == typeof(bool))
                         {
                             if (bool.TryParse(raw, out var b))
@@ -2718,16 +2719,16 @@ LIMIT 1;";
                     }
                     catch
                     {
-                        // 中文注释：单字段转换失败不影响整体读取
+                        // 单字段转换失败不影响整体读取
                     }
                 }
 
-                // 中文注释：返回主表文件记录 + 兼容属性对象
+                // 返回主表文件记录 + 兼容属性对象
                 return (file, attr);
             }
             catch (Exception ex)
             {
-                // 中文注释：输出错误并返回空对象元组
+                // 输出错误并返回空对象元组
                 Env.Editor.WriteMessage($"\n获取文件详细信息时出错: {ex.Message}");
                 return (null, null);
             }
@@ -2952,17 +2953,17 @@ LIMIT 1;";
         /// </summary>
         public async Task<(int StorageId, int AttributeId)> AddFileStorageAndAttributeAsync(FileStorage storage, FileAttribute attribute)
         {
-            // 中文注释：参数保护，防止空引用
+            // 参数保护，防止空引用
             if (storage == null) throw new ArgumentNullException(nameof(storage));
             if (attribute == null) throw new ArgumentNullException(nameof(attribute));
 
-            // 中文注释：业务属性ID兜底（继续保留，写回 cad_file_storage.file_attribute_id 供兼容旧逻辑）
+            // 业务属性ID兜底（继续保留，写回 cad_file_storage.file_attribute_id 供兼容旧逻辑）
             if (string.IsNullOrWhiteSpace(attribute.FileAttributeId))
             {
                 attribute.FileAttributeId = Guid.NewGuid().ToString("N");
             }
 
-            // 中文注释：本地函数，把旧 FileAttribute 转成字典（只存有值字段，避免无意义空值）
+            // 本地函数，把旧 FileAttribute 转成字典（只存有值字段，避免无意义空值）
             Dictionary<string, string> BuildAttrDict(FileAttribute src)
             {
                 var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -2970,7 +2971,7 @@ LIMIT 1;";
 
                 foreach (var p in props)
                 {
-                    // 中文注释：跳过系统字段/主键字段，避免污染业务属性
+                    // 跳过系统字段/主键字段，避免污染业务属性
                     if (string.Equals(p.Name, nameof(FileAttribute.Id), StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(p.Name, nameof(FileAttribute.CategoryId), StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(p.Name, nameof(FileAttribute.FileStorageId), StringComparison.OrdinalIgnoreCase) ||
@@ -2992,7 +2993,7 @@ LIMIT 1;";
                 return dict;
             }
 
-            // 中文注释：把旧模型转换为 JSON 文本
+            // 把旧模型转换为 JSON 文本
             var attrDict = BuildAttrDict(attribute);
             var attrJson = Newtonsoft.Json.JsonConvert.SerializeObject(attrDict);
 
@@ -3004,10 +3005,10 @@ LIMIT 1;";
 
             try
             {
-                // 中文注释：开启事务，确保“主表+属性表+回写”原子性
+                // 开启事务，确保“主表+属性表+回写”原子性
                 tx = connection.BeginTransaction();
 
-                // 中文注释：先插入文件主表
+                // 先插入文件主表
                 const string insertStorageSql = @"
 INSERT INTO cad_file_storage
 (category_id, file_attribute_id, file_name, file_stored_name, display_name, file_type, is_tianzheng, file_hash,
@@ -3052,10 +3053,10 @@ VALUES
                     UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
                 }, tx).ConfigureAwait(false);
 
-                // 中文注释：获取主表自增ID
+                // 获取主表自增ID
                 storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 中文注释：插入新属性表（JSON）
+                // 插入新属性表（JSON）
                 const string insertJsonAttrSql = @"
 INSERT INTO cad_block_attributes_json
 (file_id, config_name, attributes_json, created_at, updated_at)
@@ -3069,10 +3070,10 @@ VALUES
                     AttributesJson = attrJson
                 }, tx).ConfigureAwait(false);
 
-                // 中文注释：取 JSON 属性表主键（为了兼容原返回值 AttributeId）
+                // 取 JSON 属性表主键（为了兼容原返回值 AttributeId）
                 int attrId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 中文注释：回写 storage.file_attribute_id（保持兼容）
+                // 回写 storage.file_attribute_id（保持兼容）
                 const string updateStorageSql = @"
 UPDATE cad_file_storage
 SET file_attribute_id = @FileAttributeId, updated_at = @UpdatedAt
@@ -3085,26 +3086,26 @@ WHERE id = @Id;";
                     Id = storageId
                 }, tx).ConfigureAwait(false);
 
-                // 中文注释：提交事务
+                // 提交事务
                 tx.Commit();
                 return (storageId, attrId);
             }
             catch (Exception ex)
             {
-                // 中文注释：异常时回滚
+                // 异常时回滚
                 try { tx?.Rollback(); } catch { }
                 LogManager.Instance.LogInfo($"AddFileStorageAndAttributeAsync 失败: {ex.Message}");
                 return (0, 0);
             }
             finally
             {
-                // 中文注释：释放事务对象
+                // 释放事务对象
                 try { tx?.Dispose(); } catch { }
             }
         }
 
         /// <summary>
-        /// 中文注释：新方案——插入文件主记录 + JSON属性记录（事务）
+        /// 新方案——插入文件主记录 + JSON属性记录（事务）
         /// </summary>
         /// <param name="storage">中文注释：文件主表对象</param>
         /// <param name="attributes">中文注释：动态属性字典</param>
@@ -3124,7 +3125,7 @@ WHERE id = @Id;";
 
             try
             {
-                // 中文注释：先插入 cad_file_storage 主表
+                // 先插入 cad_file_storage 主表
                 const string insertStorageSql = @"
 INSERT INTO cad_file_storage
 (category_id, file_name, file_stored_name, display_name, file_type, file_hash, block_name, layer_name, color_index, scale, file_path, preview_image_name, preview_image_path, file_size, is_preview, version, description, is_active, created_by, category_type, title, keywords, is_public, updated_by, last_accessed_at, created_at, updated_at)
@@ -3162,10 +3163,10 @@ VALUES
                     UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
                 }, tx).ConfigureAwait(false);
 
-                // 中文注释：获取主表自增ID
+                // 获取主表自增ID
                 int storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 中文注释：插入 JSON 属性表
+                // 插入 JSON 属性表
                 const string insertAttrSql = @"
 INSERT INTO cad_block_attributes_json (file_id, config_name, attributes_json, created_at, updated_at)
 VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
@@ -3177,16 +3178,16 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
                     AttributesJson = ToJson(attributes)
                 }, tx).ConfigureAwait(false);
 
-                // 中文注释：获取属性表自增ID
+                // 获取属性表自增ID
                 long attrId = await connection.QuerySingleAsync<long>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 中文注释：提交事务
+                // 提交事务
                 tx.Commit();
                 return (storageId, attrId);
             }
             catch
             {
-                // 中文注释：异常回滚事务
+                // 异常回滚事务
                 tx.Rollback();
                 throw;
             }
@@ -3197,23 +3198,23 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         #region 管道操作方法
 
         /// <summary>
-        /// 中文注释：管道模板查询结果（主记录 + JSON属性）
+        /// 管道模板查询结果（主记录 + JSON属性）
         /// </summary>
         public sealed class PipeTemplateQueryResult
         {
             /// <summary>
-            /// 中文注释：模板主表记录
+            /// 模板主表记录
             /// </summary>
             public FileStorage? Storage { get; set; }
 
             /// <summary>
-            /// 中文注释：模板属性字典（来自 cad_block_attributes_json）
+            /// 模板属性字典（来自 cad_block_attributes_json）
             /// </summary>
             public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
-        /// 中文注释：按入口/出口从数据库获取“最新可用管道模板”及其属性字典
+        /// 按入口/出口从数据库获取“最新可用管道模板”及其属性字典
         /// 规则：优先匹配 display_name/file_name/block_name/title/keywords，按 updated_at/id 倒序取一条
         /// </summary>
         /// <param name="isOutlet">中文注释：true=出口模板，false=入口模板</param>
@@ -3222,17 +3223,17 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         {
             try
             {
-                // 中文注释：根据入口/出口准备关键词
+                // 根据入口/出口准备关键词
                 string kwCnMain = isOutlet ? "出口管道" : "入口管道";
                 string kwCnSub = isOutlet ? "出口" : "入口";
                 string kwEn = isOutlet ? "outlet" : "inlet";
 
-                // 中文注释：模糊匹配参数
+                // 模糊匹配参数
                 string k1 = $"%{kwCnMain}%";
                 string k2 = $"%{kwCnSub}%";
                 string k3 = $"%{kwEn}%";
 
-                // 中文注释：查询模板主记录（只取激活记录）
+                // 查询模板主记录（只取激活记录）
                 const string sqlTemplate = @"
                               SELECT
                                   id AS Id,
@@ -3276,19 +3277,19 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
                               ORDER BY updated_at DESC, id DESC
                               LIMIT 1;";
 
-                // 中文注释：建立连接并查询主记录
+                // 建立连接并查询主记录
                 using var connection = GetConnection();
                 var storage = await connection.QueryFirstOrDefaultAsync<FileStorage>(
                     sqlTemplate,
                     new { K1 = k1, K2 = k2, K3 = k3 }).ConfigureAwait(false);
 
-                // 中文注释：未命中模板直接返回 null
+                // 未命中模板直接返回 null
                 if (storage == null)
                 {
                     return null;
                 }
 
-                // 中文注释：查询该模板最新属性JSON
+                // 查询该模板最新属性JSON
                 const string sqlAttr = @"
                              SELECT attributes_json
                              FROM cad_block_attributes_json
@@ -3300,13 +3301,13 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
                     sqlAttr,
                     new { FileId = storage.Id }).ConfigureAwait(false);
 
-                // 中文注释：反序列化属性字典（空则返回空字典）
+                // 反序列化属性字典（空则返回空字典）
                 var attrs = string.IsNullOrWhiteSpace(attrJson)
                     ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     : (Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attrJson)
                        ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
-                // 中文注释：返回统一结果对象
+                // 返回统一结果对象
                 return new PipeTemplateQueryResult
                 {
                     Storage = storage,
@@ -3315,7 +3316,7 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             }
             catch (Exception ex)
             {
-                // 中文注释：记录异常日志，返回 null 由上层兜底
+                // 记录异常日志，返回 null 由上层兜底
                 LogManager.Instance.LogInfo($"GetLatestPipeTemplateWithAttributesAsync 出错: {ex.Message}");
                 return null;
             }
@@ -3397,32 +3398,7 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             public long FileSize { get; set; } // 文件大小
             public DateTime CreatedAt { get; set; } // 创建时间
             public DateTime UpdatedAt { get; set; } // 更新时间
-        }
-
-        /// <summary>
-        /// 设备信息
-        /// </summary>
-        public class DeviceInfo
-        {
-            public int Id { get; set; } // 设备ID
-            public string Name { get; set; } = string.Empty; // 设备名
-            public string Type { get; set; } = string.Empty; // 设备类型
-            public string MediumName { get; set; } = string.Empty; // 介质
-            public string Specifications { get; set; } = string.Empty; // 规格
-            public string Material { get; set; } = string.Empty; // 材质
-            public int Quantity { get; set; } // 数量
-            public string DrawingNumber { get; set; } = string.Empty; // 图号
-            public decimal Power { get; set; } // 功率
-            public decimal Volume { get; set; } // 容积
-            public decimal Pressure { get; set; } // 压力
-            public decimal Temperature { get; set; } // 温度
-            public decimal Diameter { get; set; } // 直径
-            public decimal Length { get; set; } // 长度
-            public decimal Thickness { get; set; } // 厚度
-            public decimal Weight { get; set; } // 重量
-            public string Model { get; set; } = string.Empty; // 型号
-            public string Remarks { get; set; } = string.Empty; // 备注
-        }
+        }           
 
         /// <summary>
         /// 文件存储（cad_file_storage）
@@ -3610,20 +3586,20 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         }
 
         /// <summary>
-        /// 中文注释：JSON属性表模型（对应 cad_block_attributes_json）
+        /// JSON属性表模型（对应 cad_block_attributes_json）
         /// </summary>
         public class BlockAttributesJson
         {
-            public long AttrId { get; set; } // 中文注释：属性记录主键
-            public int FileId { get; set; } // 中文注释：关联 cad_file_storage.id
-            public string? ConfigName { get; set; } // 中文注释：配置名
-            public string? AttributesJson { get; set; } // 中文注释：JSON文本
-            public DateTime CreatedAt { get; set; } // 中文注释：创建时间
-            public DateTime UpdatedAt { get; set; } // 中文注释：更新时间
+            public long AttrId { get; set; } // 属性记录主键
+            public int FileId { get; set; } // 关联 cad_file_storage.id
+            public string? ConfigName { get; set; } // 配置名
+            public string? AttributesJson { get; set; } // JSON文本
+            public DateTime CreatedAt { get; set; } // 创建时间
+            public DateTime UpdatedAt { get; set; } // 更新时间
         }
 
         /// <summary>
-        /// 中文注释：将字典转成JSON字符串
+        /// 将字典转成JSON字符串
         /// </summary>
         /// <param name="dict"></param>
         /// <returns></returns>
@@ -3633,7 +3609,7 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         }
 
         /// <summary>
-        /// 中文注释：将JSON字符串转成字典
+        /// 将JSON字符串转成字典
         /// </summary>
         /// <param name="json"></param>
         /// <returns></returns>
@@ -3645,7 +3621,7 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         }
 
         /// <summary>
-        /// 中文注释：按 file_id 获取JSON属性（返回字典）
+        /// 按 file_id 获取JSON属性（返回字典）
         /// </summary>
         /// <param name="fileId"></param>
         /// <param name="configName"></param>
