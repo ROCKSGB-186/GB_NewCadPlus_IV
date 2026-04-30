@@ -18,30 +18,30 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 生成主分类ID（注意：当前主分类表是自增主键，此方法主要用于兼容旧调用）
         /// </summary>
-        public static async Task<int> GenerateMainCategoryIdAsync(DatabaseManager databaseManager)
-        {
-            // 参数判空，避免空引用
-            if (databaseManager == null) throw new ArgumentNullException(nameof(databaseManager));
+        //public static async Task<int> GenerateMainCategoryIdAsync(DatabaseManager databaseManager)
+        //{
+        //    // 参数判空，避免空引用
+        //    if (databaseManager == null) throw new ArgumentNullException(nameof(databaseManager));
 
-            // 进入互斥区，防止并发重复
-            await _idLock.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                // 查询现有主分类列表
-                var categories = await databaseManager.GetAllCadCategoriesAsync().ConfigureAwait(false);
+        //    // 进入互斥区，防止并发重复
+        //    await _idLock.WaitAsync().ConfigureAwait(false);
+        //    try
+        //    {
+        //        // 查询现有主分类列表
+        //        var categories = await databaseManager.GetAllCadCategoriesAsync().ConfigureAwait(false);
 
-                // 计算下一个主分类ID（最小从1开始）
-                var nextId = (categories == null || categories.Count == 0) ? 1 : categories.Max(c => c.Id) + 1;
+        //        // 计算下一个主分类ID（最小从1开始）
+        //        var nextId = (categories == null || categories.Count == 0) ? 1 : categories.Max(c => c.Id) + 1;
 
-                // 返回新ID
-                return nextId;
-            }
-            finally
-            {
-                // 释放互斥锁
-                _idLock.Release();
-            }
-        }
+        //        // 返回新ID
+        //        return nextId;
+        //    }
+        //    finally
+        //    {
+        //        // 释放互斥锁
+        //        _idLock.Release();
+        //    }
+        //}
 
         /// <summary>
         /// 生成子分类ID（统一保证 >=10000，以兼容你现有 parentId>=10000 的层级判断逻辑）

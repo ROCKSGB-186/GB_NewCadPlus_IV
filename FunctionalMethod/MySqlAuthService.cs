@@ -403,15 +403,15 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="conn"></param>
         /// <param name="tableName"></param>
         /// <returns></returns>
-        private static bool TableExists(MySqlConnection conn, string tableName)
-        {
-            var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = @schema AND table_name = @table";
-            cmd.Parameters.AddWithValue("@schema", conn.Database);
-            cmd.Parameters.AddWithValue("@table", tableName);
-            var exists = Convert.ToInt32(cmd.ExecuteScalar() ?? 0) > 0;
-            return exists;
-        }
+        //private static bool TableExists(MySqlConnection conn, string tableName)
+        //{
+        //    var cmd = conn.CreateCommand();
+        //    cmd.CommandText = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = @schema AND table_name = @table";
+        //    cmd.Parameters.AddWithValue("@schema", conn.Database);
+        //    cmd.Parameters.AddWithValue("@table", tableName);
+        //    var exists = Convert.ToInt32(cmd.ExecuteScalar() ?? 0) > 0;
+        //    return exists;
+        //}
         /// <summary>
         /// 确保 users 表包含所需列，若缺失则添加（幂等）。
         /// </summary>
@@ -800,30 +800,30 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="userId">用户ID</param>
         /// <param name="departmentId">部门ID</param>
         /// <returns></returns>
-        public bool AssignUserToDepartmentByUserId(int userId, int departmentId)
-        {
-            var deptName = GetDepartmentNameByDeptTableId(departmentId);
-            using var conn = new MySqlConnection(ConnString());
-            conn.Open();
-            using var tx = conn.BeginTransaction();
-            try
-            {
-                var cmd = conn.CreateCommand();
-                cmd.Transaction = tx;
-                cmd.CommandText = "UPDATE users SET department_id=@d, department_name=@dn WHERE id=@uid;";
-                cmd.Parameters.AddWithValue("@d", departmentId);
-                cmd.Parameters.AddWithValue("@dn", deptName);
-                cmd.Parameters.AddWithValue("@uid", userId);
-                var rows = cmd.ExecuteNonQuery();
-                tx.Commit();
-                return rows > 0;
-            }
-            catch
-            {
-                try { tx.Rollback(); } catch { }
-                return false;
-            }
-        }
+        //public bool AssignUserToDepartmentByUserId(int userId, int departmentId)
+        //{
+        //    var deptName = GetDepartmentNameByDeptTableId(departmentId);
+        //    using var conn = new MySqlConnection(ConnString());
+        //    conn.Open();
+        //    using var tx = conn.BeginTransaction();
+        //    try
+        //    {
+        //        var cmd = conn.CreateCommand();
+        //        cmd.Transaction = tx;
+        //        cmd.CommandText = "UPDATE users SET department_id=@d, department_name=@dn WHERE id=@uid;";
+        //        cmd.Parameters.AddWithValue("@d", departmentId);
+        //        cmd.Parameters.AddWithValue("@dn", deptName);
+        //        cmd.Parameters.AddWithValue("@uid", userId);
+        //        var rows = cmd.ExecuteNonQuery();
+        //        tx.Commit();
+        //        return rows > 0;
+        //    }
+        //    catch
+        //    {
+        //        try { tx.Rollback(); } catch { }
+        //        return false;
+        //    }
+        //}
         /// <summary>
         /// 根据部门ID获取部门名称
         /// </summary>

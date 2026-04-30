@@ -22,17 +22,17 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 把二进制 DWG 写入到临时文件并返回路径，调用者负责删除（如果需要）
         /// 用于把从服务器下载到内存的 DWG（二进制）写入磁盘，供 AutoCAD API 读取。
         /// </summary>
-        public static string SaveBytesToTempDwg(byte[] dwgBytes, string? hintName = null)
-        {
-            // 使用用户临时目录，避免与程序资源目录冲突
-            string tempDir = Path.Combine(Path.GetTempPath(), "GB_CADTools", "TempDwg");
-            Directory.CreateDirectory(tempDir);
-            // 安全文件名
-            string fileName = string.IsNullOrWhiteSpace(hintName) ? $"tmp_{DateTime.Now:yyyyMMddHHmmssfff}.dwg" : $"{SanitizeFileName(hintName)}_{DateTime.Now:yyyyMMddHHmmssfff}.dwg";
-            string fullPath = Path.Combine(tempDir, fileName);
-            File.WriteAllBytes(fullPath, dwgBytes);
-            return fullPath;
-        }
+        //public static string SaveBytesToTempDwg(byte[] dwgBytes, string? hintName = null)
+        //{
+        //    // 使用用户临时目录，避免与程序资源目录冲突
+        //    string tempDir = Path.Combine(Path.GetTempPath(), "GB_CADTools", "TempDwg");
+        //    Directory.CreateDirectory(tempDir);
+        //    // 安全文件名
+        //    string fileName = string.IsNullOrWhiteSpace(hintName) ? $"tmp_{DateTime.Now:yyyyMMddHHmmssfff}.dwg" : $"{SanitizeFileName(hintName)}_{DateTime.Now:yyyyMMddHHmmssfff}.dwg";
+        //    string fullPath = Path.Combine(tempDir, fileName);
+        //    File.WriteAllBytes(fullPath, dwgBytes);
+        //    return fullPath;
+        //}
 
         /// <summary>
         /// 清理 AutoCadHelper 产生的临时 DWG 文件
@@ -76,51 +76,51 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         /// <param name="name">要处理的文件名</param>
         /// <returns></returns>
-        private static string SanitizeFileName(string name)
-        {
-            foreach (var c in Path.GetInvalidFileNameChars())
-            {
-                name = name.Replace(c, '_');
-            }
-            return name;
-        }
+        //private static string SanitizeFileName(string name)
+        //{
+        //    foreach (var c in Path.GetInvalidFileNameChars())
+        //    {
+        //        name = name.Replace(c, '_');
+        //    }
+        //    return name;
+        //}
 
         /// <summary>
         /// 从字节数组导入块定义到当前数据库（通过临时文件实现）。
         /// 返回导入后的块定义 ObjectId 或 ObjectId.Null（失败）。
         /// 注：使用时需要在外层事务/DBTrans 中调用以避免重复导入/线程问题。
         /// </summary>
-        public static ObjectId ImportBlockDefinitionFromBytes(byte[] dwgBytes, string blockName, DBTrans dbTr)
-        {
-            // 写临时文件
-            string tmpFile = SaveBytesToTempDwg(dwgBytes, blockName);
-            try
-            {
-                return ImportBlockDefinitionToCurrentDatabase(tmpFile, blockName, dbTr);
-            }
-            finally
-            {
-                // 尝试删除临时文件（失败不抛）
-                try { if (File.Exists(tmpFile)) File.Delete(tmpFile); } catch { }
-            }
-        }
+        //public static ObjectId ImportBlockDefinitionFromBytes(byte[] dwgBytes, string blockName, DBTrans dbTr)
+        //{
+        //    // 写临时文件
+        //    string tmpFile = SaveBytesToTempDwg(dwgBytes, blockName);
+        //    try
+        //    {
+        //        return ImportBlockDefinitionToCurrentDatabase(tmpFile, blockName, dbTr);
+        //    }
+        //    finally
+        //    {
+        //        // 尝试删除临时文件（失败不抛）
+        //        try { if (File.Exists(tmpFile)) File.Delete(tmpFile); } catch { }
+        //    }
+        //}
 
         /// <summary>
         /// 将 byte[] DWG 临时写盘后在当前文档中插入一个 BlockReference（包含属性），并返回插入的 ObjectId。
         /// 这个方法是对已有 InsertBlockFromExternalDwg 的补充：支持从内存直接插入。
         /// </summary>
-        public static ObjectId InsertBlockFromExternalDwg(byte[] dwgBytes, string blockName, Point3d insertPoint)
-        {
-            string tmpFile = SaveBytesToTempDwg(dwgBytes, blockName);
-            try
-            {
-                return InsertBlockFromExternalDwg(tmpFile, blockName, insertPoint);
-            }
-            finally
-            {
-                try { if (File.Exists(tmpFile)) File.Delete(tmpFile); } catch { }
-            }
-        }
+        //public static ObjectId InsertBlockFromExternalDwg(byte[] dwgBytes, string blockName, Point3d insertPoint)
+        //{
+        //    string tmpFile = SaveBytesToTempDwg(dwgBytes, blockName);
+        //    try
+        //    {
+        //        return InsertBlockFromExternalDwg(tmpFile, blockName, insertPoint);
+        //    }
+        //    finally
+        //    {
+        //        try { if (File.Exists(tmpFile)) File.Delete(tmpFile); } catch { }
+        //    }
+        //}
 
         /// <summary>
         /// 从外部 DWG 导入指定块定义到当前文档并在目标点插入一个 BlockReference（包含属性）
@@ -220,39 +220,39 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <param name="blockName">块名称</param>
         /// <param name="dbTr">目标数据库事务</param>
         /// <returns>目标数据库中新块记录的 ObjectId（失败返回 ObjectId.Null）</returns>
-        public static ObjectId ImportBlockDefinitionToCurrentDatabase(string dwgPath, string blockName, DBTrans dbTr)
-        {
-            if (!File.Exists(dwgPath)) return ObjectId.Null;// 文件不存在 
-            using (var sourceDb = new Database(false, true))// 创建源数据库 只读打开
-            {
-                sourceDb.ReadDwgFile(dwgPath, FileShare.ReadWrite, true, null);// 打开源数据库 读取 DWG 文件
-                using (var sourceTr = sourceDb.TransactionManager.StartTransaction())// 开始事务 启动源数据库事务
-                {
-                    var sourceBt = (BlockTable)sourceTr.GetObject(sourceDb.BlockTableId, OpenMode.ForRead);// 获取块表 获取源数据库块表
-                    if (!sourceBt.Has(blockName)) return ObjectId.Null;// 源数据库没有该块 块定义不存在
-                    ObjectId sourceBtrId = sourceBt[blockName];// 获取块记录 获取源块记录 ID
-                    // 直接从 sourceDb 克隆到 targetTr.Database（目标数据库）
-                    var ids = new ObjectIdCollection { sourceBtrId };// 创建 ObjectId 集合 包含源块记录 ID
-                    var mapping = new IdMapping();
-                    sourceDb.WblockCloneObjects(ids, dbTr.Database.BlockTableId, mapping, DuplicateRecordCloning.Replace, false);// 用 WblockCloneObjects 克隆块记录 到目标数据库
+        //public static ObjectId ImportBlockDefinitionToCurrentDatabase(string dwgPath, string blockName, DBTrans dbTr)
+        //{
+        //    if (!File.Exists(dwgPath)) return ObjectId.Null;// 文件不存在 
+        //    using (var sourceDb = new Database(false, true))// 创建源数据库 只读打开
+        //    {
+        //        sourceDb.ReadDwgFile(dwgPath, FileShare.ReadWrite, true, null);// 打开源数据库 读取 DWG 文件
+        //        using (var sourceTr = sourceDb.TransactionManager.StartTransaction())// 开始事务 启动源数据库事务
+        //        {
+        //            var sourceBt = (BlockTable)sourceTr.GetObject(sourceDb.BlockTableId, OpenMode.ForRead);// 获取块表 获取源数据库块表
+        //            if (!sourceBt.Has(blockName)) return ObjectId.Null;// 源数据库没有该块 块定义不存在
+        //            ObjectId sourceBtrId = sourceBt[blockName];// 获取块记录 获取源块记录 ID
+        //            // 直接从 sourceDb 克隆到 targetTr.Database（目标数据库）
+        //            var ids = new ObjectIdCollection { sourceBtrId };// 创建 ObjectId 集合 包含源块记录 ID
+        //            var mapping = new IdMapping();
+        //            sourceDb.WblockCloneObjects(ids, dbTr.Database.BlockTableId, mapping, DuplicateRecordCloning.Replace, false);// 用 WblockCloneObjects 克隆块记录 到目标数据库
 
-                    sourceTr.Commit();// 提交源数据库事务
-                    return mapping.Contains(sourceBtrId) ? mapping[sourceBtrId].Value : ObjectId.Null;// 返回目标数据库中新块记录的 ObjectId
-                }
-            }
-        }
+        //            sourceTr.Commit();// 提交源数据库事务
+        //            return mapping.Contains(sourceBtrId) ? mapping[sourceBtrId].Value : ObjectId.Null;// 返回目标数据库中新块记录的 ObjectId
+        //        }
+        //    }
+        //}
 
         /// <summary>
         /// 把一个来自其它数据库的实体（已从源读取）以安全方式复制到当前事务所在数据库并返回新实体的 ObjectId。
         /// 适用于单个实体：先在源上用 WblockCloneObjects 克隆其所属块记录，或直接创建 GetTransformedCopy 然后在 targetTr 中 Add。
         /// </summary>
-        public static ObjectId CloneEntityIntoCurrentDatabase(Entity sourceEntity, DBTrans dbTr)
-        {
-            // 更稳妥的方式是使用 GetTransformedCopy（会返回一个新的实体实例）
-            var clone = sourceEntity.GetTransformedCopy(Matrix3d.Identity);// 获取实体的变换副本（无变换）
-            var id = dbTr.CurrentSpace.AddEntity(clone);// 在当前空间中添加实体 将克隆实体添加到当前空间 并获取新实体的 ObjectId
-            return id;
-        }
+        //public static ObjectId CloneEntityIntoCurrentDatabase(Entity sourceEntity, DBTrans dbTr)
+        //{
+        //    // 更稳妥的方式是使用 GetTransformedCopy（会返回一个新的实体实例）
+        //    var clone = sourceEntity.GetTransformedCopy(Matrix3d.Identity);// 获取实体的变换副本（无变换）
+        //    var id = dbTr.CurrentSpace.AddEntity(clone);// 在当前空间中添加实体 将克隆实体添加到当前空间 并获取新实体的 ObjectId
+        //    return id;
+        //}
 
         /// <summary>
         /// 在活动文档中执行事务
@@ -281,21 +281,21 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <param name="func"> </param>
         /// <returns></returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public static T ExecuteInDocumentTransaction<T>(Func<Document, Transaction, T> func)
-        {
-            var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) throw new InvalidOperationException("当前没有活动文档。");
-            using (doc.LockDocument())
-            {
-                var db = doc.Database;
-                using (Transaction tr = db.TransactionManager.StartTransaction())
-                {
-                    T result = func(doc, tr);
-                    tr.Commit();
-                    return result;
-                }
-            }
-        }
+        //public static T ExecuteInDocumentTransaction<T>(Func<Document, Transaction, T> func)
+        //{
+        //    var doc = Application.DocumentManager.MdiActiveDocument;
+        //    if (doc == null) throw new InvalidOperationException("当前没有活动文档。");
+        //    using (doc.LockDocument())
+        //    {
+        //        var db = doc.Database;
+        //        using (Transaction tr = db.TransactionManager.StartTransaction())
+        //        {
+        //            T result = func(doc, tr);
+        //            tr.Commit();
+        //            return result;
+        //        }
+        //    }
+        //}
 
         /// <summary>
         /// 缓存锁
@@ -566,6 +566,7 @@ namespace GB_NewCadPlus_IV.Helpers
             VariableDictionary.wpfTextBoxScale = scale;
             return scale;
         }
+
         /// <summary>
         /// 新增：基于所选 ObjectId 列表推断比例分母（例如 1 -> 1:1, 100 -> 1:100）
         /// 优化：不仅检查Viewport，还检查图元本身的缩放信息
@@ -574,192 +575,192 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <param name="selIds">所选对象的 ObjectId 列表</param>
         /// <param name="roundToCommon">是否四舍五入到常见比例</param>
         /// <returns>推断出的比例分母</returns>
-        public static double GetScaleDenominatorForSelection(Database db, ObjectId[] selIds, bool roundToCommon = false)
-        {
-            try
-            {
-                // 无选择项时回退到当前活动视口/数据库检测
-                if (selIds == null || selIds.Length == 0 || db == null)
-                    return TextFontsStyleHelper.DetermineScaleDenominator(GetScale(true), null, roundToCommon);
+        //public static double GetScaleDenominatorForSelection(Database db, ObjectId[] selIds, bool roundToCommon = false)
+        //{
+        //    try
+        //    {
+        //        // 无选择项时回退到当前活动视口/数据库检测
+        //        if (selIds == null || selIds.Length == 0 || db == null)
+        //            return TextFontsStyleHelper.DetermineScaleDenominator(GetScale(true), null, roundToCommon);
 
-                using (var tr = db.TransactionManager.StartTransaction())
-                {
-                    // 优先检查选中的Viewport，因为Viewport直接包含了比例信息
-                    foreach (var id in selIds)
-                    {
-                        try
-                        {
-                            var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                            if (ent == null) continue;
+        //        using (var tr = db.TransactionManager.StartTransaction())
+        //        {
+        //            // 优先检查选中的Viewport，因为Viewport直接包含了比例信息
+        //            foreach (var id in selIds)
+        //            {
+        //                try
+        //                {
+        //                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+        //                    if (ent == null) continue;
 
-                            // 如果选中的是Viewport，直接获取其比例
-                            if (string.Equals(ent.GetType().Name, "Viewport", StringComparison.OrdinalIgnoreCase))
-                            {
-                                var pi = ent.GetType().GetProperty("CustomScale");
-                                if (pi != null)
-                                {
-                                    var raw = pi.GetValue(ent);
-                                    if (raw != null)
-                                    {
-                                        double customScale = Convert.ToDouble(raw);
-                                        if (customScale > 0.0)
-                                        {
-                                            double denom = TextFontsStyleHelper.DetermineScaleDenominator(customScale, null, roundToCommon);
-                                            return denom;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        catch
-                        {
-                            continue;
-                        }
-                    }
+        //                    // 如果选中的是Viewport，直接获取其比例
+        //                    if (string.Equals(ent.GetType().Name, "Viewport", StringComparison.OrdinalIgnoreCase))
+        //                    {
+        //                        var pi = ent.GetType().GetProperty("CustomScale");
+        //                        if (pi != null)
+        //                        {
+        //                            var raw = pi.GetValue(ent);
+        //                            if (raw != null)
+        //                            {
+        //                                double customScale = Convert.ToDouble(raw);
+        //                                if (customScale > 0.0)
+        //                                {
+        //                                    double denom = TextFontsStyleHelper.DetermineScaleDenominator(customScale, null, roundToCommon);
+        //                                    return denom;
+        //                                }
+        //                            }
+        //                        }
+        //                    }
+        //                }
+        //                catch
+        //                {
+        //                    continue;
+        //                }
+        //            }
 
-                    // 检查选中图元的比例信息
-                    var scaleValues = new List<double>();
+        //            // 检查选中图元的比例信息
+        //            var scaleValues = new List<double>();
 
-                    foreach (var id in selIds)
-                    {
-                        try
-                        {
-                            var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                            if (ent == null) continue;
+        //            foreach (var id in selIds)
+        //            {
+        //                try
+        //                {
+        //                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+        //                    if (ent == null) continue;
 
-                            double entityScale = 1.0;
+        //                    double entityScale = 1.0;
 
-                            // 检查不同类型的图元比例信息
-                            if (ent is BlockReference br)
-                            {
-                                // 块参照的比例 - 取X、Y、Z三个方向的比例的平均值
-                                entityScale = (br.ScaleFactors.X + br.ScaleFactors.Y + br.ScaleFactors.Z) / 3.0;
-                            }
-                            else if (ent is DBText txt)
-                            {
-                                // 文字比例 - 使用文字高度作为比例参考
-                                entityScale = txt.Height / 2.5; // 假设标准文字高度为2.5
-                            }
-                            else if (ent is MText mtxt)
-                            {
-                                // 多行文字比例 - 使用文字高度作为比例参考
-                                entityScale = mtxt.Height / 2.5;
-                            }
-                            else if (ent is Line line)
-                            {
-                                // 直线 - 使用长度作为比例参考（需要与其他实体类型进行比较）
-                                entityScale = line.Length / 1000.0; // 假设1000为标准长度
-                            }
-                            else if (ent is Polyline pl)
-                            {
-                                // 多段线 - 使用长度作为比例参考
-                                entityScale = pl.Length / 1000.0;
-                            }
-                            else
-                            {
-                                // 对于其他类型的实体，使用几何尺寸估算比例
-                                try
-                                {
-                                    var extents = ent.GeometricExtents;
-                                    var width = Math.Abs(extents.MaxPoint.X - extents.MinPoint.X);
-                                    var height = Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y);
-                                    var avgSize = (width + height) / 2.0;
-                                    // 假设正常图元在1:1比例下平均尺寸为1000
-                                    entityScale = avgSize / 1000.0;
-                                }
-                                catch
-                                {
-                                    entityScale = 1.0; // 默认比例
-                                }
-                            }
+        //                    // 检查不同类型的图元比例信息
+        //                    if (ent is BlockReference br)
+        //                    {
+        //                        // 块参照的比例 - 取X、Y、Z三个方向的比例的平均值
+        //                        entityScale = (br.ScaleFactors.X + br.ScaleFactors.Y + br.ScaleFactors.Z) / 3.0;
+        //                    }
+        //                    else if (ent is DBText txt)
+        //                    {
+        //                        // 文字比例 - 使用文字高度作为比例参考
+        //                        entityScale = txt.Height / 2.5; // 假设标准文字高度为2.5
+        //                    }
+        //                    else if (ent is MText mtxt)
+        //                    {
+        //                        // 多行文字比例 - 使用文字高度作为比例参考
+        //                        entityScale = mtxt.Height / 2.5;
+        //                    }
+        //                    else if (ent is Line line)
+        //                    {
+        //                        // 直线 - 使用长度作为比例参考（需要与其他实体类型进行比较）
+        //                        entityScale = line.Length / 1000.0; // 假设1000为标准长度
+        //                    }
+        //                    else if (ent is Polyline pl)
+        //                    {
+        //                        // 多段线 - 使用长度作为比例参考
+        //                        entityScale = pl.Length / 1000.0;
+        //                    }
+        //                    else
+        //                    {
+        //                        // 对于其他类型的实体，使用几何尺寸估算比例
+        //                        try
+        //                        {
+        //                            var extents = ent.GeometricExtents;
+        //                            var width = Math.Abs(extents.MaxPoint.X - extents.MinPoint.X);
+        //                            var height = Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y);
+        //                            var avgSize = (width + height) / 2.0;
+        //                            // 假设正常图元在1:1比例下平均尺寸为1000
+        //                            entityScale = avgSize / 1000.0;
+        //                        }
+        //                        catch
+        //                        {
+        //                            entityScale = 1.0; // 默认比例
+        //                        }
+        //                    }
 
-                            if (entityScale > 0.0001) // 过滤掉极小的值
-                            {
-                                scaleValues.Add(entityScale);
-                            }
-                        }
-                        catch
-                        {
-                            continue;
-                        }
-                    }
+        //                    if (entityScale > 0.0001) // 过滤掉极小的值
+        //                    {
+        //                        scaleValues.Add(entityScale);
+        //                    }
+        //                }
+        //                catch
+        //                {
+        //                    continue;
+        //                }
+        //            }
 
-                    // 如果找到了有效的比例值，返回平均值
-                    if (scaleValues.Count > 0)
-                    {
-                        double avgScale = scaleValues.Average();
-                        double denom = TextFontsStyleHelper.DetermineScaleDenominator(avgScale, null, roundToCommon);
-                        return denom;
-                    }
+        //            // 如果找到了有效的比例值，返回平均值
+        //            if (scaleValues.Count > 0)
+        //            {
+        //                double avgScale = scaleValues.Average();
+        //                double denom = TextFontsStyleHelper.DetermineScaleDenominator(avgScale, null, roundToCommon);
+        //                return denom;
+        //            }
 
-                    // 检查图元所属的布局中的Viewport
-                    foreach (var id in selIds)
-                    {
-                        try
-                        {
-                            var obj = tr.GetObject(id, OpenMode.ForRead) as DBObject;
-                            if (obj == null) continue;
+        //            // 检查图元所属的布局中的Viewport
+        //            foreach (var id in selIds)
+        //            {
+        //                try
+        //                {
+        //                    var obj = tr.GetObject(id, OpenMode.ForRead) as DBObject;
+        //                    if (obj == null) continue;
 
-                            // 获取图元所属的BlockTableRecord
-                            ObjectId ownerId = obj.OwnerId;
-                            if (ownerId == ObjectId.Null) continue;
+        //                    // 获取图元所属的BlockTableRecord
+        //                    ObjectId ownerId = obj.OwnerId;
+        //                    if (ownerId == ObjectId.Null) continue;
 
-                            var ownerBtr = tr.GetObject(ownerId, OpenMode.ForRead) as BlockTableRecord;
-                            if (ownerBtr == null) continue;
+        //                    var ownerBtr = tr.GetObject(ownerId, OpenMode.ForRead) as BlockTableRecord;
+        //                    if (ownerBtr == null) continue;
 
-                            // 如果所属的是布局（Layout），在该布局中查找Viewport
-                            if (ownerBtr.IsLayout)
-                            {
-                                foreach (ObjectId entId in ownerBtr)
-                                {
-                                    try
-                                    {
-                                        var ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
-                                        if (ent == null) continue;
+        //                    // 如果所属的是布局（Layout），在该布局中查找Viewport
+        //                    if (ownerBtr.IsLayout)
+        //                    {
+        //                        foreach (ObjectId entId in ownerBtr)
+        //                        {
+        //                            try
+        //                            {
+        //                                var ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
+        //                                if (ent == null) continue;
 
-                                        // 检查是否为Viewport
-                                        if (string.Equals(ent.GetType().Name, "Viewport", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            var pi = ent.GetType().GetProperty("CustomScale");
-                                            if (pi != null)
-                                            {
-                                                var raw = pi.GetValue(ent);
-                                                if (raw != null)
-                                                {
-                                                    double customScale = Convert.ToDouble(raw);
-                                                    if (customScale > 0.0)
-                                                    {
-                                                        double denom = TextFontsStyleHelper.DetermineScaleDenominator(customScale, null, roundToCommon);
-                                                        return denom;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    catch
-                                    {
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                        catch
-                        {
-                            continue;
-                        }
-                    }
+        //                                // 检查是否为Viewport
+        //                                if (string.Equals(ent.GetType().Name, "Viewport", StringComparison.OrdinalIgnoreCase))
+        //                                {
+        //                                    var pi = ent.GetType().GetProperty("CustomScale");
+        //                                    if (pi != null)
+        //                                    {
+        //                                        var raw = pi.GetValue(ent);
+        //                                        if (raw != null)
+        //                                        {
+        //                                            double customScale = Convert.ToDouble(raw);
+        //                                            if (customScale > 0.0)
+        //                                            {
+        //                                                double denom = TextFontsStyleHelper.DetermineScaleDenominator(customScale, null, roundToCommon);
+        //                                                return denom;
+        //                                            }
+        //                                        }
+        //                                    }
+        //                                }
+        //                            }
+        //                            catch
+        //                            {
+        //                                continue;
+        //                            }
+        //                        }
+        //                    }
+        //                }
+        //                catch
+        //                {
+        //                    continue;
+        //                }
+        //            }
 
-                    tr.Commit();
-                }
-            }
-            catch
-            {
-                // 忽略并回退
-            }
+        //            tr.Commit();
+        //        }
+        //    }
+        //    catch
+        //    {
+        //        // 忽略并回退
+        //    }
 
-            // 回退到全局/当前视口检测
-            return TextFontsStyleHelper.DetermineScaleDenominator(GetScale(true), null, roundToCommon);
-        }
+        //    // 回退到全局/当前视口检测
+        //    return TextFontsStyleHelper.DetermineScaleDenominator(GetScale(true), null, roundToCommon);
+        //}
 
         /// <summary>
         /// 从WPF界面获取用户输入的绘图比例
@@ -997,107 +998,38 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 确认 DimStyle 是否真的写入了当前图纸、是否有重名/不可见字符、以及 EnsureOrCreateDimStyle(DBTrans, string, short, double, ObjectId) 返回的 ObjectId 是否为回退值（即失败）
-        /// </summary>
-        [CommandMethod("DEBUG_DIMSTYLE")]
-        public static void DEBUG_DIMSTYLE()
-        {
-            try
-            {
-                // 使用常用 DBTrans 开启事务（与你工程中其它命令一致）
-                using var tr = new DBTrans();
-
-                // 1) 列出当前 DimStyle 表中的所有样式名（调试用）
-                var before = DimStyleHelper.ListDimStyleNames(tr) ?? new List<string>();
-                string beforeList = before.Count == 0 ? "<empty>" : string.Join("\n", before);
-                Env.Editor.WriteMessage($"\n[DEBUG] 当前 DimStyle 列表（创建前）:\n{beforeList}");
-
-                // 2) 检查是否存在精确或规范化（去不可见/大小写忽略）的目标名
-                string target = "JLPDI-定位";
-                bool existsExact = before.Contains(target);
-                bool existsNormalized = before.Any(n => string.Equals((n ?? string.Empty).Trim().Replace('\u00A0', ' '), target, StringComparison.OrdinalIgnoreCase));
-                Env.Editor.WriteMessage($"\n[DEBUG] 精确存在: {existsExact}, 规范化存在(忽略大小写/NBSP): {existsNormalized}");
-
-                // 3) 打印当前事务数据库与活动文档数据库是否一致（常见问题：事务写入了错误的数据库）
-                var activeDb = Application.DocumentManager.MdiActiveDocument?.Database;
-                var trDb = tr.Database;
-                Env.Editor.WriteMessage($"\n[DEBUG] ActiveDocument.Database == tr.Database ? {ReferenceEquals(activeDb, trDb)}");
-
-                // 4) 尝试调用 EnsureOrCreateDimStyle 创建/更新目标样式，并打印返回的 ObjectId
-                //    注意：这里使用一个合理的默认参数（颜色索引 3、文字样式 tJText、scale 从 AutoCadHelper 读取）
-                double uiScale = 1.0;
-                try { uiScale = AutoCadHelper.GetScale(true); } catch { uiScale = 1.0; }
-                ObjectId textStyleId = ObjectId.Null;
-                try { textStyleId = tr.TextStyleTable["tJText"]; } catch { textStyleId = tr.Database.Textstyle; }
-
-                ObjectId createdId = DimStyleHelper.EnsureOrCreateDimStyle(tr, target, 3, uiScale, textStyleId);
-
-                // 5) 提交事务（EnsureOrCreateDimStyle 在内部可能已修改表，但要确认提交）
-                tr.Commit();
-
-                // 6) 比较返回值是否等同数据库默认 dimstyle（这是 EnsureOrCreateDimStyle 的失败回退）
-                var db = activeDb;
-                bool returnedIsDefault = (createdId == db?.Dimstyle);
-                Env.Editor.WriteMessage($"\n[DEBUG] EnsureOrCreateDimStyle 返回: {createdId}  (是否回退到 db.Dimstyle: {returnedIsDefault})");
-
-                // 7) 再次打开新事务列出样式，确认是否可见
-                using var tr2 = new DBTrans();
-                var after = DimStyleHelper.ListDimStyleNames(tr2) ?? new List<string>();
-                string afterList = after.Count == 0 ? "<empty>" : string.Join("\n", after);
-                Env.Editor.WriteMessage($"\n[DEBUG] 当前 DimStyle 列表（创建后）:\n{afterList}");
-
-                // 8) 列出所有近似匹配（包含目标字串 / 忽略不可见字符），方便排查隐藏字符或类似名称
-                var similars = after.Where(n =>
-                    (n ?? string.Empty).IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    string.Equals((n ?? string.Empty).Trim().Replace('\u00A0', ' '), target, StringComparison.OrdinalIgnoreCase)
-                ).ToList();
-                if (similars.Count > 0)
-                    Env.Editor.WriteMessage($"\n[DEBUG] 检测到近似名（包含或规范化匹配）:\n{string.Join("\n", similars)}");
-                else
-                    Env.Editor.WriteMessage($"\n[DEBUG] 未检测到近似名。");
-
-                tr2.Commit();
-            }
-            catch (Exception ex)
-            {
-                AutoCadHelper.LogWithSafety($"\nDEBUG_DIMSTYLE_JLPDI 异常: {ex.Message}");
-                Env.Editor.WriteMessage($"\nDEBUG_DIMSTYLE_JLPDI 异常: {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// 端点接触容差（例如 1e-3）
         /// 安全读取可能存在的系统变量作为容差，若不存在或读取失败则返回合理的默认值。
         /// </summary>
-        public static double GetPipeEndpointTolerance()
-        {
-            // 尝试从系统变量读取（变量名为示例，可根据项目实际变量名调整）
-            // 如果系统变量不存在或读取失败，SafeGetSystemVariableDouble 会返回第二个参数作为默认值
-            double tol = SafeGetSystemVariableDouble("PIPE_ENDPOINT_TOL", 0.001);
-            // 容错：确保返回为正数，避免后续计算异常
-            if (!(tol > 0.0))
-            {
-                tol = 0.001; // 默认 1mm（可根据项目调整）
-            }
-            return tol;
-        }
+        //public static double GetPipeEndpointTolerance()
+        //{
+        //    // 尝试从系统变量读取（变量名为示例，可根据项目实际变量名调整）
+        //    // 如果系统变量不存在或读取失败，SafeGetSystemVariableDouble 会返回第二个参数作为默认值
+        //    double tol = SafeGetSystemVariableDouble("PIPE_ENDPOINT_TOL", 0.001);
+        //    // 容错：确保返回为正数，避免后续计算异常
+        //    if (!(tol > 0.0))
+        //    {
+        //        tol = 0.001; // 默认 1mm（可根据项目调整）
+        //    }
+        //    return tol;
+        //}
 
         /// <summary>
         /// 共线角度容差（例如 1.0 度转弧度）
         /// 从系统变量读取角度容差（单位默认度），返回值为弧度。
         /// </summary>
-        public static double GetPipeCollinearAngleToleranceRad()
-        {
-            // 尝试从系统变量读取角度容差（以度为单位），若不可用则使用 1.0 度为默认值
-            double angleDeg = SafeGetSystemVariableDouble("PIPE_COLLINEAR_ANGLE_DEG", 1.0);
-            // 容错：确保角度为非负合理值
-            if (double.IsNaN(angleDeg) || angleDeg <= 0.0)
-            {
-                angleDeg = 1.0; // 默认 1 度
-            }
-            // 将度转换为弧度返回
-            double angleRad = angleDeg * (Math.PI / 180.0);
-            return angleRad;
-        }
+        //public static double GetPipeCollinearAngleToleranceRad()
+        //{
+        //    // 尝试从系统变量读取角度容差（以度为单位），若不可用则使用 1.0 度为默认值
+        //    double angleDeg = SafeGetSystemVariableDouble("PIPE_COLLINEAR_ANGLE_DEG", 1.0);
+        //    // 容错：确保角度为非负合理值
+        //    if (double.IsNaN(angleDeg) || angleDeg <= 0.0)
+        //    {
+        //        angleDeg = 1.0; // 默认 1 度
+        //    }
+        //    // 将度转换为弧度返回
+        //    double angleRad = angleDeg * (Math.PI / 180.0);
+        //    return angleRad;
+        //}
     }
 }

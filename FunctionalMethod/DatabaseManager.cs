@@ -88,65 +88,49 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             return 1;
         }
 
+        /// <summary>
+        /// 删除文件属性（占位）
+        /// </summary>
+        /// <param name="attributeId"></param>
+        /// <returns></returns>
         public virtual async Task<bool> DeleteFileAttributeAsync(long attributeId)
         {
             await Task.Yield();
             return true;
         }
 
+        /// <summary>
+        /// 删除文件存储记录（占位）
+        /// </summary>
+        /// <param name="storageId"></param>
+        /// <returns></returns>
         public virtual async Task<bool> DeleteFileStorageAsync(long storageId)
         {
             await Task.Yield();
             return true;
         }
 
-        public virtual async Task<int> AddFileAttributeAsync(FileAttribute attribute)
-        {
-            await Task.Yield();
-            // 旧链路已废弃，返回0避免“假成功”
-            LogManager.Instance.LogWarning("AddFileAttributeAsync 已废弃，请改用 AddFileStorageAndAttributesJsonAsync。");
-            return 0;
-        }
-
-        public virtual async Task<int> AddFileStorageAsync(FileStorage storage)
-        {
-            await Task.Yield();
-            // 旧链路已废弃，返回0避免“假成功”
-            LogManager.Instance.LogWarning("AddFileStorageAsync 旧写入链路已废弃，请改用 AddFileStorageAndAttributesJsonAsync。");
-            return 0;
-        }
-
-
-        //public virtual async Task<FileStorage?> GetFileStorageAsync(string fileHash)
-        //{
-        //    await Task.Yield();
-        //    return null;
-        //}
-
-        public virtual async Task<bool> UpdateFileAttributeAsync(FileAttribute attribute)
-        {
-            await Task.Yield();
-            return true;
-        }
-
+        /// <summary>
+        /// 更新文件存储记录（占位）
+        /// </summary>
+        /// <param name="storage"></param>
+        /// <returns></returns>
         public virtual async Task<bool> UpdateFileStorageAsync(FileStorage storage)
         {
             await Task.Yield();
             return true;
         }
 
+        /// <summary>
+        /// 添加文件标签（占位）
+        /// </summary>
+        /// <param name="tag"></param>
+        /// <returns></returns>
         public virtual async Task<bool> AddFileTagAsync(FileTag tag)
         {
             await Task.Yield();
             return true;
         }
-
-        public virtual async Task<int> AddFileAccessLogAsync(object accessLog)
-        {
-            await Task.Yield();
-            return 1;
-        }
-
 
         /// <summary>
         /// 用户实体（对应 users 表）
@@ -1495,55 +1479,55 @@ ON UPDATE CASCADE;");
         /// <summary>
         /// 获取所有设备信息（用于设备表生成）
         /// </summary>
-        public async Task<List<DeviceInfo>> GetAllDeviceInfoAsync()
-        {
-            const string sql = @"
-            SELECT 
-                device_id AS Id,
-                device_name AS Name,
-                device_type AS Type,
-                medium_name AS MediumName,
-                specifications AS Specifications,
-                material AS Material,
-                quantity AS Quantity,
-                drawing_number AS DrawingNumber,
-                power AS Power,
-                volume AS Volume,
-                pressure AS Pressure,
-                temperature AS Temperature,
-                diameter AS Diameter,
-                length AS Length,
-                thickness AS Thickness,
-                weight AS Weight,
-                model AS Model,
-                remarks AS Remarks
-            FROM device_info 
-            ORDER BY device_name";
+        //public async Task<List<DeviceInfo>> GetAllDeviceInfoAsync()
+        //{
+        //    const string sql = @"
+        //    SELECT 
+        //        device_id AS Id,
+        //        device_name AS Name,
+        //        device_type AS Type,
+        //        medium_name AS MediumName,
+        //        specifications AS Specifications,
+        //        material AS Material,
+        //        quantity AS Quantity,
+        //        drawing_number AS DrawingNumber,
+        //        power AS Power,
+        //        volume AS Volume,
+        //        pressure AS Pressure,
+        //        temperature AS Temperature,
+        //        diameter AS Diameter,
+        //        length AS Length,
+        //        thickness AS Thickness,
+        //        weight AS Weight,
+        //        model AS Model,
+        //        remarks AS Remarks
+        //    FROM device_info 
+        //    ORDER BY device_name";
 
-            using var connection = new MySqlConnection(_connectionString);
-            var deviceList = await connection.QueryAsync<DeviceInfo>(sql);
-            return deviceList.AsList();
-        }
+        //    using var connection = new MySqlConnection(_connectionString);
+        //    var deviceList = await connection.QueryAsync<DeviceInfo>(sql);
+        //    return deviceList.AsList();
+        //}
 
         /// <summary>
         /// 批量插入设备信息
         /// </summary>
-        public async Task<int> InsertDeviceInfoBatchAsync(List<DeviceInfo> deviceList)
-        {
-            const string sql = @"
-            INSERT INTO device_info (
-                device_name, device_type, medium_name, specifications,
-                material, quantity, drawing_number, power, volume, pressure,
-                temperature, diameter, length, thickness, weight, model, remarks
-            ) VALUES (
-                @Name, @Type, @MediumName, @Specifications,
-                @Material, @Quantity, @DrawingNumber, @Power, @Volume, @Pressure,
-                @Temperature, @Diameter, @Length, @Thickness, @Weight, @Model, @Remarks
-            )";
+        //public async Task<int> InsertDeviceInfoBatchAsync(List<DeviceInfo> deviceList)
+        //{
+        //    const string sql = @"
+        //    INSERT INTO device_info (
+        //        device_name, device_type, medium_name, specifications,
+        //        material, quantity, drawing_number, power, volume, pressure,
+        //        temperature, diameter, length, thickness, weight, model, remarks
+        //    ) VALUES (
+        //        @Name, @Type, @MediumName, @Specifications,
+        //        @Material, @Quantity, @DrawingNumber, @Power, @Volume, @Pressure,
+        //        @Temperature, @Diameter, @Length, @Thickness, @Weight, @Model, @Remarks
+        //    )";
 
-            using var connection = new MySqlConnection(_connectionString);
-            return await connection.ExecuteAsync(sql, deviceList);
-        }
+        //    using var connection = new MySqlConnection(_connectionString);
+        //    return await connection.ExecuteAsync(sql, deviceList);
+        //}
 
         #endregion
 
@@ -1552,31 +1536,31 @@ ON UPDATE CASCADE;");
         /// <summary>
         /// 事务操作示例：批量更新图元信息
         /// </summary>
-        public async Task<bool> UpdateFileBatchAsync(List<FileStorage> file)
-        {
-            const string updateSql = @"
-            UPDATE cad_file_storage 
-            SET display_name = @DisplayName,
-                file_path = @FilePath,
-                preview_image_path = @PreviewImagePath,
-                updated_at = NOW()
-            WHERE id = @Id";
+        //public async Task<bool> UpdateFileBatchAsync(List<FileStorage> file)
+        //{
+        //    const string updateSql = @"
+        //    UPDATE cad_file_storage 
+        //    SET display_name = @DisplayName,
+        //        file_path = @FilePath,
+        //        preview_image_path = @PreviewImagePath,
+        //        updated_at = NOW()
+        //    WHERE id = @Id";
 
-            using var connection = new MySqlConnection(_connectionString);
-            using var transaction = await connection.BeginTransactionAsync();
+        //    using var connection = new MySqlConnection(_connectionString);
+        //    using var transaction = await connection.BeginTransactionAsync();
 
-            try
-            {
-                await connection.ExecuteAsync(updateSql, file, transaction);
-                await transaction.CommitAsync();
-                return true;
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                return false;
-            }
-        }
+        //    try
+        //    {
+        //        await connection.ExecuteAsync(updateSql, file, transaction);
+        //        await transaction.CommitAsync();
+        //        return true;
+        //    }
+        //    catch
+        //    {
+        //        await transaction.RollbackAsync();
+        //        return false;
+        //    }
+        //}
 
         #endregion
 
@@ -1592,31 +1576,33 @@ ON UPDATE CASCADE;");
             var sql = "SELECT config_value FROM system_config WHERE config_key = @ConfigKey";
             return await connection.QueryFirstOrDefaultAsync<string>(sql, new { ConfigKey = configKey });
         }
+
         /// <summary>
         /// 设置系统配置
         /// </summary>
         /// <param name="configKey"></param>
         /// <param name="configValue"></param>
         /// <returns></returns>
-        public async Task<int> SetConfigValueAsync(string configKey, string configValue)
-        {
-            using var connection = GetConnection();
-            var sql = @"INSERT INTO system_config (config_key, config_value) 
-                VALUES (@ConfigKey, @ConfigValue) 
-                ON DUPLICATE KEY UPDATE config_value = @ConfigValue";
-            return await connection.ExecuteAsync(sql, new { ConfigKey = configKey, ConfigValue = configValue });
-        }
+        //public async Task<int> SetConfigValueAsync(string configKey, string configValue)
+        //{
+        //    using var connection = GetConnection();
+        //    var sql = @"INSERT INTO system_config (config_key, config_value) 
+        //        VALUES (@ConfigKey, @ConfigValue) 
+        //        ON DUPLICATE KEY UPDATE config_value = @ConfigValue";
+        //    return await connection.ExecuteAsync(sql, new { ConfigKey = configKey, ConfigValue = configValue });
+        //}
+
         /// <summary>
         /// 获取所有系统配置
         /// </summary>
         /// <returns></returns>
-        public async Task<Dictionary<string, string>> GetAllConfigAsync()
-        {
-            using var connection = GetConnection();
-            var sql = "SELECT config_key, config_value FROM system_config";
-            var result = await connection.QueryAsync<(string, string)>(sql);
-            return result.ToDictionary(x => x.Item1, x => x.Item2);
-        }
+        //public async Task<Dictionary<string, string>> GetAllConfigAsync()
+        //{
+        //    using var connection = GetConnection();
+        //    var sql = "SELECT config_key, config_value FROM system_config";
+        //    var result = await connection.QueryAsync<(string, string)>(sql);
+        //    return result.ToDictionary(x => x.Item1, x => x.Item2);
+        //}
 
         /// <summary>
         /// 获取CAD分类的最大排序序号
@@ -1645,14 +1631,14 @@ ON UPDATE CASCADE;");
         /// <summary>
         /// 获取所有子分类的最大排序序号（用于主分类下的直接子分类）
         /// </summary>
-        public async Task<int> GetMaxCadSubcategorySortOrderForMainCategoryAsync(int parentId)
-        {
-            const string sql = "SELECT COALESCE(MAX(sort_order), 0) FROM cad_subcategories WHERE parent_id = @parentId";
+        //public async Task<int> GetMaxCadSubcategorySortOrderForMainCategoryAsync(int parentId)
+        //{
+        //    const string sql = "SELECT COALESCE(MAX(sort_order), 0) FROM cad_subcategories WHERE parent_id = @parentId";
 
-            using var connection = new MySqlConnection(_connectionString);
-            var result = await connection.QuerySingleOrDefaultAsync<int>(sql, new { parentId });
-            return result;
-        }
+        //    using var connection = new MySqlConnection(_connectionString);
+        //    var result = await connection.QuerySingleOrDefaultAsync<int>(sql, new { parentId });
+        //    return result;
+        //}
 
         #endregion
 
@@ -1661,70 +1647,70 @@ ON UPDATE CASCADE;");
         /// <summary>
         /// 获取分类下的所有文件（支持分页和排序）
         /// </summary>
-        public async Task<List<FileStorage>> GetFilesByCategoryAsync(int categoryId, string categoryType = "sub",
-    int page = 1, int pageSize = 50, string orderBy = "created_at DESC")
-        {
-            string sql = @"
-        SELECT 
-            id AS Id,
-            category_id AS CategoryId,
-            file_attribute_id AS FileAttributeId,
-            file_name AS FileName,
-            file_stored_name AS FileStoredName,
-            file_type AS FileType,
-            is_tianzheng AS IsTianZheng,
-            file_hash AS FileHash,
-            display_name AS DisplayName,
-            block_name AS BlockName,
-            layer_name AS LayerName,
-            color_index AS ColorIndex,
-            scale AS Scale,
-            file_path AS FilePath,
-            preview_image_name AS PreviewImageName,
-            preview_image_path AS PreviewImagePath,
-            file_size AS FileSize,
-            is_preview AS IsPreview,
-            version AS Version,
-            description AS Description,
-            is_active AS IsActive,
-            created_by AS CreatedBy,
-            category_type AS CategoryType,
-            title AS Title,
-            keywords AS Keywords,
-            is_public AS IsPublic,
-            updated_by AS UpdatedBy,
-            last_accessed_at AS LastAccessedAt,
-            created_at AS CreatedAt,
-            updated_at AS UpdatedAt
-          FROM cad_file_storage
-          WHERE category_id = @CategoryId 
-          AND category_type = @CategoryType
-          AND is_active = 1";
-            try
-            {
-                if (!string.IsNullOrEmpty(orderBy))
-                {
-                    sql += $" ORDER BY {orderBy}";
-                }
-                sql += " LIMIT @offset, @pageSize";
+        //    public async Task<List<FileStorage>> GetFilesByCategoryAsync(int categoryId, string categoryType = "sub",
+        //int page = 1, int pageSize = 50, string orderBy = "created_at DESC")
+        //    {
+        //        string sql = @"
+        //    SELECT 
+        //        id AS Id,
+        //        category_id AS CategoryId,
+        //        file_attribute_id AS FileAttributeId,
+        //        file_name AS FileName,
+        //        file_stored_name AS FileStoredName,
+        //        file_type AS FileType,
+        //        is_tianzheng AS IsTianZheng,
+        //        file_hash AS FileHash,
+        //        display_name AS DisplayName,
+        //        block_name AS BlockName,
+        //        layer_name AS LayerName,
+        //        color_index AS ColorIndex,
+        //        scale AS Scale,
+        //        file_path AS FilePath,
+        //        preview_image_name AS PreviewImageName,
+        //        preview_image_path AS PreviewImagePath,
+        //        file_size AS FileSize,
+        //        is_preview AS IsPreview,
+        //        version AS Version,
+        //        description AS Description,
+        //        is_active AS IsActive,
+        //        created_by AS CreatedBy,
+        //        category_type AS CategoryType,
+        //        title AS Title,
+        //        keywords AS Keywords,
+        //        is_public AS IsPublic,
+        //        updated_by AS UpdatedBy,
+        //        last_accessed_at AS LastAccessedAt,
+        //        created_at AS CreatedAt,
+        //        updated_at AS UpdatedAt
+        //      FROM cad_file_storage
+        //      WHERE category_id = @CategoryId 
+        //      AND category_type = @CategoryType
+        //      AND is_active = 1";
+        //        try
+        //        {
+        //            if (!string.IsNullOrEmpty(orderBy))
+        //            {
+        //                sql += $" ORDER BY {orderBy}";
+        //            }
+        //            sql += " LIMIT @offset, @pageSize";
 
-                var parameters = new
-                {
-                    CategoryId = categoryId,
-                    CategoryType = categoryType,
-                    offset = (page - 1) * pageSize,
-                    pageSize
-                };
+        //            var parameters = new
+        //            {
+        //                CategoryId = categoryId,
+        //                CategoryType = categoryType,
+        //                offset = (page - 1) * pageSize,
+        //                pageSize
+        //            };
 
-                using var connection = new MySqlConnection(_connectionString);
-                return (await connection.QueryAsync<FileStorage>(sql, parameters)).AsList();
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"获取分类下的文件时出错: {ex.Message}");
-                return new List<FileStorage>();
-            }
-        }
+        //            using var connection = new MySqlConnection(_connectionString);
+        //            return (await connection.QueryAsync<FileStorage>(sql, parameters)).AsList();
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            LogManager.Instance.LogInfo($"获取分类下的文件时出错: {ex.Message}");
+        //            return new List<FileStorage>();
+        //        }
+        //    }
 
         /// <summary>
         ///  获取分类下的所有文件
@@ -1981,131 +1967,129 @@ LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
             }
         }
 
-
-
         /// <summary>
         /// 根据文件扩展名获取分类下的文件
         /// </summary>
-        public async Task<List<FileStorage>> GetFilesByCategoryAndExtensionAsync(int categoryId, string fileType)
-        {
-            const string sql = @"
-        SELECT 
-            id AS Id,
-            category_id AS CategoryId,
-            file_attribute_id AS FileAttributeId,
-            file_name AS FileName,
-            file_stored_name AS FileStoredName,
-            file_type AS FileType,
-            file_hash AS FileHash,
-            display_name AS DisplayName,
-            block_name AS BlockName,
-            layer_name AS LayerName,
-            color_index AS ColorIndex,
-            scale AS Scale,
-            file_path AS FilePath,
-            preview_image_name AS PreviewImageName,
-            preview_image_path AS PreviewImagePath,
-            file_size AS FileSize,
-            is_preview AS IsPreview,
-            version AS Version,
-            description AS Description,
-            is_active AS IsActive,
-            created_by AS CreatedBy,
-            category_type AS CategoryType,
-            title AS Title,
-            keywords AS Keywords,
-            is_public AS IsPublic,
-            updated_by AS UpdatedBy,
-            last_accessed_at AS LastAccessedAt,
-            created_at AS CreatedAt,
-            updated_at AS UpdatedAt
-        FROM cad_file_storage 
-        WHERE category_id = @categoryId 
-          AND file_type = @fileType
-          AND is_active = 1
-        ORDER BY created_at DESC";
-            try
-            {
-                using var connection = new MySqlConnection(_connectionString);
-                return (await connection.QueryAsync<FileStorage>(sql, new { categoryId, fileType })).AsList();
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"根据文件扩展名获取分类下的文件时出错: {ex.Message}");
-                return new List<FileStorage>();
-            }
-        }
+        //public async Task<List<FileStorage>> GetFilesByCategoryAndExtensionAsync(int categoryId, string fileType)
+        //{
+        //    const string sql = @"
+        //SELECT 
+        //    id AS Id,
+        //    category_id AS CategoryId,
+        //    file_attribute_id AS FileAttributeId,
+        //    file_name AS FileName,
+        //    file_stored_name AS FileStoredName,
+        //    file_type AS FileType,
+        //    file_hash AS FileHash,
+        //    display_name AS DisplayName,
+        //    block_name AS BlockName,
+        //    layer_name AS LayerName,
+        //    color_index AS ColorIndex,
+        //    scale AS Scale,
+        //    file_path AS FilePath,
+        //    preview_image_name AS PreviewImageName,
+        //    preview_image_path AS PreviewImagePath,
+        //    file_size AS FileSize,
+        //    is_preview AS IsPreview,
+        //    version AS Version,
+        //    description AS Description,
+        //    is_active AS IsActive,
+        //    created_by AS CreatedBy,
+        //    category_type AS CategoryType,
+        //    title AS Title,
+        //    keywords AS Keywords,
+        //    is_public AS IsPublic,
+        //    updated_by AS UpdatedBy,
+        //    last_accessed_at AS LastAccessedAt,
+        //    created_at AS CreatedAt,
+        //    updated_at AS UpdatedAt
+        //FROM cad_file_storage 
+        //WHERE category_id = @categoryId 
+        //  AND file_type = @fileType
+        //  AND is_active = 1
+        //ORDER BY created_at DESC";
+        //    try
+        //    {
+        //        using var connection = new MySqlConnection(_connectionString);
+        //        return (await connection.QueryAsync<FileStorage>(sql, new { categoryId, fileType })).AsList();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"根据文件扩展名获取分类下的文件时出错: {ex.Message}");
+        //        return new List<FileStorage>();
+        //    }
+        //}
 
         /// <summary>
         /// 搜索文件（支持关键词搜索）
         /// </summary>
-        public async Task<List<FileStorage>> SearchFilesAsync(string keyword, int? categoryId = null)
-        {
-            string sql = @"
-        SELECT 
-            id AS Id,
-            category_id AS CategoryId,
-            file_attribute_id AS FileAttributeId,
-            file_name AS FileName,
-            file_stored_name AS FileStoredName,
-            file_type AS FileType,
-            file_hash AS FileHash,
-            display_name AS DisplayName,
-            block_name AS BlockName,
-            layer_name AS LayerName,
-            color_index AS ColorIndex,
-            scale AS Scale,
-            file_path AS FilePath,
-            preview_image_name AS PreviewImageName,
-            preview_image_path AS PreviewImagePath,
-            file_size AS FileSize,
-            is_preview AS IsPreview,
-            version AS Version,
-            description AS Description,
-            is_active AS IsActive,
-            created_by AS CreatedBy,
-            category_type AS CategoryType,
-            title AS Title,
-            keywords AS Keywords,
-            is_public AS IsPublic,
-            updated_by AS UpdatedBy,
-            last_accessed_at AS LastAccessedAt,
-            created_at AS CreatedAt,
-            updated_at AS UpdatedAt
-        FROM cad_file_storage 
-        WHERE is_active = 1";
-            try
-            {
-                var parameters = new Dictionary<string, object>();
+        //public async Task<List<FileStorage>> SearchFilesAsync(string keyword, int? categoryId = null)
+        //{
+        //    string sql = @"
+        //SELECT 
+        //    id AS Id,
+        //    category_id AS CategoryId,
+        //    file_attribute_id AS FileAttributeId,
+        //    file_name AS FileName,
+        //    file_stored_name AS FileStoredName,
+        //    file_type AS FileType,
+        //    file_hash AS FileHash,
+        //    display_name AS DisplayName,
+        //    block_name AS BlockName,
+        //    layer_name AS LayerName,
+        //    color_index AS ColorIndex,
+        //    scale AS Scale,
+        //    file_path AS FilePath,
+        //    preview_image_name AS PreviewImageName,
+        //    preview_image_path AS PreviewImagePath,
+        //    file_size AS FileSize,
+        //    is_preview AS IsPreview,
+        //    version AS Version,
+        //    description AS Description,
+        //    is_active AS IsActive,
+        //    created_by AS CreatedBy,
+        //    category_type AS CategoryType,
+        //    title AS Title,
+        //    keywords AS Keywords,
+        //    is_public AS IsPublic,
+        //    updated_by AS UpdatedBy,
+        //    last_accessed_at AS LastAccessedAt,
+        //    created_at AS CreatedAt,
+        //    updated_at AS UpdatedAt
+        //FROM cad_file_storage 
+        //WHERE is_active = 1";
+        //    try
+        //    {
+        //        var parameters = new Dictionary<string, object>();
 
-                if (!string.IsNullOrEmpty(keyword))
-                {
-                    sql += @" AND (title LIKE @keyword 
-         OR file_name LIKE @keyword 
-         OR display_name LIKE @keyword 
-         OR description LIKE @keyword 
-         OR keywords LIKE @keyword)";
-                    parameters.Add("keyword", $"%{keyword}%");
-                }
+        //        if (!string.IsNullOrEmpty(keyword))
+        //        {
+        //            sql += @" AND (title LIKE @keyword 
+        // OR file_name LIKE @keyword 
+        // OR display_name LIKE @keyword 
+        // OR description LIKE @keyword 
+        // OR keywords LIKE @keyword)";
+        //            parameters.Add("keyword", $"%{keyword}%");
+        //        }
 
-                if (categoryId.HasValue)
-                {
-                    sql += " AND category_id = @categoryId";
-                    parameters.Add("categoryId", categoryId.Value);
-                }
+        //        if (categoryId.HasValue)
+        //        {
+        //            sql += " AND category_id = @categoryId";
+        //            parameters.Add("categoryId", categoryId.Value);
+        //        }
 
-                sql += " ORDER BY created_at DESC LIMIT 100";
+        //        sql += " ORDER BY created_at DESC LIMIT 100";
 
-                using var connection = new MySqlConnection(_connectionString);
-                return (await connection.QueryAsync<FileStorage>(sql, parameters)).AsList();
-            }
-            catch (Exception ex)
-            {
-                Env.Editor.WriteMessage($"搜索文件时出错: {ex.Message}");
-                return new List<FileStorage>();
-            }
+        //        using var connection = new MySqlConnection(_connectionString);
+        //        return (await connection.QueryAsync<FileStorage>(sql, parameters)).AsList();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Env.Editor.WriteMessage($"搜索文件时出错: {ex.Message}");
+        //        return new List<FileStorage>();
+        //    }
 
-        }
+        //}
 
         /// <summary>
         /// 获取文件主记录（按文件哈希）
@@ -2200,305 +2184,305 @@ LIMIT 1;";
         /// <summary>
         /// 新增：按文件哈希获取“主记录 + JSON 属性字典 + 配置名”
         /// </summary>
-        public async Task<(FileStorage File, Dictionary<string, string> Attributes, string ConfigName)> GetFileStorageWithAttributesByHashAsync(
-            string filehash,
-            string preferredConfigName = null)
-        {
-            // 先拿主记录（复用现有方法）
-            var file = await GetFileStorageAsync(filehash).ConfigureAwait(false);
+        //        public async Task<(FileStorage File, Dictionary<string, string> Attributes, string ConfigName)> GetFileStorageWithAttributesByHashAsync(
+        //            string filehash,
+        //            string preferredConfigName = null)
+        //        {
+        //            // 先拿主记录（复用现有方法）
+        //            var file = await GetFileStorageAsync(filehash).ConfigureAwait(false);
 
-            // 主记录不存在时，返回空元组内容
-            if (file == null)
-                return (null, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+        //            // 主记录不存在时，返回空元组内容
+        //            if (file == null)
+        //                return (null, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
 
-            // 准备查询属性 JSON 的 SQL（优先配置名）
-            const string attrByConfigSql = @"
-SELECT config_name AS ConfigName, attributes_json AS AttributesJson
-FROM cad_block_attributes_json
-WHERE file_id = @FileId
-  AND config_name = @ConfigName
-ORDER BY attr_id DESC
-LIMIT 1;";
+        //            // 准备查询属性 JSON 的 SQL（优先配置名）
+        //            const string attrByConfigSql = @"
+        //SELECT config_name AS ConfigName, attributes_json AS AttributesJson
+        //FROM cad_block_attributes_json
+        //WHERE file_id = @FileId
+        //  AND config_name = @ConfigName
+        //ORDER BY attr_id DESC
+        //LIMIT 1;";
 
-            // 兜底查询（取最新）
-            const string attrLatestSql = @"
-SELECT config_name AS ConfigName, attributes_json AS AttributesJson
-FROM cad_block_attributes_json
-WHERE file_id = @FileId
-ORDER BY attr_id DESC
-LIMIT 1;";
+        //            // 兜底查询（取最新）
+        //            const string attrLatestSql = @"
+        //SELECT config_name AS ConfigName, attributes_json AS AttributesJson
+        //FROM cad_block_attributes_json
+        //WHERE file_id = @FileId
+        //ORDER BY attr_id DESC
+        //LIMIT 1;";
 
-            try
-            {
-                // 创建数据库连接
-                using var connection = new MySqlConnection(_connectionString);
+        //            try
+        //            {
+        //                // 创建数据库连接
+        //                using var connection = new MySqlConnection(_connectionString);
 
-                // 确定优先配置名（参数优先，其次主表 file_attribute_id）
-                var configName = string.IsNullOrWhiteSpace(preferredConfigName)
-                    ? (file.FileAttributeId ?? string.Empty)
-                    : preferredConfigName.Trim();
+        //                // 确定优先配置名（参数优先，其次主表 file_attribute_id）
+        //                var configName = string.IsNullOrWhiteSpace(preferredConfigName)
+        //                    ? (file.FileAttributeId ?? string.Empty)
+        //                    : preferredConfigName.Trim();
 
-                (string ConfigName, string AttributesJson)? row = null;
+        //                (string ConfigName, string AttributesJson)? row = null;
 
-                // 优先按配置名查
-                if (!string.IsNullOrWhiteSpace(configName))
-                {
-                    row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
-                        attrByConfigSql, new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
-                }
+        //                // 优先按配置名查
+        //                if (!string.IsNullOrWhiteSpace(configName))
+        //                {
+        //                    row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
+        //                        attrByConfigSql, new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
+        //                }
 
-                // 兜底查最新
-                if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
-                {
-                    row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
-                        attrLatestSql, new { FileId = file.Id }).ConfigureAwait(false);
-                }
+        //                // 兜底查最新
+        //                if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+        //                {
+        //                    row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
+        //                        attrLatestSql, new { FileId = file.Id }).ConfigureAwait(false);
+        //                }
 
-                // 没有属性记录时返回空字典
-                if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
-                {
-                    return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-                }
+        //                // 没有属性记录时返回空字典
+        //                if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+        //                {
+        //                    return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+        //                }
 
-                // 反序列化 JSON -> 字典
-                var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(row.Value.AttributesJson)
-                           ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //                // 反序列化 JSON -> 字典
+        //                var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(row.Value.AttributesJson)
+        //                           ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 返回聚合结果
-                return (file, dict, row.Value.ConfigName ?? string.Empty);
-            }
-            catch (Exception ex)
-            {
-                // 异常时记录日志并返回主记录+空字典
-                LogManager.Instance.LogInfo($"GetFileStorageWithAttributesByHashAsync 出错: {ex.Message}");
-                return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-            }
-        }
+        //                // 返回聚合结果
+        //                return (file, dict, row.Value.ConfigName ?? string.Empty);
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                // 异常时记录日志并返回主记录+空字典
+        //                LogManager.Instance.LogInfo($"GetFileStorageWithAttributesByHashAsync 出错: {ex.Message}");
+        //                return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+        //            }
+        //        }
 
         /// <summary>
         /// 获取文件属性的详细信息（JSON新方案）
         /// 说明：保持旧返回类型 FileAttribute，不改调用方；
         /// 实现流程：先按文件名在 cad_file_storage 找 file -> 再到 cad_block_attributes_json 取 JSON -> 反序列化回填 FileAttribute。
         /// </summary>
-        public async Task<FileAttribute> GetFileAttributeAsync(string fileName)
-        {
-            // 防御式处理，防止空输入
-            if (string.IsNullOrWhiteSpace(fileName))
-                return null;
+        //        public async Task<FileAttribute> GetFileAttributeAsync(string fileName)
+        //        {
+        //            // 防御式处理，防止空输入
+        //            if (string.IsNullOrWhiteSpace(fileName))
+        //                return null;
 
-            // 提取文件名（带扩展名）和不带扩展名版本，用于模糊匹配
-            string noExtName = Path.GetFileNameWithoutExtension(fileName) ?? string.Empty;
-            string rawName = Path.GetFileName(fileName) ?? string.Empty;
+        //            // 提取文件名（带扩展名）和不带扩展名版本，用于模糊匹配
+        //            string noExtName = Path.GetFileNameWithoutExtension(fileName) ?? string.Empty;
+        //            string rawName = Path.GetFileName(fileName) ?? string.Empty;
 
-            // 先在主表里查目标文件（优先按 file_name / display_name / title）
-            const string fileSql = @"
-SELECT
-    id AS Id,
-    category_id AS CategoryId,
-    file_attribute_id AS FileAttributeId,
-    file_name AS FileName,
-    file_stored_name AS FileStoredName,
-    display_name AS DisplayName,
-    file_type AS FileType,
-    file_hash AS FileHash,
-    block_name AS BlockName,
-    layer_name AS LayerName,
-    color_index AS ColorIndex,
-    scale AS Scale,
-    file_path AS FilePath,
-    preview_image_name AS PreviewImageName,
-    preview_image_path AS PreviewImagePath,
-    file_size AS FileSize,
-    is_preview AS IsPreview,
-    version AS Version,
-    description AS Description,
-    is_active AS IsActive,
-    created_by AS CreatedBy,
-    category_type AS CategoryType,
-    title AS Title,
-    keywords AS Keywords,
-    is_public AS IsPublic,
-    updated_by AS UpdatedBy,
-    last_accessed_at AS LastAccessedAt,
-    created_at AS CreatedAt,
-    updated_at AS UpdatedAt
-FROM cad_file_storage
-WHERE is_active = 1
-  AND (
-        file_name LIKE CONCAT('%', @Name1, '%')
-     OR file_name LIKE CONCAT('%', @Name2, '%')
-     OR display_name LIKE CONCAT('%', @Name1, '%')
-     OR display_name LIKE CONCAT('%', @Name2, '%')
-     OR title LIKE CONCAT('%', @Name1, '%')
-     OR title LIKE CONCAT('%', @Name2, '%')
-  )
-ORDER BY updated_at DESC, id DESC
-LIMIT 1;";
+        //            // 先在主表里查目标文件（优先按 file_name / display_name / title）
+        //            const string fileSql = @"
+        //SELECT
+        //    id AS Id,
+        //    category_id AS CategoryId,
+        //    file_attribute_id AS FileAttributeId,
+        //    file_name AS FileName,
+        //    file_stored_name AS FileStoredName,
+        //    display_name AS DisplayName,
+        //    file_type AS FileType,
+        //    file_hash AS FileHash,
+        //    block_name AS BlockName,
+        //    layer_name AS LayerName,
+        //    color_index AS ColorIndex,
+        //    scale AS Scale,
+        //    file_path AS FilePath,
+        //    preview_image_name AS PreviewImageName,
+        //    preview_image_path AS PreviewImagePath,
+        //    file_size AS FileSize,
+        //    is_preview AS IsPreview,
+        //    version AS Version,
+        //    description AS Description,
+        //    is_active AS IsActive,
+        //    created_by AS CreatedBy,
+        //    category_type AS CategoryType,
+        //    title AS Title,
+        //    keywords AS Keywords,
+        //    is_public AS IsPublic,
+        //    updated_by AS UpdatedBy,
+        //    last_accessed_at AS LastAccessedAt,
+        //    created_at AS CreatedAt,
+        //    updated_at AS UpdatedAt
+        //FROM cad_file_storage
+        //WHERE is_active = 1
+        //  AND (
+        //        file_name LIKE CONCAT('%', @Name1, '%')
+        //     OR file_name LIKE CONCAT('%', @Name2, '%')
+        //     OR display_name LIKE CONCAT('%', @Name1, '%')
+        //     OR display_name LIKE CONCAT('%', @Name2, '%')
+        //     OR title LIKE CONCAT('%', @Name1, '%')
+        //     OR title LIKE CONCAT('%', @Name2, '%')
+        //  )
+        //ORDER BY updated_at DESC, id DESC
+        //LIMIT 1;";
 
-            // 优先按 config_name=file_attribute_id 精确查 JSON 属性
-            const string attrSqlByConfig = @"
-SELECT
-    attr_id AS AttrId,
-    file_id AS FileId,
-    config_name AS ConfigName,
-    attributes_json AS AttributesJson,
-    created_at AS CreatedAt,
-    updated_at AS UpdatedAt
-FROM cad_block_attributes_json
-WHERE file_id = @FileId
-  AND config_name = @ConfigName
-ORDER BY attr_id DESC
-LIMIT 1;";
+        //            // 优先按 config_name=file_attribute_id 精确查 JSON 属性
+        //            const string attrSqlByConfig = @"
+        //SELECT
+        //    attr_id AS AttrId,
+        //    file_id AS FileId,
+        //    config_name AS ConfigName,
+        //    attributes_json AS AttributesJson,
+        //    created_at AS CreatedAt,
+        //    updated_at AS UpdatedAt
+        //FROM cad_block_attributes_json
+        //WHERE file_id = @FileId
+        //  AND config_name = @ConfigName
+        //ORDER BY attr_id DESC
+        //LIMIT 1;";
 
-            // 兜底按 file_id 取最新属性记录
-            const string attrSqlByLatest = @"
-SELECT
-    attr_id AS AttrId,
-    file_id AS FileId,
-    config_name AS ConfigName,
-    attributes_json AS AttributesJson,
-    created_at AS CreatedAt,
-    updated_at AS UpdatedAt
-FROM cad_block_attributes_json
-WHERE file_id = @FileId
-ORDER BY attr_id DESC
-LIMIT 1;";
+        //            // 兜底按 file_id 取最新属性记录
+        //            const string attrSqlByLatest = @"
+        //SELECT
+        //    attr_id AS AttrId,
+        //    file_id AS FileId,
+        //    config_name AS ConfigName,
+        //    attributes_json AS AttributesJson,
+        //    created_at AS CreatedAt,
+        //    updated_at AS UpdatedAt
+        //FROM cad_block_attributes_json
+        //WHERE file_id = @FileId
+        //ORDER BY attr_id DESC
+        //LIMIT 1;";
 
-            try
-            {
-                using var connection = new MySqlConnection(_connectionString);
+        //            try
+        //            {
+        //                using var connection = new MySqlConnection(_connectionString);
 
-                // 查询主表文件记录
-                var file = await connection.QueryFirstOrDefaultAsync<FileStorage>(
-                    fileSql,
-                    new { Name1 = noExtName, Name2 = rawName }).ConfigureAwait(false);
+        //                // 查询主表文件记录
+        //                var file = await connection.QueryFirstOrDefaultAsync<FileStorage>(
+        //                    fileSql,
+        //                    new { Name1 = noExtName, Name2 = rawName }).ConfigureAwait(false);
 
-                // 没有匹配到文件，直接返回 null
-                if (file == null)
-                    return null;
+        //                // 没有匹配到文件，直接返回 null
+        //                if (file == null)
+        //                    return null;
 
-                // 查询 JSON 属性记录
-                BlockAttributesJson jsonRow = null;
-                var configName = Convert.ToString(file.FileAttributeId)?.Trim();
+        //                // 查询 JSON 属性记录
+        //                BlockAttributesJson jsonRow = null;
+        //                var configName = Convert.ToString(file.FileAttributeId)?.Trim();
 
-                if (!string.IsNullOrWhiteSpace(configName))
-                {
-                    jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
-                        attrSqlByConfig,
-                        new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
-                }
+        //                if (!string.IsNullOrWhiteSpace(configName))
+        //                {
+        //                    jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
+        //                        attrSqlByConfig,
+        //                        new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
+        //                }
 
-                if (jsonRow == null)
-                {
-                    jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
-                        attrSqlByLatest,
-                        new { FileId = file.Id }).ConfigureAwait(false);
-                }
+        //                if (jsonRow == null)
+        //                {
+        //                    jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
+        //                        attrSqlByLatest,
+        //                        new { FileId = file.Id }).ConfigureAwait(false);
+        //                }
 
-                // 没有属性记录时，返回一个基础对象（兼容旧逻辑）
-                if (jsonRow == null || string.IsNullOrWhiteSpace(jsonRow.AttributesJson))
-                {
-                    return new FileAttribute
-                    {
-                        FileStorageId = file.Id,
-                        FileName = file.FileName,
-                        FileAttributeId = file.FileAttributeId,
-                        CreatedAt = file.CreatedAt,
-                        UpdatedAt = file.UpdatedAt
-                    };
-                }
+        //                // 没有属性记录时，返回一个基础对象（兼容旧逻辑）
+        //                if (jsonRow == null || string.IsNullOrWhiteSpace(jsonRow.AttributesJson))
+        //                {
+        //                    return new FileAttribute
+        //                    {
+        //                        FileStorageId = file.Id,
+        //                        FileName = file.FileName,
+        //                        FileAttributeId = file.FileAttributeId,
+        //                        CreatedAt = file.CreatedAt,
+        //                        UpdatedAt = file.UpdatedAt
+        //                    };
+        //                }
 
-                // 反序列化 JSON 到字典
-                var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonRow.AttributesJson)
-                           ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //                // 反序列化 JSON 到字典
+        //                var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonRow.AttributesJson)
+        //                           ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 创建返回对象，先回填基础字段
-                var attr = new FileAttribute
-                {
-                    FileStorageId = file.Id,
-                    FileName = file.FileName,
-                    FileAttributeId = string.IsNullOrWhiteSpace(jsonRow.ConfigName) ? file.FileAttributeId : jsonRow.ConfigName,
-                    CreatedAt = jsonRow.CreatedAt,
-                    UpdatedAt = jsonRow.UpdatedAt
-                };
+        //                // 创建返回对象，先回填基础字段
+        //                var attr = new FileAttribute
+        //                {
+        //                    FileStorageId = file.Id,
+        //                    FileName = file.FileName,
+        //                    FileAttributeId = string.IsNullOrWhiteSpace(jsonRow.ConfigName) ? file.FileAttributeId : jsonRow.ConfigName,
+        //                    CreatedAt = jsonRow.CreatedAt,
+        //                    UpdatedAt = jsonRow.UpdatedAt
+        //                };
 
-                // 通过反射把字典按“属性名”回填到 FileAttribute 模型
-                foreach (var p in typeof(FileAttribute).GetProperties())
-                {
-                    if (!p.CanWrite) continue;
-                    if (!dict.TryGetValue(p.Name, out var raw)) continue;
-                    if (string.IsNullOrWhiteSpace(raw)) continue;
+        //                // 通过反射把字典按“属性名”回填到 FileAttribute 模型
+        //                foreach (var p in typeof(FileAttribute).GetProperties())
+        //                {
+        //                    if (!p.CanWrite) continue;
+        //                    if (!dict.TryGetValue(p.Name, out var raw)) continue;
+        //                    if (string.IsNullOrWhiteSpace(raw)) continue;
 
-                    try
-                    {
-                        var targetType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+        //                    try
+        //                    {
+        //                        var targetType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
 
-                        if (targetType == typeof(string))
-                        {
-                            p.SetValue(attr, raw);
-                            continue;
-                        }
+        //                        if (targetType == typeof(string))
+        //                        {
+        //                            p.SetValue(attr, raw);
+        //                            continue;
+        //                        }
 
-                        if (targetType == typeof(int))
-                        {
-                            if (int.TryParse(raw, out var v)) p.SetValue(attr, v);
-                            continue;
-                        }
+        //                        if (targetType == typeof(int))
+        //                        {
+        //                            if (int.TryParse(raw, out var v)) p.SetValue(attr, v);
+        //                            continue;
+        //                        }
 
-                        if (targetType == typeof(long))
-                        {
-                            if (long.TryParse(raw, out var v)) p.SetValue(attr, v);
-                            continue;
-                        }
+        //                        if (targetType == typeof(long))
+        //                        {
+        //                            if (long.TryParse(raw, out var v)) p.SetValue(attr, v);
+        //                            continue;
+        //                        }
 
-                        if (targetType == typeof(decimal))
-                        {
-                            if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
-                                p.SetValue(attr, v);
-                            else if (decimal.TryParse(raw, out var v2))
-                                p.SetValue(attr, v2);
-                            continue;
-                        }
+        //                        if (targetType == typeof(decimal))
+        //                        {
+        //                            if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
+        //                                p.SetValue(attr, v);
+        //                            else if (decimal.TryParse(raw, out var v2))
+        //                                p.SetValue(attr, v2);
+        //                            continue;
+        //                        }
 
-                        if (targetType == typeof(double))
-                        {
-                            if (double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
-                                p.SetValue(attr, v);
-                            else if (double.TryParse(raw, out var v2))
-                                p.SetValue(attr, v2);
-                            continue;
-                        }
+        //                        if (targetType == typeof(double))
+        //                        {
+        //                            if (double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
+        //                                p.SetValue(attr, v);
+        //                            else if (double.TryParse(raw, out var v2))
+        //                                p.SetValue(attr, v2);
+        //                            continue;
+        //                        }
 
-                        if (targetType == typeof(DateTime))
-                        {
-                            if (DateTime.TryParse(raw, out var v)) p.SetValue(attr, v);
-                            continue;
-                        }
+        //                        if (targetType == typeof(DateTime))
+        //                        {
+        //                            if (DateTime.TryParse(raw, out var v)) p.SetValue(attr, v);
+        //                            continue;
+        //                        }
 
-                        if (targetType == typeof(bool))
-                        {
-                            if (bool.TryParse(raw, out var b))
-                                p.SetValue(attr, b);
-                            else if (raw == "1")
-                                p.SetValue(attr, true);
-                            else if (raw == "0")
-                                p.SetValue(attr, false);
-                        }
-                    }
-                    catch
-                    {
-                        // 单个字段解析失败不影响整体返回
-                    }
-                }
+        //                        if (targetType == typeof(bool))
+        //                        {
+        //                            if (bool.TryParse(raw, out var b))
+        //                                p.SetValue(attr, b);
+        //                            else if (raw == "1")
+        //                                p.SetValue(attr, true);
+        //                            else if (raw == "0")
+        //                                p.SetValue(attr, false);
+        //                        }
+        //                    }
+        //                    catch
+        //                    {
+        //                        // 单个字段解析失败不影响整体返回
+        //                    }
+        //                }
 
-                return attr;
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"获取文件属性失败(JSON): {ex.Message}");
-                return null;
-            }
-        }
+        //                return attr;
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                LogManager.Instance.LogInfo($"获取文件属性失败(JSON): {ex.Message}");
+        //                return null;
+        //            }
+        //        }
 
         /// <summary>
         /// 获取文件详细信息（主表 + 新 JSON 属性表）
@@ -2737,125 +2721,125 @@ LIMIT 1;";
         /// <summary>
         /// ===== 新增：cad_file_attributes 全字段查询片段（供多个查询方法复用）=====
         /// </summary>
-        private const string CadFileAttributeSelectColumns = @"
-    id AS Id,
-    category_id AS CategoryId,
-    file_storage_id AS FileStorageId,
-    file_name AS FileName,
-    file_attribute_id AS FileAttributeId,
-    description AS Description,
-    attribute_group AS AttributeGroup,
-    remarks AS Remarks,
-    customize1 AS Customize1,
-    customize2 AS Customize2,
-    customize3 AS Customize3,
-    length AS Length,
-    width AS Width,
-    height AS Height,
-    angle AS Angle,
-    base_point_x AS BasePointX,
-    base_point_y AS BasePointY,
-    base_point_z AS BasePointZ,
-    model AS Model,
-    specifications AS Specifications,
-    material AS Material,
-    medium_name AS MediumName,
-    standard_number AS StandardNumber,
-    pressure AS Pressure,
-    temperature AS Temperature,
-    pressure_rating AS PressureRating,
-    operating_pressure AS OperatingPressure,
-    operating_temperature AS OperatingTemperature,
-    diameter AS Diameter,
-    outer_diameter AS OuterDiameter,
-    inner_diameter AS InnerDiameter,
-    nominal_diameter AS NominalDiameter,
-    thickness AS Thickness,
-    weight AS Weight,
-    density AS Density,
-    volume AS Volume,
-    flow AS Flow,
-    velocity AS Velocity,
-    lift AS Lift,
-    power AS Power,
-    voltage AS Voltage,
-    current AS Current,
-    frequency AS Frequency,
-    conductivity AS Conductivity,
-    moisture AS Moisture,
-    humidity AS Humidity,
-    vacuum AS Vacuum,
-    radiation AS Radiation,
-    pipe_spec AS PipeSpec,
-    pipe_nominal_diameter AS PipeNominalDiameter,
-    pipe_wall_thickness AS PipeWallThickness,
-    pipe_pressure_class AS PipePressureClass,
-    connection_type AS ConnectionType,
-    pipe_slope AS PipeSlope,
-    anticorrosion_treatment AS AnticorrosionTreatment,
-    valve_model AS ValveModel,
-    valve_body_material AS ValveBodyMaterial,
-    valve_disc_material AS ValveDiscMaterial,
-    valve_ball_material AS ValveBallMaterial,
-    seal_material AS SealMaterial,
-    drive_type AS DriveType,
-    open_mode AS OpenMode,
-    applicable_medium AS ApplicableMedium,
-    flange_model AS FlangeModel,
-    flange_type AS FlangeType,
-    flange_face_type AS FlangeFaceType,
-    flange_standard AS FlangeStandard,
-    bolt_spec AS BoltSpec,
-    reducer_spec AS ReducerSpec,
-    reducer_large_dn AS ReducerLargeDn,
-    reducer_small_dn AS ReducerSmallDn,
-    reducer_wall_thickness_large AS ReducerWallThicknessLarge,
-    reducer_wall_thickness_small AS ReducerWallThicknessSmall,
-    reducer_connection_type AS ReducerConnectionType,
-    reducer_conicity AS ReducerConicity,
-    reducer_eccentric_direction AS ReducerEccentricDirection,
-    reducer_applicable_medium AS ReducerApplicableMedium,
-    reducer_anticorrosion AS ReducerAnticorrosion,
-    pump_model AS PumpModel,
-    pump_flow AS PumpFlow,
-    pump_head AS PumpHead,
-    pump_body_material AS PumpBodyMaterial,
-    motor_power AS MotorPower,
-    inlet_outlet_diameter AS InletOutletDiameter,
-    rated_speed AS RatedSpeed,
-    pump_applicable_medium AS PumpApplicableMedium,
-    working_pressure AS WorkingPressure,
-    protection_level AS ProtectionLevel,
-    expansion_joint_model AS ExpansionJointModel,
-    bellows_material AS BellowsMaterial,
-    flange_or_nozzle_material AS FlangeOrNozzleMaterial,
-    compensation_amount AS CompensationAmount,
-    expansion_joint_connection_type AS ExpansionJointConnectionType,
-    expansion_joint_medium AS ExpansionJointMedium,
-    expansion_joint_working_temp AS ExpansionJointWorkingTemp,
-    flue_gas_capacity AS FlueGasCapacity,
-    desulfurization_efficiency AS DesulfurizationEfficiency,
-    droplet_size AS DropletSize,
-    spray_layer_count AS SprayLayerCount,
-    chimney_spec AS ChimneySpec,
-    chimney_diameter AS ChimneyDiameter,
-    chimney_height AS ChimneyHeight,
-    chimney_material AS ChimneyMaterial,
-    chimney_thickness AS ChimneyThickness,
-    outlet_wind_speed AS OutletWindSpeed,
-    insulation_thickness AS InsulationThickness,
-    support_type AS SupportType,
-    flue_gas_temperature AS FlueGasTemperature,
-    pressure_gauge_model AS PressureGaugeModel,
-    thermometer_model AS ThermometerModel,
-    filter_model AS FilterModel,
-    check_valve_model AS CheckValveModel,
-    sprinkler_model AS SprinklerModel,
-    flow_meter_model AS FlowMeterModel,
-    safety_valve_model AS SafetyValveModel,
-    flexible_joint_model AS FlexibleJointModel,
-    created_at AS CreatedAt,
-    updated_at AS UpdatedAt";
+        //    private const string CadFileAttributeSelectColumns = @"
+        //id AS Id,
+        //category_id AS CategoryId,
+        //file_storage_id AS FileStorageId,
+        //file_name AS FileName,
+        //file_attribute_id AS FileAttributeId,
+        //description AS Description,
+        //attribute_group AS AttributeGroup,
+        //remarks AS Remarks,
+        //customize1 AS Customize1,
+        //customize2 AS Customize2,
+        //customize3 AS Customize3,
+        //length AS Length,
+        //width AS Width,
+        //height AS Height,
+        //angle AS Angle,
+        //base_point_x AS BasePointX,
+        //base_point_y AS BasePointY,
+        //base_point_z AS BasePointZ,
+        //model AS Model,
+        //specifications AS Specifications,
+        //material AS Material,
+        //medium_name AS MediumName,
+        //standard_number AS StandardNumber,
+        //pressure AS Pressure,
+        //temperature AS Temperature,
+        //pressure_rating AS PressureRating,
+        //operating_pressure AS OperatingPressure,
+        //operating_temperature AS OperatingTemperature,
+        //diameter AS Diameter,
+        //outer_diameter AS OuterDiameter,
+        //inner_diameter AS InnerDiameter,
+        //nominal_diameter AS NominalDiameter,
+        //thickness AS Thickness,
+        //weight AS Weight,
+        //density AS Density,
+        //volume AS Volume,
+        //flow AS Flow,
+        //velocity AS Velocity,
+        //lift AS Lift,
+        //power AS Power,
+        //voltage AS Voltage,
+        //current AS Current,
+        //frequency AS Frequency,
+        //conductivity AS Conductivity,
+        //moisture AS Moisture,
+        //humidity AS Humidity,
+        //vacuum AS Vacuum,
+        //radiation AS Radiation,
+        //pipe_spec AS PipeSpec,
+        //pipe_nominal_diameter AS PipeNominalDiameter,
+        //pipe_wall_thickness AS PipeWallThickness,
+        //pipe_pressure_class AS PipePressureClass,
+        //connection_type AS ConnectionType,
+        //pipe_slope AS PipeSlope,
+        //anticorrosion_treatment AS AnticorrosionTreatment,
+        //valve_model AS ValveModel,
+        //valve_body_material AS ValveBodyMaterial,
+        //valve_disc_material AS ValveDiscMaterial,
+        //valve_ball_material AS ValveBallMaterial,
+        //seal_material AS SealMaterial,
+        //drive_type AS DriveType,
+        //open_mode AS OpenMode,
+        //applicable_medium AS ApplicableMedium,
+        //flange_model AS FlangeModel,
+        //flange_type AS FlangeType,
+        //flange_face_type AS FlangeFaceType,
+        //flange_standard AS FlangeStandard,
+        //bolt_spec AS BoltSpec,
+        //reducer_spec AS ReducerSpec,
+        //reducer_large_dn AS ReducerLargeDn,
+        //reducer_small_dn AS ReducerSmallDn,
+        //reducer_wall_thickness_large AS ReducerWallThicknessLarge,
+        //reducer_wall_thickness_small AS ReducerWallThicknessSmall,
+        //reducer_connection_type AS ReducerConnectionType,
+        //reducer_conicity AS ReducerConicity,
+        //reducer_eccentric_direction AS ReducerEccentricDirection,
+        //reducer_applicable_medium AS ReducerApplicableMedium,
+        //reducer_anticorrosion AS ReducerAnticorrosion,
+        //pump_model AS PumpModel,
+        //pump_flow AS PumpFlow,
+        //pump_head AS PumpHead,
+        //pump_body_material AS PumpBodyMaterial,
+        //motor_power AS MotorPower,
+        //inlet_outlet_diameter AS InletOutletDiameter,
+        //rated_speed AS RatedSpeed,
+        //pump_applicable_medium AS PumpApplicableMedium,
+        //working_pressure AS WorkingPressure,
+        //protection_level AS ProtectionLevel,
+        //expansion_joint_model AS ExpansionJointModel,
+        //bellows_material AS BellowsMaterial,
+        //flange_or_nozzle_material AS FlangeOrNozzleMaterial,
+        //compensation_amount AS CompensationAmount,
+        //expansion_joint_connection_type AS ExpansionJointConnectionType,
+        //expansion_joint_medium AS ExpansionJointMedium,
+        //expansion_joint_working_temp AS ExpansionJointWorkingTemp,
+        //flue_gas_capacity AS FlueGasCapacity,
+        //desulfurization_efficiency AS DesulfurizationEfficiency,
+        //droplet_size AS DropletSize,
+        //spray_layer_count AS SprayLayerCount,
+        //chimney_spec AS ChimneySpec,
+        //chimney_diameter AS ChimneyDiameter,
+        //chimney_height AS ChimneyHeight,
+        //chimney_material AS ChimneyMaterial,
+        //chimney_thickness AS ChimneyThickness,
+        //outlet_wind_speed AS OutletWindSpeed,
+        //insulation_thickness AS InsulationThickness,
+        //support_type AS SupportType,
+        //flue_gas_temperature AS FlueGasTemperature,
+        //pressure_gauge_model AS PressureGaugeModel,
+        //thermometer_model AS ThermometerModel,
+        //filter_model AS FilterModel,
+        //check_valve_model AS CheckValveModel,
+        //sprinkler_model AS SprinklerModel,
+        //flow_meter_model AS FlowMeterModel,
+        //safety_valve_model AS SafetyValveModel,
+        //flexible_joint_model AS FlexibleJointModel,
+        //created_at AS CreatedAt,
+        //updated_at AS UpdatedAt";
 
         /// <summary>
         /// ===== 新增：统一构造参数（插入/更新复用）=====
@@ -2863,246 +2847,246 @@ LIMIT 1;";
         /// <param name="a"></param>
         /// <param name="includeId"></param>
         /// <returns></returns>
-        private DynamicParameters BuildFileAttributeParameters(FileAttribute a, bool includeId)
-        {
-            // 防御式处理，避免空引用
-            a ??= new FileAttribute();
+        //private DynamicParameters BuildFileAttributeParameters(FileAttribute a, bool includeId)
+        //{
+        //    // 防御式处理，避免空引用
+        //    a ??= new FileAttribute();
 
-            // 业务属性ID为空时自动生成，满足新表非空要求
-            if (string.IsNullOrWhiteSpace(a.FileAttributeId))
-            {
-                a.FileAttributeId = Guid.NewGuid().ToString("N");
-            }
+        //    // 业务属性ID为空时自动生成，满足新表非空要求
+        //    if (string.IsNullOrWhiteSpace(a.FileAttributeId))
+        //    {
+        //        a.FileAttributeId = Guid.NewGuid().ToString("N");
+        //    }
 
-            // 时间兜底
-            if (a.CreatedAt == default) a.CreatedAt = DateTime.Now;
-            if (a.UpdatedAt == default) a.UpdatedAt = DateTime.Now;
+        //    // 时间兜底
+        //    if (a.CreatedAt == default) a.CreatedAt = DateTime.Now;
+        //    if (a.UpdatedAt == default) a.UpdatedAt = DateTime.Now;
 
-            var p = new DynamicParameters();
-            if (includeId) p.Add("Id", a.Id);
+        //    var p = new DynamicParameters();
+        //    if (includeId) p.Add("Id", a.Id);
 
-            p.Add("CategoryId", a.CategoryId);
-            p.Add("FileStorageId", a.FileStorageId);
-            p.Add("FileName", a.FileName ?? string.Empty);
-            p.Add("FileAttributeId", a.FileAttributeId);
+        //    p.Add("CategoryId", a.CategoryId);
+        //    p.Add("FileStorageId", a.FileStorageId);
+        //    p.Add("FileName", a.FileName ?? string.Empty);
+        //    p.Add("FileAttributeId", a.FileAttributeId);
 
-            p.Add("Description", a.Description);
-            p.Add("AttributeGroup", a.AttributeGroup);
-            p.Add("Remarks", a.Remarks);
-            p.Add("Customize1", a.Customize1);
-            p.Add("Customize2", a.Customize2);
-            p.Add("Customize3", a.Customize3);
+        //    p.Add("Description", a.Description);
+        //    p.Add("AttributeGroup", a.AttributeGroup);
+        //    p.Add("Remarks", a.Remarks);
+        //    p.Add("Customize1", a.Customize1);
+        //    p.Add("Customize2", a.Customize2);
+        //    p.Add("Customize3", a.Customize3);
 
-            p.Add("Length", a.Length); p.Add("Width", a.Width); p.Add("Height", a.Height); p.Add("Angle", a.Angle);
-            p.Add("BasePointX", a.BasePointX); p.Add("BasePointY", a.BasePointY); p.Add("BasePointZ", a.BasePointZ);
+        //    p.Add("Length", a.Length); p.Add("Width", a.Width); p.Add("Height", a.Height); p.Add("Angle", a.Angle);
+        //    p.Add("BasePointX", a.BasePointX); p.Add("BasePointY", a.BasePointY); p.Add("BasePointZ", a.BasePointZ);
 
-            p.Add("Model", a.Model); p.Add("Specifications", a.Specifications); p.Add("Material", a.Material);
-            p.Add("MediumName", a.MediumName); p.Add("StandardNumber", a.StandardNumber);
+        //    p.Add("Model", a.Model); p.Add("Specifications", a.Specifications); p.Add("Material", a.Material);
+        //    p.Add("MediumName", a.MediumName); p.Add("StandardNumber", a.StandardNumber);
 
-            p.Add("Pressure", a.Pressure); p.Add("Temperature", a.Temperature); p.Add("PressureRating", a.PressureRating);
-            p.Add("OperatingPressure", a.OperatingPressure); p.Add("OperatingTemperature", a.OperatingTemperature);
+        //    p.Add("Pressure", a.Pressure); p.Add("Temperature", a.Temperature); p.Add("PressureRating", a.PressureRating);
+        //    p.Add("OperatingPressure", a.OperatingPressure); p.Add("OperatingTemperature", a.OperatingTemperature);
 
-            p.Add("Diameter", a.Diameter); p.Add("OuterDiameter", a.OuterDiameter); p.Add("InnerDiameter", a.InnerDiameter);
-            p.Add("NominalDiameter", a.NominalDiameter); p.Add("Thickness", a.Thickness); p.Add("Weight", a.Weight); p.Add("Density", a.Density);
+        //    p.Add("Diameter", a.Diameter); p.Add("OuterDiameter", a.OuterDiameter); p.Add("InnerDiameter", a.InnerDiameter);
+        //    p.Add("NominalDiameter", a.NominalDiameter); p.Add("Thickness", a.Thickness); p.Add("Weight", a.Weight); p.Add("Density", a.Density);
 
-            p.Add("Volume", a.Volume); p.Add("Flow", a.Flow); p.Add("Velocity", a.Velocity); p.Add("Lift", a.Lift);
-            p.Add("Power", a.Power); p.Add("Voltage", a.Voltage); p.Add("Current", a.Current); p.Add("Frequency", a.Frequency);
-            p.Add("Conductivity", a.Conductivity); p.Add("Moisture", a.Moisture); p.Add("Humidity", a.Humidity); p.Add("Vacuum", a.Vacuum); p.Add("Radiation", a.Radiation);
+        //    p.Add("Volume", a.Volume); p.Add("Flow", a.Flow); p.Add("Velocity", a.Velocity); p.Add("Lift", a.Lift);
+        //    p.Add("Power", a.Power); p.Add("Voltage", a.Voltage); p.Add("Current", a.Current); p.Add("Frequency", a.Frequency);
+        //    p.Add("Conductivity", a.Conductivity); p.Add("Moisture", a.Moisture); p.Add("Humidity", a.Humidity); p.Add("Vacuum", a.Vacuum); p.Add("Radiation", a.Radiation);
 
-            p.Add("PipeSpec", a.PipeSpec); p.Add("PipeNominalDiameter", a.PipeNominalDiameter); p.Add("PipeWallThickness", a.PipeWallThickness);
-            p.Add("PipePressureClass", a.PipePressureClass); p.Add("ConnectionType", a.ConnectionType); p.Add("PipeSlope", a.PipeSlope); p.Add("AnticorrosionTreatment", a.AnticorrosionTreatment);
+        //    p.Add("PipeSpec", a.PipeSpec); p.Add("PipeNominalDiameter", a.PipeNominalDiameter); p.Add("PipeWallThickness", a.PipeWallThickness);
+        //    p.Add("PipePressureClass", a.PipePressureClass); p.Add("ConnectionType", a.ConnectionType); p.Add("PipeSlope", a.PipeSlope); p.Add("AnticorrosionTreatment", a.AnticorrosionTreatment);
 
-            p.Add("ValveModel", a.ValveModel); p.Add("ValveBodyMaterial", a.ValveBodyMaterial); p.Add("ValveDiscMaterial", a.ValveDiscMaterial);
-            p.Add("ValveBallMaterial", a.ValveBallMaterial); p.Add("SealMaterial", a.SealMaterial); p.Add("DriveType", a.DriveType);
-            p.Add("OpenMode", a.OpenMode); p.Add("ApplicableMedium", a.ApplicableMedium);
+        //    p.Add("ValveModel", a.ValveModel); p.Add("ValveBodyMaterial", a.ValveBodyMaterial); p.Add("ValveDiscMaterial", a.ValveDiscMaterial);
+        //    p.Add("ValveBallMaterial", a.ValveBallMaterial); p.Add("SealMaterial", a.SealMaterial); p.Add("DriveType", a.DriveType);
+        //    p.Add("OpenMode", a.OpenMode); p.Add("ApplicableMedium", a.ApplicableMedium);
 
-            p.Add("FlangeModel", a.FlangeModel); p.Add("FlangeType", a.FlangeType); p.Add("FlangeFaceType", a.FlangeFaceType);
-            p.Add("FlangeStandard", a.FlangeStandard); p.Add("BoltSpec", a.BoltSpec);
+        //    p.Add("FlangeModel", a.FlangeModel); p.Add("FlangeType", a.FlangeType); p.Add("FlangeFaceType", a.FlangeFaceType);
+        //    p.Add("FlangeStandard", a.FlangeStandard); p.Add("BoltSpec", a.BoltSpec);
 
-            p.Add("ReducerSpec", a.ReducerSpec); p.Add("ReducerLargeDn", a.ReducerLargeDn); p.Add("ReducerSmallDn", a.ReducerSmallDn);
-            p.Add("ReducerWallThicknessLarge", a.ReducerWallThicknessLarge); p.Add("ReducerWallThicknessSmall", a.ReducerWallThicknessSmall);
-            p.Add("ReducerConnectionType", a.ReducerConnectionType); p.Add("ReducerConicity", a.ReducerConicity);
-            p.Add("ReducerEccentricDirection", a.ReducerEccentricDirection); p.Add("ReducerApplicableMedium", a.ReducerApplicableMedium); p.Add("ReducerAnticorrosion", a.ReducerAnticorrosion);
+        //    p.Add("ReducerSpec", a.ReducerSpec); p.Add("ReducerLargeDn", a.ReducerLargeDn); p.Add("ReducerSmallDn", a.ReducerSmallDn);
+        //    p.Add("ReducerWallThicknessLarge", a.ReducerWallThicknessLarge); p.Add("ReducerWallThicknessSmall", a.ReducerWallThicknessSmall);
+        //    p.Add("ReducerConnectionType", a.ReducerConnectionType); p.Add("ReducerConicity", a.ReducerConicity);
+        //    p.Add("ReducerEccentricDirection", a.ReducerEccentricDirection); p.Add("ReducerApplicableMedium", a.ReducerApplicableMedium); p.Add("ReducerAnticorrosion", a.ReducerAnticorrosion);
 
-            p.Add("PumpModel", a.PumpModel); p.Add("PumpFlow", a.PumpFlow); p.Add("PumpHead", a.PumpHead); p.Add("PumpBodyMaterial", a.PumpBodyMaterial);
-            p.Add("MotorPower", a.MotorPower); p.Add("InletOutletDiameter", a.InletOutletDiameter); p.Add("RatedSpeed", a.RatedSpeed);
-            p.Add("PumpApplicableMedium", a.PumpApplicableMedium); p.Add("WorkingPressure", a.WorkingPressure); p.Add("ProtectionLevel", a.ProtectionLevel);
+        //    p.Add("PumpModel", a.PumpModel); p.Add("PumpFlow", a.PumpFlow); p.Add("PumpHead", a.PumpHead); p.Add("PumpBodyMaterial", a.PumpBodyMaterial);
+        //    p.Add("MotorPower", a.MotorPower); p.Add("InletOutletDiameter", a.InletOutletDiameter); p.Add("RatedSpeed", a.RatedSpeed);
+        //    p.Add("PumpApplicableMedium", a.PumpApplicableMedium); p.Add("WorkingPressure", a.WorkingPressure); p.Add("ProtectionLevel", a.ProtectionLevel);
 
-            p.Add("ExpansionJointModel", a.ExpansionJointModel); p.Add("BellowsMaterial", a.BellowsMaterial); p.Add("FlangeOrNozzleMaterial", a.FlangeOrNozzleMaterial);
-            p.Add("CompensationAmount", a.CompensationAmount); p.Add("ExpansionJointConnectionType", a.ExpansionJointConnectionType);
-            p.Add("ExpansionJointMedium", a.ExpansionJointMedium); p.Add("ExpansionJointWorkingTemp", a.ExpansionJointWorkingTemp);
+        //    p.Add("ExpansionJointModel", a.ExpansionJointModel); p.Add("BellowsMaterial", a.BellowsMaterial); p.Add("FlangeOrNozzleMaterial", a.FlangeOrNozzleMaterial);
+        //    p.Add("CompensationAmount", a.CompensationAmount); p.Add("ExpansionJointConnectionType", a.ExpansionJointConnectionType);
+        //    p.Add("ExpansionJointMedium", a.ExpansionJointMedium); p.Add("ExpansionJointWorkingTemp", a.ExpansionJointWorkingTemp);
 
-            p.Add("FlueGasCapacity", a.FlueGasCapacity); p.Add("DesulfurizationEfficiency", a.DesulfurizationEfficiency); p.Add("DropletSize", a.DropletSize); p.Add("SprayLayerCount", a.SprayLayerCount);
-            p.Add("ChimneySpec", a.ChimneySpec); p.Add("ChimneyDiameter", a.ChimneyDiameter); p.Add("ChimneyHeight", a.ChimneyHeight); p.Add("ChimneyMaterial", a.ChimneyMaterial);
-            p.Add("ChimneyThickness", a.ChimneyThickness); p.Add("OutletWindSpeed", a.OutletWindSpeed); p.Add("InsulationThickness", a.InsulationThickness);
-            p.Add("SupportType", a.SupportType); p.Add("FlueGasTemperature", a.FlueGasTemperature);
+        //    p.Add("FlueGasCapacity", a.FlueGasCapacity); p.Add("DesulfurizationEfficiency", a.DesulfurizationEfficiency); p.Add("DropletSize", a.DropletSize); p.Add("SprayLayerCount", a.SprayLayerCount);
+        //    p.Add("ChimneySpec", a.ChimneySpec); p.Add("ChimneyDiameter", a.ChimneyDiameter); p.Add("ChimneyHeight", a.ChimneyHeight); p.Add("ChimneyMaterial", a.ChimneyMaterial);
+        //    p.Add("ChimneyThickness", a.ChimneyThickness); p.Add("OutletWindSpeed", a.OutletWindSpeed); p.Add("InsulationThickness", a.InsulationThickness);
+        //    p.Add("SupportType", a.SupportType); p.Add("FlueGasTemperature", a.FlueGasTemperature);
 
-            p.Add("PressureGaugeModel", a.PressureGaugeModel); p.Add("ThermometerModel", a.ThermometerModel); p.Add("FilterModel", a.FilterModel);
-            p.Add("CheckValveModel", a.CheckValveModel); p.Add("SprinklerModel", a.SprinklerModel); p.Add("FlowMeterModel", a.FlowMeterModel);
-            p.Add("SafetyValveModel", a.SafetyValveModel); p.Add("FlexibleJointModel", a.FlexibleJointModel);
+        //    p.Add("PressureGaugeModel", a.PressureGaugeModel); p.Add("ThermometerModel", a.ThermometerModel); p.Add("FilterModel", a.FilterModel);
+        //    p.Add("CheckValveModel", a.CheckValveModel); p.Add("SprinklerModel", a.SprinklerModel); p.Add("FlowMeterModel", a.FlowMeterModel);
+        //    p.Add("SafetyValveModel", a.SafetyValveModel); p.Add("FlexibleJointModel", a.FlexibleJointModel);
 
-            p.Add("CreatedAt", a.CreatedAt);
-            p.Add("UpdatedAt", a.UpdatedAt);
-            return p;
-        }
+        //    p.Add("CreatedAt", a.CreatedAt);
+        //    p.Add("UpdatedAt", a.UpdatedAt);
+        //    return p;
+        //}
 
 
         /// <summary>
         /// 事务插入：先插入文件存储，再插入 JSON 属性（新表 cad_block_attributes_json）
         /// 说明：保留旧方法签名，兼容现有调用方；旧 FileAttribute 会被转换为字典后存入 JSON。
         /// </summary>
-        public async Task<(int StorageId, int AttributeId)> AddFileStorageAndAttributeAsync(FileStorage storage, FileAttribute attribute)
-        {
-            // 参数保护，防止空引用
-            if (storage == null) throw new ArgumentNullException(nameof(storage));
-            if (attribute == null) throw new ArgumentNullException(nameof(attribute));
+        //        public async Task<(int StorageId, int AttributeId)> AddFileStorageAndAttributeAsync(FileStorage storage, FileAttribute attribute)
+        //        {
+        //            // 参数保护，防止空引用
+        //            if (storage == null) throw new ArgumentNullException(nameof(storage));
+        //            if (attribute == null) throw new ArgumentNullException(nameof(attribute));
 
-            // 业务属性ID兜底（继续保留，写回 cad_file_storage.file_attribute_id 供兼容旧逻辑）
-            if (string.IsNullOrWhiteSpace(attribute.FileAttributeId))
-            {
-                attribute.FileAttributeId = Guid.NewGuid().ToString("N");
-            }
+        //            // 业务属性ID兜底（继续保留，写回 cad_file_storage.file_attribute_id 供兼容旧逻辑）
+        //            if (string.IsNullOrWhiteSpace(attribute.FileAttributeId))
+        //            {
+        //                attribute.FileAttributeId = Guid.NewGuid().ToString("N");
+        //            }
 
-            // 本地函数，把旧 FileAttribute 转成字典（只存有值字段，避免无意义空值）
-            Dictionary<string, string> BuildAttrDict(FileAttribute src)
-            {
-                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                var props = typeof(FileAttribute).GetProperties();
+        //            // 本地函数，把旧 FileAttribute 转成字典（只存有值字段，避免无意义空值）
+        //            Dictionary<string, string> BuildAttrDict(FileAttribute src)
+        //            {
+        //                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //                var props = typeof(FileAttribute).GetProperties();
 
-                foreach (var p in props)
-                {
-                    // 跳过系统字段/主键字段，避免污染业务属性
-                    if (string.Equals(p.Name, nameof(FileAttribute.Id), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.CategoryId), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.FileStorageId), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.CreatedAt), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.UpdatedAt), StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
+        //                foreach (var p in props)
+        //                {
+        //                    // 跳过系统字段/主键字段，避免污染业务属性
+        //                    if (string.Equals(p.Name, nameof(FileAttribute.Id), StringComparison.OrdinalIgnoreCase) ||
+        //                        string.Equals(p.Name, nameof(FileAttribute.CategoryId), StringComparison.OrdinalIgnoreCase) ||
+        //                        string.Equals(p.Name, nameof(FileAttribute.FileStorageId), StringComparison.OrdinalIgnoreCase) ||
+        //                        string.Equals(p.Name, nameof(FileAttribute.CreatedAt), StringComparison.OrdinalIgnoreCase) ||
+        //                        string.Equals(p.Name, nameof(FileAttribute.UpdatedAt), StringComparison.OrdinalIgnoreCase))
+        //                    {
+        //                        continue;
+        //                    }
 
-                    var v = p.GetValue(src);
-                    if (v == null) continue;
+        //                    var v = p.GetValue(src);
+        //                    if (v == null) continue;
 
-                    var s = Convert.ToString(v);
-                    if (string.IsNullOrWhiteSpace(s)) continue;
+        //                    var s = Convert.ToString(v);
+        //                    if (string.IsNullOrWhiteSpace(s)) continue;
 
-                    dict[p.Name] = s.Trim();
-                }
+        //                    dict[p.Name] = s.Trim();
+        //                }
 
-                return dict;
-            }
+        //                return dict;
+        //            }
 
-            // 把旧模型转换为 JSON 文本
-            var attrDict = BuildAttrDict(attribute);
-            var attrJson = Newtonsoft.Json.JsonConvert.SerializeObject(attrDict);
+        //            // 把旧模型转换为 JSON 文本
+        //            var attrDict = BuildAttrDict(attribute);
+        //            var attrJson = Newtonsoft.Json.JsonConvert.SerializeObject(attrDict);
 
-            using var connection = GetConnection();
-            await connection.OpenAsync().ConfigureAwait(false);
+        //            using var connection = GetConnection();
+        //            await connection.OpenAsync().ConfigureAwait(false);
 
-            MySqlTransaction tx = null;
-            int storageId = 0;
+        //            MySqlTransaction tx = null;
+        //            int storageId = 0;
 
-            try
-            {
-                // 开启事务，确保“主表+属性表+回写”原子性
-                tx = connection.BeginTransaction();
+        //            try
+        //            {
+        //                // 开启事务，确保“主表+属性表+回写”原子性
+        //                tx = connection.BeginTransaction();
 
-                // 先插入文件主表
-                const string insertStorageSql = @"
-INSERT INTO cad_file_storage
-(category_id, file_attribute_id, file_name, file_stored_name, display_name, file_type, is_tianzheng, file_hash,
- block_name, layer_name, color_index, scale, file_path, preview_image_name, preview_image_path, file_size,
- is_preview, version, description, is_active, created_by, category_type, title, keywords, is_public, updated_by,
- last_accessed_at, created_at, updated_at)
-VALUES
-(@CategoryId, NULL, @FileName, @FileStoredName, @DisplayName, @FileType, @IsTianZheng, @FileHash,
- @BlockName, @LayerName, @ColorIndex, @Scale, @FilePath, @PreviewImageName, @PreviewImagePath, @FileSize,
- @IsPreview, @Version, @Description, @IsActive, @CreatedBy, @CategoryType, @Title, @Keywords, @IsPublic, @UpdatedBy,
- @LastAccessedAt, @CreatedAt, @UpdatedAt);";
+        //                // 先插入文件主表
+        //                const string insertStorageSql = @"
+        //INSERT INTO cad_file_storage
+        //(category_id, file_attribute_id, file_name, file_stored_name, display_name, file_type, is_tianzheng, file_hash,
+        // block_name, layer_name, color_index, scale, file_path, preview_image_name, preview_image_path, file_size,
+        // is_preview, version, description, is_active, created_by, category_type, title, keywords, is_public, updated_by,
+        // last_accessed_at, created_at, updated_at)
+        //VALUES
+        //(@CategoryId, NULL, @FileName, @FileStoredName, @DisplayName, @FileType, @IsTianZheng, @FileHash,
+        // @BlockName, @LayerName, @ColorIndex, @Scale, @FilePath, @PreviewImageName, @PreviewImagePath, @FileSize,
+        // @IsPreview, @Version, @Description, @IsActive, @CreatedBy, @CategoryType, @Title, @Keywords, @IsPublic, @UpdatedBy,
+        // @LastAccessedAt, @CreatedAt, @UpdatedAt);";
 
-                await connection.ExecuteAsync(insertStorageSql, new
-                {
-                    storage.CategoryId,
-                    FileName = storage.FileName ?? string.Empty,
-                    FileStoredName = storage.FileStoredName ?? string.Empty,
-                    DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
-                    FileType = storage.FileType ?? string.Empty,
-                    storage.IsTianZheng,
-                    FileHash = storage.FileHash ?? string.Empty,
-                    BlockName = storage.BlockName ?? string.Empty,
-                    LayerName = storage.LayerName ?? string.Empty,
-                    ColorIndex = storage.ColorIndex ?? 0,
-                    Scale = storage.Scale ?? 1.0,
-                    FilePath = storage.FilePath ?? string.Empty,
-                    PreviewImageName = storage.PreviewImageName ?? string.Empty,
-                    PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
-                    FileSize = storage.FileSize ?? 0L,
-                    storage.IsPreview,
-                    storage.Version,
-                    Description = storage.Description ?? string.Empty,
-                    storage.IsActive,
-                    CreatedBy = storage.CreatedBy ?? Environment.UserName,
-                    CategoryType = storage.CategoryType ?? "sub",
-                    Title = storage.Title ?? string.Empty,
-                    Keywords = storage.Keywords ?? string.Empty,
-                    storage.IsPublic,
-                    UpdatedBy = storage.UpdatedBy ?? string.Empty,
-                    storage.LastAccessedAt,
-                    CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
-                    UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
-                }, tx).ConfigureAwait(false);
+        //                await connection.ExecuteAsync(insertStorageSql, new
+        //                {
+        //                    storage.CategoryId,
+        //                    FileName = storage.FileName ?? string.Empty,
+        //                    FileStoredName = storage.FileStoredName ?? string.Empty,
+        //                    DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
+        //                    FileType = storage.FileType ?? string.Empty,
+        //                    storage.IsTianZheng,
+        //                    FileHash = storage.FileHash ?? string.Empty,
+        //                    BlockName = storage.BlockName ?? string.Empty,
+        //                    LayerName = storage.LayerName ?? string.Empty,
+        //                    ColorIndex = storage.ColorIndex ?? 0,
+        //                    Scale = storage.Scale ?? 1.0,
+        //                    FilePath = storage.FilePath ?? string.Empty,
+        //                    PreviewImageName = storage.PreviewImageName ?? string.Empty,
+        //                    PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
+        //                    FileSize = storage.FileSize ?? 0L,
+        //                    storage.IsPreview,
+        //                    storage.Version,
+        //                    Description = storage.Description ?? string.Empty,
+        //                    storage.IsActive,
+        //                    CreatedBy = storage.CreatedBy ?? Environment.UserName,
+        //                    CategoryType = storage.CategoryType ?? "sub",
+        //                    Title = storage.Title ?? string.Empty,
+        //                    Keywords = storage.Keywords ?? string.Empty,
+        //                    storage.IsPublic,
+        //                    UpdatedBy = storage.UpdatedBy ?? string.Empty,
+        //                    storage.LastAccessedAt,
+        //                    CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
+        //                    UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
+        //                }, tx).ConfigureAwait(false);
 
-                // 获取主表自增ID
-                storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+        //                // 获取主表自增ID
+        //                storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 插入新属性表（JSON）
-                const string insertJsonAttrSql = @"
-INSERT INTO cad_block_attributes_json
-(file_id, config_name, attributes_json, created_at, updated_at)
-VALUES
-(@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
+        //                // 插入新属性表（JSON）
+        //                const string insertJsonAttrSql = @"
+        //INSERT INTO cad_block_attributes_json
+        //(file_id, config_name, attributes_json, created_at, updated_at)
+        //VALUES
+        //(@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
 
-                await connection.ExecuteAsync(insertJsonAttrSql, new
-                {
-                    FileId = storageId,
-                    ConfigName = string.IsNullOrWhiteSpace(attribute.FileAttributeId) ? "default" : attribute.FileAttributeId,
-                    AttributesJson = attrJson
-                }, tx).ConfigureAwait(false);
+        //                await connection.ExecuteAsync(insertJsonAttrSql, new
+        //                {
+        //                    FileId = storageId,
+        //                    ConfigName = string.IsNullOrWhiteSpace(attribute.FileAttributeId) ? "default" : attribute.FileAttributeId,
+        //                    AttributesJson = attrJson
+        //                }, tx).ConfigureAwait(false);
 
-                // 取 JSON 属性表主键（为了兼容原返回值 AttributeId）
-                int attrId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+        //                // 取 JSON 属性表主键（为了兼容原返回值 AttributeId）
+        //                int attrId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 回写 storage.file_attribute_id（保持兼容）
-                const string updateStorageSql = @"
-UPDATE cad_file_storage
-SET file_attribute_id = @FileAttributeId, updated_at = @UpdatedAt
-WHERE id = @Id;";
+        //                // 回写 storage.file_attribute_id（保持兼容）
+        //                const string updateStorageSql = @"
+        //UPDATE cad_file_storage
+        //SET file_attribute_id = @FileAttributeId, updated_at = @UpdatedAt
+        //WHERE id = @Id;";
 
-                await connection.ExecuteAsync(updateStorageSql, new
-                {
-                    FileAttributeId = attribute.FileAttributeId,
-                    UpdatedAt = DateTime.Now,
-                    Id = storageId
-                }, tx).ConfigureAwait(false);
+        //                await connection.ExecuteAsync(updateStorageSql, new
+        //                {
+        //                    FileAttributeId = attribute.FileAttributeId,
+        //                    UpdatedAt = DateTime.Now,
+        //                    Id = storageId
+        //                }, tx).ConfigureAwait(false);
 
-                // 提交事务
-                tx.Commit();
-                return (storageId, attrId);
-            }
-            catch (Exception ex)
-            {
-                // 异常时回滚
-                try { tx?.Rollback(); } catch { }
-                LogManager.Instance.LogInfo($"AddFileStorageAndAttributeAsync 失败: {ex.Message}");
-                return (0, 0);
-            }
-            finally
-            {
-                // 释放事务对象
-                try { tx?.Dispose(); } catch { }
-            }
-        }
+        //                // 提交事务
+        //                tx.Commit();
+        //                return (storageId, attrId);
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                // 异常时回滚
+        //                try { tx?.Rollback(); } catch { }
+        //                LogManager.Instance.LogInfo($"AddFileStorageAndAttributeAsync 失败: {ex.Message}");
+        //                return (0, 0);
+        //            }
+        //            finally
+        //            {
+        //                // 释放事务对象
+        //                try { tx?.Dispose(); } catch { }
+        //            }
+        //        }
 
         /// <summary>
         /// 新方案——插入文件主记录 + JSON属性记录（事务）
@@ -3200,18 +3184,18 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         /// <summary>
         /// 管道模板查询结果（主记录 + JSON属性）
         /// </summary>
-        public sealed class PipeTemplateQueryResult
-        {
-            /// <summary>
-            /// 模板主表记录
-            /// </summary>
-            public FileStorage? Storage { get; set; }
+        //public sealed class PipeTemplateQueryResult
+        //{
+        //    /// <summary>
+        //    /// 模板主表记录
+        //    /// </summary>
+        //    public FileStorage? Storage { get; set; }
 
-            /// <summary>
-            /// 模板属性字典（来自 cad_block_attributes_json）
-            /// </summary>
-            public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        }
+        //    /// <summary>
+        //    /// 模板属性字典（来自 cad_block_attributes_json）
+        //    /// </summary>
+        //    public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //}
 
         /// <summary>
         /// 按入口/出口从数据库获取“最新可用管道模板”及其属性字典
@@ -3219,112 +3203,112 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         /// </summary>
         /// <param name="isOutlet">中文注释：true=出口模板，false=入口模板</param>
         /// <returns>中文注释：命中时返回模板与属性，未命中返回 null</returns>
-        public async Task<PipeTemplateQueryResult?> GetLatestPipeTemplateWithAttributesAsync(bool isOutlet)
-        {
-            try
-            {
-                // 根据入口/出口准备关键词
-                string kwCnMain = isOutlet ? "出口管道" : "入口管道";
-                string kwCnSub = isOutlet ? "出口" : "入口";
-                string kwEn = isOutlet ? "outlet" : "inlet";
+        //public async Task<PipeTemplateQueryResult?> GetLatestPipeTemplateWithAttributesAsync(bool isOutlet)
+        //{
+        //    try
+        //    {
+        //        // 根据入口/出口准备关键词
+        //        string kwCnMain = isOutlet ? "出口管道" : "入口管道";
+        //        string kwCnSub = isOutlet ? "出口" : "入口";
+        //        string kwEn = isOutlet ? "outlet" : "inlet";
 
-                // 模糊匹配参数
-                string k1 = $"%{kwCnMain}%";
-                string k2 = $"%{kwCnSub}%";
-                string k3 = $"%{kwEn}%";
+        //        // 模糊匹配参数
+        //        string k1 = $"%{kwCnMain}%";
+        //        string k2 = $"%{kwCnSub}%";
+        //        string k3 = $"%{kwEn}%";
 
-                // 查询模板主记录（只取激活记录）
-                const string sqlTemplate = @"
-                              SELECT
-                                  id AS Id,
-                                  category_id AS CategoryId,
-                                  category_type AS CategoryType,
-                                  file_attribute_id AS FileAttributeId,
-                                  file_name AS FileName,
-                                  file_stored_name AS FileStoredName,
-                                  display_name AS DisplayName,
-                                  file_type AS FileType,
-                                  file_hash AS FileHash,
-                                  block_name AS BlockName,
-                                  layer_name AS LayerName,
-                                  color_index AS ColorIndex,
-                                  scale AS Scale,
-                                  file_path AS FilePath,
-                                  preview_image_name AS PreviewImageName,
-                                  preview_image_path AS PreviewImagePath,
-                                  file_size AS FileSize,
-                                  is_preview AS IsPreview,
-                                  version AS Version,
-                                  description AS Description,
-                                  is_active AS IsActive,
-                                  created_by AS CreatedBy,
-                                  title AS Title,
-                                  keywords AS Keywords,
-                                  is_public AS IsPublic,
-                                  updated_by AS UpdatedBy,
-                                  last_accessed_at AS LastAccessedAt,
-                                  created_at AS CreatedAt,
-                                  updated_at AS UpdatedAt
-                              FROM cad_file_storage
-                              WHERE is_active = 1
-                                AND (
-                                    display_name LIKE @K1 OR display_name LIKE @K2 OR display_name LIKE @K3
-                                    OR file_name LIKE @K1 OR file_name LIKE @K2 OR file_name LIKE @K3
-                                    OR block_name LIKE @K1 OR block_name LIKE @K2 OR block_name LIKE @K3
-                                    OR title LIKE @K1 OR title LIKE @K2 OR title LIKE @K3
-                                    OR keywords LIKE @K1 OR keywords LIKE @K2 OR keywords LIKE @K3
-                                )
-                              ORDER BY updated_at DESC, id DESC
-                              LIMIT 1;";
+        //        // 查询模板主记录（只取激活记录）
+        //        const string sqlTemplate = @"
+        //                      SELECT
+        //                          id AS Id,
+        //                          category_id AS CategoryId,
+        //                          category_type AS CategoryType,
+        //                          file_attribute_id AS FileAttributeId,
+        //                          file_name AS FileName,
+        //                          file_stored_name AS FileStoredName,
+        //                          display_name AS DisplayName,
+        //                          file_type AS FileType,
+        //                          file_hash AS FileHash,
+        //                          block_name AS BlockName,
+        //                          layer_name AS LayerName,
+        //                          color_index AS ColorIndex,
+        //                          scale AS Scale,
+        //                          file_path AS FilePath,
+        //                          preview_image_name AS PreviewImageName,
+        //                          preview_image_path AS PreviewImagePath,
+        //                          file_size AS FileSize,
+        //                          is_preview AS IsPreview,
+        //                          version AS Version,
+        //                          description AS Description,
+        //                          is_active AS IsActive,
+        //                          created_by AS CreatedBy,
+        //                          title AS Title,
+        //                          keywords AS Keywords,
+        //                          is_public AS IsPublic,
+        //                          updated_by AS UpdatedBy,
+        //                          last_accessed_at AS LastAccessedAt,
+        //                          created_at AS CreatedAt,
+        //                          updated_at AS UpdatedAt
+        //                      FROM cad_file_storage
+        //                      WHERE is_active = 1
+        //                        AND (
+        //                            display_name LIKE @K1 OR display_name LIKE @K2 OR display_name LIKE @K3
+        //                            OR file_name LIKE @K1 OR file_name LIKE @K2 OR file_name LIKE @K3
+        //                            OR block_name LIKE @K1 OR block_name LIKE @K2 OR block_name LIKE @K3
+        //                            OR title LIKE @K1 OR title LIKE @K2 OR title LIKE @K3
+        //                            OR keywords LIKE @K1 OR keywords LIKE @K2 OR keywords LIKE @K3
+        //                        )
+        //                      ORDER BY updated_at DESC, id DESC
+        //                      LIMIT 1;";
 
-                // 建立连接并查询主记录
-                using var connection = GetConnection();
-                var storage = await connection.QueryFirstOrDefaultAsync<FileStorage>(
-                    sqlTemplate,
-                    new { K1 = k1, K2 = k2, K3 = k3 }).ConfigureAwait(false);
+        //        // 建立连接并查询主记录
+        //        using var connection = GetConnection();
+        //        var storage = await connection.QueryFirstOrDefaultAsync<FileStorage>(
+        //            sqlTemplate,
+        //            new { K1 = k1, K2 = k2, K3 = k3 }).ConfigureAwait(false);
 
-                // 未命中模板直接返回 null
-                if (storage == null)
-                {
-                    return null;
-                }
+        //        // 未命中模板直接返回 null
+        //        if (storage == null)
+        //        {
+        //            return null;
+        //        }
 
-                // 查询该模板最新属性JSON
-                const string sqlAttr = @"
-                             SELECT attributes_json
-                             FROM cad_block_attributes_json
-                             WHERE file_id = @FileId
-                             ORDER BY updated_at DESC, attr_id DESC
-                             LIMIT 1;";
+        //        // 查询该模板最新属性JSON
+        //        const string sqlAttr = @"
+        //                     SELECT attributes_json
+        //                     FROM cad_block_attributes_json
+        //                     WHERE file_id = @FileId
+        //                     ORDER BY updated_at DESC, attr_id DESC
+        //                     LIMIT 1;";
 
-                string? attrJson = await connection.QueryFirstOrDefaultAsync<string>(
-                    sqlAttr,
-                    new { FileId = storage.Id }).ConfigureAwait(false);
+        //        string? attrJson = await connection.QueryFirstOrDefaultAsync<string>(
+        //            sqlAttr,
+        //            new { FileId = storage.Id }).ConfigureAwait(false);
 
-                // 反序列化属性字典（空则返回空字典）
-                var attrs = string.IsNullOrWhiteSpace(attrJson)
-                    ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                    : (Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attrJson)
-                       ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        //        // 反序列化属性字典（空则返回空字典）
+        //        var attrs = string.IsNullOrWhiteSpace(attrJson)
+        //            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        //            : (Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attrJson)
+        //               ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
-                // 返回统一结果对象
-                return new PipeTemplateQueryResult
-                {
-                    Storage = storage,
-                    Attributes = attrs
-                };
-            }
-            catch (Exception ex)
-            {
-                // 记录异常日志，返回 null 由上层兜底
-                LogManager.Instance.LogInfo($"GetLatestPipeTemplateWithAttributesAsync 出错: {ex.Message}");
-                return null;
-            }
-        }
+        //        // 返回统一结果对象
+        //        return new PipeTemplateQueryResult
+        //        {
+        //            Storage = storage,
+        //            Attributes = attrs
+        //        };
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        // 记录异常日志，返回 null 由上层兜底
+        //        LogManager.Instance.LogInfo($"GetLatestPipeTemplateWithAttributesAsync 出错: {ex.Message}");
+        //        return null;
+        //    }
+        //}
 
         #endregion
 
-
+       
 
         /// <summary>
         /// CAD分类
@@ -3398,7 +3382,7 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             public long FileSize { get; set; } // 文件大小
             public DateTime CreatedAt { get; set; } // 创建时间
             public DateTime UpdatedAt { get; set; } // 更新时间
-        }           
+        }
 
         /// <summary>
         /// 文件存储（cad_file_storage）
@@ -3443,28 +3427,18 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
         /// </summary>
         public class FileAttribute
         {
-            // 主键ID（BIGINT）
-            public long Id { get; set; }
-
-            // 分类ID（BIGINT，可空）
-            public long? CategoryId { get; set; }
-
-            // 文件存储ID（BIGINT）
-            public long FileStorageId { get; set; }
-
-            // 文件名
-            public string? FileName { get; set; }
-
-            // 业务属性ID（VARCHAR(64)）
-            public string? FileAttributeId { get; set; }
-
+          
+            public long Id { get; set; }  // 主键ID（BIGINT）           
+            public long? CategoryId { get; set; } // 分类ID（BIGINT，可空）            
+            public long FileStorageId { get; set; }// 文件存储ID（BIGINT）          
+            public string? FileName { get; set; }  // 文件名          
+            public string? FileAttributeId { get; set; }  // 业务属性ID（VARCHAR(64)）
             public string? Description { get; set; } // 描述
             public string? AttributeGroup { get; set; } // 属性分组
             public string? Remarks { get; set; } // 备注
             public string? Customize1 { get; set; } // 自定义1
             public string? Customize2 { get; set; } // 自定义2
             public string? Customize3 { get; set; } // 自定义3
-
             public decimal? Length { get; set; }
             public decimal? Width { get; set; }
             public decimal? Height { get; set; }
@@ -3472,7 +3446,6 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             public decimal? BasePointX { get; set; }
             public decimal? BasePointY { get; set; }
             public decimal? BasePointZ { get; set; }
-
             public string? Model { get; set; }
             public string? Specifications { get; set; }
             public string? Material { get; set; }
@@ -3580,7 +3553,6 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
             public string? FlowMeterModel { get; set; }
             public string? SafetyValveModel { get; set; }
             public string? FlexibleJointModel { get; set; }
-
             public DateTime CreatedAt { get; set; }
             public DateTime UpdatedAt { get; set; }
         }
@@ -3641,4 +3613,5 @@ LIMIT 1;";
         }
 
     }
+
 }

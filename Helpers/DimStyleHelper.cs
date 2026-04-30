@@ -271,31 +271,31 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 辅助方法：在事务上下文中列出当前 DimStyle 表中所有样式名（用于调试，方便在命令行查看）
         /// </summary>
-        public static List<string> ListDimStyleNames(DBTrans tr)
-        {
-            var list = new List<string>();
-            if (tr == null) return list;
+        //public static List<string> ListDimStyleNames(DBTrans tr)
+        //{
+        //    var list = new List<string>();
+        //    if (tr == null) return list;
 
-            try
-            {
-                var db = tr.Database;
-                var dimStyleTable = tr.GetObject(db.DimStyleTableId, OpenMode.ForRead) as DimStyleTable;
-                if (dimStyleTable == null) return list;
+        //    try
+        //    {
+        //        var db = tr.Database;
+        //        var dimStyleTable = tr.GetObject(db.DimStyleTableId, OpenMode.ForRead) as DimStyleTable;
+        //        if (dimStyleTable == null) return list;
 
-                foreach (ObjectId id in dimStyleTable)
-                {
-                    try
-                    {
-                        var rec = tr.GetObject(id, OpenMode.ForRead) as DimStyleTableRecord;
-                        if (rec != null) list.Add(rec.Name ?? string.Empty);
-                    }
-                    catch { }
-                }
-            }
-            catch { }
+        //        foreach (ObjectId id in dimStyleTable)
+        //        {
+        //            try
+        //            {
+        //                var rec = tr.GetObject(id, OpenMode.ForRead) as DimStyleTableRecord;
+        //                if (rec != null) list.Add(rec.Name ?? string.Empty);
+        //            }
+        //            catch { }
+        //        }
+        //    }
+        //    catch { }
 
-            return list;
-        }
+        //    return list;
+        //}
 
         // 新增：将数值向上取整到指定步长（例如步长50：101->150, 150->150, 151->200）
         // 放置位置：Command 类的私有辅助方法区域（靠近 TryGetDouble / EnsurePromptOk 等方法）

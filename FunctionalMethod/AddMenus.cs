@@ -50,19 +50,21 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             // 调用对象属性
             return comtype.InvokeMember(key, BindingFlags.GetProperty, null, obj, null);
         }
+
         /// <summary>
         /// 设置属性
         /// </summary>
         /// <param name="obj"></param>
         /// <param name="key"></param>
         /// <param name="value"></param>
-        public static void SetProperty(this object obj, string key, object value)
-        {
-            // 获取对象类型
-            var comtype = Type.GetTypeFromHandle(Type.GetTypeHandle(obj));
-            // 调用对象属性
-            comtype.InvokeMember(key, BindingFlags.SetProperty, null, obj, new object[] { value });
-        }
+        //public static void SetProperty(this object obj, string key, object value)
+        //{
+        //    // 获取对象类型
+        //    var comtype = Type.GetTypeFromHandle(Type.GetTypeHandle(obj));
+        //    // 调用对象属性
+        //    comtype.InvokeMember(key, BindingFlags.SetProperty, null, obj, new object[] { value });
+        //}
+
         /// <summary>
         /// 调用方法
         /// </summary>

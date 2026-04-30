@@ -15,86 +15,12 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 存储用户点击的点
         /// </summary>
-        private static List<Point3d> pointS = new List<Point3d>();
+        public static List<Point3d> pointS = new List<Point3d>();
 
         #region 将外部 DWG 文件插入到当前图纸鼠标指定点 可以插入天正 TCH 实体保留天正等自定义实体属性的快速方法（整图复制）
 
 
-        #region 再次点方向按键的重复插入逻辑
-
-        /// 放在 CopyDwgAllFast 相关静态字段附近
-        private static bool _isCopyDwgAllFastDragging;
-
-        /// <summary>
-        /// 新增：命令级互斥标志，防止 Drag 期间重复进入导致崩溃
-        /// </summary>
-        private static int _copyDwgAllFastBusyFlag = 0;
-
-        /// <summary>
-        /// 当前是否处于 COPYDWGALLFAST 的 Drag 交互中
-        /// </summary>
-        public static bool IsCopyDwgAllFastDragging => _isCopyDwgAllFastDragging;
-
-        /// <summary>
-        /// 当前是否处于 COPYDWGALLFAST 执行中（含 Drag）
-        /// </summary>
-        public static bool IsCopyDwgAllFastBusy => System.Threading.Volatile.Read(ref _copyDwgAllFastBusyFlag) == 1;
-
-        /// <summary>
-        /// COPYDWGALLFAST 执行完成事件：success=true 表示插入成功，error 为失败原因（可空）
-        /// </summary>
-        public static event Action<bool, string?>? CopyDwgAllFastCompleted;
-
-        /// <summary>
-        /// 尝试进入 COPYDWGALLFAST 临界区
-        /// </summary>
-        private static bool TryEnterCopyDwgAllFastBusy()
-        {
-            return System.Threading.Interlocked.CompareExchange(ref _copyDwgAllFastBusyFlag, 1, 0) == 0;
-        }
-
-        /// <summary>
-        /// 退出 COPYDWGALLFAST 临界区
-        /// </summary>
-        private static void ExitCopyDwgAllFastBusy()
-        {
-            System.Threading.Interlocked.Exchange(ref _copyDwgAllFastBusyFlag, 0);
-        }
-
-        /// <summary>
-        /// 是否存在可重复执行的上次整图插入
-        /// </summary>
-        public static bool HasRepeatableCopyDwgAllFast()
-        {
-            if (_lastCopyDwgBytes != null && _lastCopyDwgBytes.Length > 0) return true;
-            return !string.IsNullOrWhiteSpace(_lastCopyDwgPath) && System.IO.File.Exists(_lastCopyDwgPath);
-        }
-
-        /// <summary>
-        /// 供方向键调用：按当前角度重复一次上次整图插入
-        /// </summary>
-        public static void RepeatLastCopyDwgAllFastFromDirection()
-        {
-            if (!HasRepeatableCopyDwgAllFast()) return;
-            Env.Document.SendStringToExecute("COPYDWGALLFASTLAST ", false, false, false);
-        }
-
-        /// <summary>
-        /// 统一派发插入结果，避免事件回调影响主流程
-        /// </summary>
-        private static void RaiseCopyDwgAllFastCompleted(bool success, string? error = null)
-        {
-            try
-            {
-                CopyDwgAllFastCompleted?.Invoke(success, error);
-            }
-            catch
-            {
-                // 忽略事件回调异常，避免影响命令本身
-            }
-        }
-
-        #endregion
+        //SyncCommonPropertiesToBlockReference   _propertySyncMaxCandidates
 
         #endregion
 
@@ -106,7 +32,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 尝试安全获取实体包围盒（防止部分实体抛异常）
         /// </summary>
-        private static bool TryGetEntityExtents(Entity entity, out Extents3d extents)
+        public static bool TryGetEntityExtents(Entity entity, out Extents3d extents)
         {
             // 先给 out 参数一个默认值，避免未赋值异常
             extents = default;
@@ -131,7 +57,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 判断两个包围盒是否相交（含接触）
         /// </summary>
-        private static bool IsExtentsIntersect(Extents3d a, Extents3d b, double tol = 1e-6)
+        public static bool IsExtentsIntersect(Extents3d a, Extents3d b, double tol = 1e-6)
         {
             // X 轴左侧分离
             if (a.MaxPoint.X < b.MinPoint.X - tol) return false;
@@ -152,7 +78,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 粗精结合的重叠判定：先包围盒，再尝试曲线求交
         /// </summary>
-        private static bool IsEntityOverlap(Entity source, Entity target)
+        public static bool IsEntityOverlap(Entity source, Entity target)
         {
             // 源实体包围盒获取失败，直接不重叠
             if (!TryGetEntityExtents(source, out var e1)) return false;
@@ -186,7 +112,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 计算两个包围盒交叠体积（用于候选评分）
         /// </summary>
-        private static double CalcOverlapVolume(Extents3d a, Extents3d b)
+        public static double CalcOverlapVolume(Extents3d a, Extents3d b)
         {
             // 计算 X 方向交叠长度
             double dx = Math.Min(a.MaxPoint.X, b.MaxPoint.X) - Math.Max(a.MinPoint.X, b.MinPoint.X);
@@ -204,7 +130,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 计算包围盒中心点
         /// </summary>
-        private static Point3d GetExtentsCenter(Extents3d e)
+        public static Point3d GetExtentsCenter(Extents3d e)
         {
             // 按最小点与最大点中点计算中心
             return new Point3d(
@@ -216,7 +142,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 规范化属性键名（用于同名匹配增强）
         /// </summary>
-        private static string NormalizePropertyKey(string raw)
+        public static string NormalizePropertyKey(string raw)
         {
             // 空值直接返回空串
             if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
@@ -242,7 +168,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 统一判定：该值是否应跳过继承（空值或数值零）
         /// </summary>
-        private static bool ShouldSkipInheritedValue(string raw)
+        public static bool ShouldSkipInheritedValue(string raw)
         {
             // null 转空，避免空引用
             string text = (raw ?? string.Empty).Trim();
@@ -274,7 +200,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 读取实体“类型标识”用于评分（块优先取块名）
         /// </summary>
-        private static string GetEntityTypeToken(Entity e)
+        public static string GetEntityTypeToken(Entity e)
         {
             // 空实体返回空串
             if (e == null) return string.Empty;
@@ -301,7 +227,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 对候选重叠实体打分（分数越高越优先）
         /// </summary>
-        private static double ComputeOverlapCandidateScore(BlockReference insertingBr, Entity candidate)
+        public static double ComputeOverlapCandidateScore(BlockReference insertingBr, Entity candidate)
         {
             // 空对象直接最低分
             if (insertingBr == null || candidate == null) return double.MinValue;
@@ -366,7 +292,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 判断字段是否允许参与继承（白名单优先 + 黑名单兜底）
         /// </summary>
-        private static bool IsPropertyKeyAllowed(string rawKey, HashSet<string> activeWhitelist)
+        public static bool IsPropertyKeyAllowed(string rawKey, HashSet<string> activeWhitelist)
         {
             // 空键直接不允许，避免脏数据进入
             if (string.IsNullOrWhiteSpace(rawKey)) return false;
@@ -391,7 +317,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 读取实体属性映射（支持：块属性 + 扩展字典XRecord）
         /// </summary>
-        private static Dictionary<string, string> ReadEntityPropertyMap(DBTrans tr, Entity entity)
+        public static Dictionary<string, string> ReadEntityPropertyMap(DBTrans tr, Entity entity)
         {
             // 创建不区分大小写字典，降低字段大小写差异影响
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -483,7 +409,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 将源属性同步到目标块参照（仅同名属性，增强键名匹配）
         /// </summary>
-        private static void SyncCommonPropertiesToBlockReference(DBTrans tr, BlockReference targetBr, Dictionary<string, string> sourceMap)
+        public static void SyncCommonPropertiesToBlockReference(DBTrans tr, BlockReference targetBr, Dictionary<string, string> sourceMap)
         {
             // 参数校验
             if (tr == null || targetBr == null || sourceMap == null || sourceMap.Count == 0) return;
@@ -534,7 +460,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 根据目标 TypedValue 的类型码把字符串转换为对应对象（用于尽量保持 XRecord 原类型）
         /// </summary>
-        private static object ConvertValueByTypeCode(int typeCode, string raw)
+        public static object ConvertValueByTypeCode(int typeCode, string raw)
         {
             // 空值统一按空串处理
             string text = raw ?? string.Empty;
@@ -572,7 +498,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 将源属性同步到目标实体扩展字典（仅同名键，增强：尽量保持原类型）
         /// </summary>
-        private static void SyncCommonPropertiesToEntityXRecord(DBTrans tr, Entity targetEntity, Dictionary<string, string> sourceMap)
+        public static void SyncCommonPropertiesToEntityXRecord(DBTrans tr, Entity targetEntity, Dictionary<string, string> sourceMap)
         {
             // 参数校验
             if (tr == null || targetEntity == null || sourceMap == null || sourceMap.Count == 0) return;
@@ -649,7 +575,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 对“分解后的新实体集合”执行同名属性同步
         /// </summary>
-        private static void SyncCommonPropertiesToInsertedEntities(DBTrans tr, List<Entity> insertedEntities, Dictionary<string, string> sourceMap)
+        public static void SyncCommonPropertiesToInsertedEntities(DBTrans tr, List<Entity> insertedEntities, Dictionary<string, string> sourceMap)
         {
             // 参数校验
             if (tr == null || insertedEntities == null || sourceMap == null || sourceMap.Count == 0) return;
@@ -680,7 +606,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 4) 同名（归一化后）字段只取首个来源
         /// 5) 值为 0 或空时，不参与合并
         /// </summary>
-        private static Dictionary<string, string> BuildMergedPropertyMapFromCandidates(
+        public static Dictionary<string, string> BuildMergedPropertyMapFromCandidates(
             DBTrans tr,
             List<OverlapCandidate> candidates,
             HashSet<string> activeWhitelist)
@@ -766,22 +692,24 @@ namespace GB_NewCadPlus_IV.Helpers
 
         #endregion
 
+        //IsCopyDwgAllFastDragging
+
         #region
 
         /// <summary>
         /// 属性同步策略配置（第二版增强）
         /// </summary>
         // 是否优先同层来源（true 时同层会加权，且可额外筛选）
-        private static readonly bool _propertySyncPreferSameLayer = true;
+        public static readonly bool _propertySyncPreferSameLayer = true;
 
         // 最多参与合并的重叠候选数量（防止大图性能波动）
-        private static readonly int _propertySyncMaxCandidates = 8;
+        public static readonly int _propertySyncMaxCandidates = 8;
 
         // 最多合并字段数量（防止异常图元导致字段爆炸）
-        private static readonly int _propertySyncMaxMergedFields = 200;
+        public static readonly int _propertySyncMaxMergedFields = 200;
 
         // 黑名单字段（这些字段不参与“交叠继承”）
-        private static readonly HashSet<string> _propertySyncBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        public static readonly HashSet<string> _propertySyncBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {   "ID","GUID","UUID","OBJECTID","HANDLE",
             "CREATEDAT","UPDATEDAT","CREATETIME","UPDATETIME","TIMESTAMP",
             "CREATEDBY","UPDATEDBY","USER","USERNAME","OWNER",
@@ -795,7 +723,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 候选来源实体模型
         /// </summary>
-        private sealed class OverlapCandidate
+        public sealed class OverlapCandidate
         {
             // 候选实体对象
             public Entity Entity { get; set; }
@@ -813,7 +741,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 判断字段是否在黑名单中（支持归一化后判断）
         /// </summary>
-        private static bool IsBlacklistedPropertyKey(string rawKey)
+        public static bool IsBlacklistedPropertyKey(string rawKey)
         {
             // 空键直接当黑名单处理
             if (string.IsNullOrWhiteSpace(rawKey)) return true;
@@ -835,7 +763,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 获取“所有重叠候选”并按评分排序（第二版增强）
         /// </summary>
-        private static List<OverlapCandidate> FindOverlappedCandidates(DBTrans tr, BlockReference insertingBr, int maxCandidates = 8)
+        public static List<OverlapCandidate> FindOverlappedCandidates(DBTrans tr, BlockReference insertingBr, int maxCandidates = 8)
         {
             // 准备结果集合
             var list = new List<OverlapCandidate>();
@@ -931,12 +859,12 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 说明：键使用“归一化字段名”（NormalizePropertyKey 后）
         /// </summary>
         // 是否启用白名单模板控制（启用后，仅允许白名单字段被继承）
-        private static readonly bool _propertySyncUseWhitelistTemplate = false;
+        public static readonly bool _propertySyncUseWhitelistTemplate = false;
 
         /// <summary>
         /// 解析当前插入图元所属专业模板键
         /// </summary>
-        private static string ResolvePropertySyncTemplateKey(BlockReference insertingBr)
+        public static string ResolvePropertySyncTemplateKey(BlockReference insertingBr)
         {
             // 优先从按钮名推断（你项目里按钮名语义最明确）
             string btnName = (VariableDictionary.btnFileName ?? string.Empty).Trim().ToUpperInvariant();
@@ -970,7 +898,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 白名单模板 JSON 路径（可手工编辑）
         /// </summary>
-        private static readonly string _propertySyncWhitelistJsonPath = System.IO.Path.Combine(
+        public static readonly string _propertySyncWhitelistJsonPath = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "GB_NewCadPlus_IV",
                 "property-sync-whitelist.json");
@@ -978,23 +906,23 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 白名单模板缓存（热加载后存这里）
         /// </summary>
-        private static Dictionary<string, HashSet<string>> _propertySyncWhitelistTemplatesRuntime =
+        public static Dictionary<string, HashSet<string>> _propertySyncWhitelistTemplatesRuntime =
             new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// 白名单文件最近写入时间（用于热加载判断）
         /// </summary>
-        private static DateTime _propertySyncWhitelistJsonLastWriteUtc = DateTime.MinValue;
+        public static DateTime _propertySyncWhitelistJsonLastWriteUtc = DateTime.MinValue;
 
         /// <summary>
         /// 白名单热加载锁，避免并发读写冲突
         /// </summary>
-        private static readonly object _propertySyncWhitelistLock = new object();
+        public static readonly object _propertySyncWhitelistLock = new object();
 
         /// <summary>
         /// 构建内置默认白名单模板（JSON 不存在或解析失败时兜底）
         /// </summary>
-        private static Dictionary<string, HashSet<string>> BuildDefaultWhitelistTemplates()
+        public static Dictionary<string, HashSet<string>> BuildDefaultWhitelistTemplates()
         {
             // 创建默认模板字典
             var dict = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -1060,7 +988,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 把模板字段做归一化（与属性匹配规则一致）
         /// </summary>
-        private static HashSet<string> NormalizeWhitelistFields(IEnumerable<string> fields)
+        public static HashSet<string> NormalizeWhitelistFields(IEnumerable<string> fields)
         {
             // 创建结果集合
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1080,7 +1008,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 尝试把默认模板写出到 JSON（首次生成，方便用户编辑）
         /// </summary>
-        private static void EnsureWhitelistSeedJson()
+        public static void EnsureWhitelistSeedJson()
         {
             try
             {
@@ -1111,7 +1039,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 尝试从 JSON 读取白名单模板
         /// </summary>
-        private static Dictionary<string, HashSet<string>> LoadWhitelistTemplatesFromJson()
+        public static Dictionary<string, HashSet<string>> LoadWhitelistTemplatesFromJson()
         {
             // 准备返回字典
             var result = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -1146,7 +1074,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 确保白名单模板已热加载（文件变化则自动重载）
         /// </summary>
-        private static void EnsureWhitelistTemplatesHotLoaded()
+        public static void EnsureWhitelistTemplatesHotLoaded()
         {
             lock (_propertySyncWhitelistLock)
             {
@@ -1202,7 +1130,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 获取当前激活白名单（热加载版）
         /// </summary>
-        private static HashSet<string> GetActiveWhitelist(BlockReference insertingBr)
+        public static HashSet<string> GetActiveWhitelist(BlockReference insertingBr)
         {
             // 先执行热加载
             EnsureWhitelistTemplatesHotLoaded();
@@ -1226,952 +1154,7 @@ namespace GB_NewCadPlus_IV.Helpers
 
         #endregion
 
-        // 上一次“整图插入”缓存
-        private static byte[]? _lastCopyDwgBytes;
-        private static string? _lastCopyDwgFileNameBase;
-        private static string? _lastCopyDwgPath;
-
-        /// <summary>
-        /// 按钮侧统一调用：注册“上次插入参数”，并通过命令行触发，保证空格可重复
-        /// </summary>
-        public static void ExecuteCopyDwgAllFastWithRepeat(string sourceFilePath)
-        {
-            // 新增：Drag/执行中禁止再次触发，避免命令重入导致 CAD 崩溃
-            if (IsCopyDwgAllFastDragging || IsCopyDwgAllFastBusy)
-            {
-                Env.Editor?.WriteMessage("\n当前图元正在跟随插入，请先左键落点或按 Esc 结束后再触发。");
-                return;
-            }
-
-            try
-            {
-                // 优先缓存资源字节（最稳，避免临时文件被删后无法重复）
-                if (VariableDictionary.resourcesFile != null && VariableDictionary.resourcesFile.Length > 0)
-                {
-                    _lastCopyDwgBytes = (byte[])VariableDictionary.resourcesFile.Clone();// 克隆一份字节数组，避免后续被修改
-                    // 仅缓存文件名的基础部分，去掉路径和扩展名，避免重复执行时文件名过长或包含非法字符
-                    _lastCopyDwgFileNameBase = string.IsNullOrWhiteSpace(VariableDictionary.btnFileName)
-                        ? "GB_CopyDwgAllFast"
-                        : VariableDictionary.btnFileName;
-                    _lastCopyDwgPath = null;// 已缓存字节后路径不可靠，置空避免误用
-                }
-                else
-                {
-                    _lastCopyDwgBytes = null;
-                    _lastCopyDwgFileNameBase = Path.GetFileNameWithoutExtension(sourceFilePath);
-                    _lastCopyDwgPath = sourceFilePath;
-                }
-            }
-            catch
-            {
-                // 缓存失败不阻断主流程
-            }
-
-            // 关键：通过命令执行，这样空格会重复这个命令
-            Env.Document.SendStringToExecute("COPYDWGALLFASTLAST ", false, false, false);
-        }
-
-        /// <summary>
-        /// 可被空格重复的命令：再次执行上一次插入
-        /// </summary>
-        [CommandMethod("COPYDWGALLFASTLAST")]
-        public static void CopyDwgAllFastLast()
-        {
-            // 新增：执行中直接拦截，防止重入
-            if (IsCopyDwgAllFastDragging || IsCopyDwgAllFastBusy)
-            {
-                Env.Editor?.WriteMessage("\n当前图元正在跟随插入，请先完成当前插入。");
-                return;
-            }
-
-            try
-            {
-                string? runPath = null;
-
-                // 如果有字节缓存，则每次重复都新建一个临时文件
-                if (_lastCopyDwgBytes != null && _lastCopyDwgBytes.Length > 0)
-                {
-                    // 生成临时文件路径，使用基础文件名加上 GUID，避免重复执行时文件名过长或包含非法字符
-                    string baseName = string.IsNullOrWhiteSpace(_lastCopyDwgFileNameBase)
-                        ? "GB_CopyDwgAllFast"
-                        : _lastCopyDwgFileNameBase;
-                    // 确保基础文件名不包含非法字符
-                    foreach (var c in Path.GetInvalidFileNameChars())
-                    {
-                        baseName = baseName.Replace(c, '_');
-                    }
-                    // 生成临时文件路径
-                    runPath = Path.Combine(Path.GetTempPath(), $"{baseName}_{Guid.NewGuid():N}.dwg");
-                    System.IO.File.WriteAllBytes(runPath, _lastCopyDwgBytes);// 写入临时文件
-                }
-                else
-                {
-                    runPath = _lastCopyDwgPath;// 没有字节缓存则使用上次的路径（可能是原文件路径，存在被删除风险）
-                }
-                // 最后再次验证路径有效性，避免误用已被删除的临时文件路径
-                if (string.IsNullOrWhiteSpace(runPath) || !System.IO.File.Exists(runPath))
-                {
-                    Env.Editor.WriteMessage("\n没有可重复的上一次插入命令。");
-                    return;
-                }
-
-                if (runPath != null)
-                    //插入源文件中的图元到当前图纸
-                    CopyDwgAllFast(runPath);// 直接调用插入方法，传入路径
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"\n重复执行上次插入失败: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 以“整图复制”的方式，将指定 DWG 文件的模型空间全部图元一次性克隆到当前图纸空间，
-        /// 等效于在源图里全选 Ctrl+C，再在当前图 Ctrl+V，能够保留天正等自定义实体的附加属性。
-        /// 新增功能：如果插入点与现有图元重叠，自动继承重叠图元的业务属性（如压力、介质等）。
-        /// </summary>
-        [CommandMethod("COPYDWGALLFAST")] // 注册 CAD 命令名，允许在命令行输入 COPYDWGALLFAST 调用
-        public static void CopyDwgAllFast(string sourceFilePath) // 整图插入主方法，参数 sourceFilePath 为源 DWG 文件的路径
-        {
-            // 获取 LogManager 的单例实例，用于记录日志
-            var logger = LogManager.Instance;
-            // 在日志文件中记录命令开始执行
-            logger.LogInfo(">>> [DEBUG] 开始执行 COPYDWGALLFAST 命令");
-
-            // 获取当前活动的 AutoCAD 文档对象
-            var doc = Application.DocumentManager.MdiActiveDocument;
-            // 如果未找到活动文档，说明 CAD 环境异常，记录错误并退出
-            if (doc == null)
-            {
-                // 记录严重错误日志
-                logger.LogError("错误：未找到活动文档。");
-                // 回调通知上层调用者失败
-                RaiseCopyDwgAllFastCompleted(false, "未找到活动文档。");
-                // 结束方法执行
-                return;
-            }
-
-            // 获取编辑器对象 ed，用于向 CAD 命令行发送提示消息
-            var ed = doc.Editor;
-
-            // 尝试进入互斥锁，防止命令重入（即防止在上一次没结束时再次触发）导致崩溃
-            if (!TryEnterCopyDwgAllFastBusy())
-            {
-                // 记录警告日志
-                logger.LogWarning("警告：当前命令忙碌中。");
-                // 在 CAD 命令行提示用户
-                ed.WriteMessage("\n当前插入命令正在执行中，请先完成当前插入（左键落点或 Esc）。");
-                // 回调通知上层调用者失败
-                RaiseCopyDwgAllFastCompleted(false, "当前命令忙碌中。");
-                // 结束方法执行
-                return;
-            }
-
-            // 获取当前文档的数据库对象 destDb，这是我们要插入图元的目标数据库
-            var destDb = doc.Database;
-            // 标记 deleteAfter，判断是否需要在成功后删除源文件（通常用于临时文件）
-            bool deleteAfter = false;
-            // 标记 insertSuccess，记录本次插入操作最终是否成功
-            bool insertSuccess = false;
-            // 变量 failReason，用于记录如果失败时的具体原因字符串
-            string? failReason = null;
-
-            try // 主流程异常捕获块，包裹整个插入逻辑
-            {
-                // 内部 try-catch，专门用于判断源文件是否为临时文件
-                try
-                {
-                    // 如果传入了有效的源文件路径
-                    if (!string.IsNullOrEmpty(sourceFilePath))
-                    {
-                        // 获取系统临时文件夹的路径
-                        var tempDir = Path.GetTempPath();
-                        // 如果源文件路径以临时目录开头，则视为临时文件
-                        if (!string.IsNullOrEmpty(tempDir) && sourceFilePath.StartsWith(tempDir, StringComparison.OrdinalIgnoreCase))
-                        {
-                            // 标记为需要删除
-                            deleteAfter = true;
-                            // 记录日志，说明识别到了临时文件
-                            logger.LogInfo($"源文件识别为临时文件: {sourceFilePath}");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // 如果判断路径时发生异常，记录错误日志
-                    logger.LogError($"判断临时文件异常: {ex.Message}");
-                    // 发生异常时保守处理，不删除文件
-                    deleteAfter = false;
-                }
-
-                // 初始化插入点 targetPoint 为原点 (0,0,0)，后续拖拽会更新此值
-                Point3d targetPoint = Point3d.Origin;
-
-                // 锁定文档以确保线程安全的数据库写操作
-                using (doc.LockDocument())
-                // 创建一个新的数据库对象 sourceDb 用于读取源 DWG 文件
-                using (var sourceDb = new Autodesk.AutoCAD.DatabaseServices.Database(false, true))
-                {
-                    // 从磁盘读取源 DWG 文件内容到内存数据库 sourceDb
-                    sourceDb.ReadDwgFile(sourceFilePath, FileShare.Read, true, null);
-                    // 关闭输入流，释放文件占用，允许其他进程访问该文件
-                    sourceDb.CloseInput(true);
-
-                    // 开启针对目标数据库的事务处理 tr
-                    using (var tr = new DBTrans())
-                    {
-                        // 将源数据库作为匿名块定义插入到目标数据库 destDb 中
-                        var blkDefId = destDb.Insert("*U", sourceDb, false);
-                        // 基于插入的块定义创建一个新的块参照实体 br
-                        var br = new BlockReference(targetPoint, blkDefId);
-
-                        // 初始化缩放比例 scale 为 1.0
-                        double scale = 1.0;
-                        // 根据当前界面状态（WinForm 或 WPF）获取用户设置的缩放比例
-                        if (VariableDictionary.winForm_Status) // 如果是 WinForm 模式
-                        {
-                            try { scale = VariableDictionary.textBoxScale; } // 尝试读取 WinForm 的比例值
-                            catch { scale = 1.0; } // 读取失败则使用默认值 1.0
-                        }
-                        else // 如果是 WPF 模式
-                        {
-                            try { scale = VariableDictionary.wpfTextBoxScale; } // 尝试读取 WPF 的比例值
-                            catch { scale = 1.0; } // 读取失败则使用默认值 1.0
-                        }
-                        // 如果比例值非法（NaN 或小于等于 0），强制重置为 1.0
-                        if (double.IsNaN(scale) || scale <= 0) scale = 1.0;
-
-                        // 设置块参照 br 的初始缩放比例
-                        br.ScaleFactors = new Scale3d(scale);
-                        // 将块参照 br 添加到当前空间的模型空间中
-                        var entityObjectId = tr.CurrentSpace.AddEntity(br);
-                        // 以写模式打开刚刚添加的块参照 fileEntity，以便后续修改属性或变换
-                        var fileEntity = (BlockReference)tr.GetObject(entityObjectId, OpenMode.ForWrite);
-
-                        // 记录当前的旋转角度 tempAngle，用于拖拽过程中的增量计算
-                        double tempAngle = VariableDictionary.entityRotateAngle;
-                        // 记录当前的缩放比例 tempScale，用于拖拽过程中的增量计算
-                        double tempScale = scale;
-
-                        // 如果初始旋转角度不为 0，则预先应用旋转，确保预览方向正确
-                        if (Math.Abs(tempAngle) > 1e-12)
-                        {
-                            // 绕 Z 轴旋转块参照 fileEntity
-                            fileEntity.TransformBy(Matrix3d.Rotation(tempAngle, Vector3d.ZAxis, targetPoint));
-                        }
-
-                        // 创建自定义拖拽类 JigEx，用于实现鼠标跟随效果
-                        var entityBlock = new JigEx((mpw, _) =>
-                        {
-                            // 移动块参照从旧位置到新鼠标位置 mpw
-                            fileEntity.Move(targetPoint, mpw);
-                            // 更新全局记录的插入点 targetPoint
-                            targetPoint = mpw;
-
-                            // 检查外部设置的旋转角度是否发生变化
-                            if (VariableDictionary.entityRotateAngle != tempAngle)
-                            {
-                                // 先逆向旋转抵消之前的角度
-                                fileEntity.TransformBy(Matrix3d.Rotation(-tempAngle, Vector3d.ZAxis, targetPoint));
-                                // 更新缓存的角度值 tempAngle
-                                tempAngle = VariableDictionary.entityRotateAngle;
-                                // 应用新的旋转角度
-                                fileEntity.TransformBy(Matrix3d.Rotation(tempAngle, Vector3d.ZAxis, targetPoint));
-                            }
-
-                            // 获取当前界面实时设置的缩放比例 currentUiScale
-                            double currentUiScale = scale;
-                            if (VariableDictionary.winForm_Status) // WinForm 模式
-                            {
-                                try { currentUiScale = VariableDictionary.textBoxScale; } // 读取实时比例
-                                catch { currentUiScale = tempScale; } // 失败则沿用上次有效值
-                            }
-                            else // WPF 模式
-                            {
-                                try { currentUiScale = VariableDictionary.wpfTextBoxScale; } // 读取实时比例
-                                catch { currentUiScale = tempScale; } // 失败则沿用上次有效值
-                            }
-                            // 校验比例值合法性
-                            if (double.IsNaN(currentUiScale) || currentUiScale <= 0) currentUiScale = 1.0;
-
-                            // 如果比例发生变化，则更新块参照的缩放
-                            if (Math.Abs(currentUiScale - tempScale) > 1e-9)
-                            {
-                                // 设置新比例
-                                fileEntity.ScaleFactors = new Scale3d(currentUiScale);
-                                // 更新缓存比例 tempScale
-                                tempScale = currentUiScale;
-                            }
-                        });
-
-                        // 执行图形绘制，显示拖拽预览
-                        entityBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(fileEntity));
-                        // 设置命令行提示文字
-                        entityBlock.SetOptions(msg: "\n指定插入点");
-                        // 确保绘图区域获得焦点，以便接收鼠标事件
-                        EnsureDwgViewFocus();
-
-                        // 声明变量 endPoint 用于接收拖拽结果
-                        PromptResult endPoint;
-                        // 标记当前处于拖拽交互状态
-                        _isCopyDwgAllFastDragging = true;
-                        try
-                        {
-                            // 启动编辑器拖拽交互，等待用户点击确认或取消
-                            endPoint = Env.Editor.Drag(entityBlock);
-                        }
-                        finally
-                        {
-                            // 无论拖拽成功与否，都清除拖拽状态标记
-                            _isCopyDwgAllFastDragging = false;
-                        }
-
-                        // 如果用户按 Esc 取消或拖拽失败
-                        if (endPoint.Status != PromptStatus.OK)
-                        {
-                            // 记录失败原因
-                            failReason = "用户取消插入。";
-                            // 记录日志
-                            logger.LogInfo("用户取消了插入操作。");
-                            // 回滚事务，不保存任何更改
-                            tr.Abort();
-                            // 退出方法
-                            return;
-                        }
-
-                        // 记录日志，表示拖拽结束，开始核心逻辑
-                        logger.LogInfo("拖拽结束，开始执行重叠检测与属性继承逻辑...");
-
-                        // ================== 核心新功能：重叠检测与属性继承（带 LogManager 日志） ==================
-
-                        // 初始化字典 overlapSourcePropertyMap，用于存储从重叠图元读取到的属性
-                        var overlapSourcePropertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                        // 调用 FindOverlappedCandidates 查找当前插入点附近所有可能重叠的候选图元
-                        var overlapCandidates = FindOverlappedCandidates(tr, fileEntity, _propertySyncMaxCandidates);
-
-                        // 记录日志，输出找到的候选图元数量
-                        logger.LogInfo($"[DEBUG] 找到重叠候选图元数量: {overlapCandidates.Count}");
-
-                        // 如果找到了重叠候选图元
-                        if (overlapCandidates.Count > 0)
-                        {
-                            // 调用 GetActiveWhitelist 根据当前图元的专业类型获取对应的属性白名单
-                            var activeWhitelist = GetActiveWhitelist(fileEntity);
-
-                            // 调用 BuildMergedPropertyMapFromCandidates 从候选图元中合并属性，并应用白名单/黑名单过滤
-                            overlapSourcePropertyMap = BuildMergedPropertyMapFromCandidates(tr, overlapCandidates, activeWhitelist);
-
-                            // 记录日志，输出过滤后待同步的属性数量
-                            logger.LogInfo($"[DEBUG] 过滤后待同步属性数量: {overlapSourcePropertyMap.Count}");
-
-                            // 如果有属性，打印前 5 个属性的键值对，方便排查
-                            if (overlapSourcePropertyMap.Count > 0)
-                            {
-                                int debugCount = 0; // 计数器
-                                foreach (var kv in overlapSourcePropertyMap) // 遍历属性字典
-                                {
-                                    // 记录每个属性的名称和值
-                                    logger.LogInfo($"[DEBUG]   属性名: [{kv.Key}], 属性值: [{kv.Value}]");
-                                    debugCount++; // 计数器加 1
-                                    if (debugCount >= 5) break; // 只打印前 5 个，避免日志过多
-                                }
-                            }
-                            else
-                            {
-                                // 如果数量为 0，记录警告日志，提示可能是白名单过滤掉了
-                                logger.LogWarning("[DEBUG] 警告：未找到可同步属性。请检查白名单配置或原图元是否有扩展数据/块属性。");
-                            }
-                        }
-                        else
-                        {
-                            // 如果没有重叠，记录警告日志，提示用户检查插入位置
-                            logger.LogWarning("[DEBUG] 未检测到重叠图元。请确保新图元与旧图元有几何交集。");
-                        }
-
-                        // 如果成功读取到有效的重叠属性
-                        if (overlapSourcePropertyMap.Count > 0)
-                        {
-                            // 第一步：调用 SyncCommonPropertiesToBlockReference 将属性同步到当前的块参照本身
-                            SyncCommonPropertiesToBlockReference(tr, fileEntity, overlapSourcePropertyMap);
-                            // 第二步：调用 SyncCommonPropertiesToEntityXRecord 将属性同步到块参照的扩展字典
-                            SyncCommonPropertiesToEntityXRecord(tr, fileEntity, overlapSourcePropertyMap);
-
-                            // 记录日志，说明已向块参照同步了多少个属性
-                            logger.LogInfo($"[DEBUG] 已向块参照同步 {overlapSourcePropertyMap.Count} 个属性。");
-                        }
-
-                        // ================== 结束核心新功能 ==================
-
-                        // 创建集合 newIds 用于存储分解后产生的所有新实体
-                        var newIds = new DBObjectCollection();
-
-                        // 执行分解操作，将块参照 fileEntity 炸开为独立的图元
-                        fileEntity.Explode(newIds);
-
-                        // 删除原始的块参照实体 fileEntity，因为已经被分解替代
-                        fileEntity.Erase();
-
-                        // 创建列表 insertedEntities 用于跟踪所有新加入到图纸中的实体
-                        var insertedEntities = new List<Entity>();
-                        // 遍历分解产生的每一个实体 ent
-                        foreach (Entity ent in newIds)
-                        {
-                            // 将实体 ent 添加到当前空间，使其在图纸中可见
-                            tr.CurrentSpace.AddEntity(ent);
-                            // 将实体 ent 加入跟踪列表 insertedEntities
-                            insertedEntities.Add(ent);
-                        }
-
-                        // 如果之前读取到了重叠属性，需要将这些属性进一步同步到分解后的子实体上
-                        if (overlapSourcePropertyMap.Count > 0)
-                        {
-                            // 记录日志，说明正在向多少个分解后的实体同步属性
-                            logger.LogInfo($"[DEBUG] 正在向 {insertedEntities.Count} 个分解后的实体同步属性...");
-
-                            // 调用 SyncCommonPropertiesToInsertedEntities 遍历分解后的实体，将属性同步到它们的扩展数据或嵌套块中
-                            SyncCommonPropertiesToInsertedEntities(tr, insertedEntities, overlapSourcePropertyMap);
-
-                            // 记录日志，说明属性同步流程结束
-                            logger.LogInfo("[DEBUG] 属性同步流程结束。");
-                        }
-
-                        // 检查是否有待创建的标注文本 dimString
-                        if (VariableDictionary.dimString != null)
-                        {
-                            try
-                            {
-                                // 调用 Command.DDimLinear 创建线性标注
-                                Command.DDimLinear(tr, entityBlock.MousePointWcsLast, VariableDictionary.dimString);
-                                // 清空标注缓存，防止重复创建
-                                VariableDictionary.dimString = null;
-                            }
-                            catch (Exception ex)
-                            {
-                                // 如果标注创建失败，记录错误日志，但不影响主流程
-                                logger.LogError($"设置标注样式失败: {ex.Message}");
-                            }
-                        }
-
-                        // 提交事务 tr，将所有数据库更改永久保存
-                        tr.Commit();
-                        // 刷新屏幕显示，让用户立即看到结果
-                        Env.Editor.Redraw();
-                        // 标记操作成功
-                        insertSuccess = true;
-                        // 记录日志，说明事务提交成功
-                        logger.LogInfo("事务提交成功，插入完成。");
-                    }
-                }
-
-                // 如果标记为临时文件且插入成功，则清理临时文件
-                if (deleteAfter && insertSuccess && !string.IsNullOrEmpty(sourceFilePath))
-                {
-                    try
-                    {
-                        // 再次确认文件存在
-                        if (System.IO.File.Exists(sourceFilePath))
-                        {
-                            // 删除临时 DWG 文件，释放磁盘空间
-                            System.IO.File.Delete(sourceFilePath);
-                            // 记录日志，说明已删除临时文件
-                            logger.LogInfo($"已删除临时 DWG 文件: {sourceFilePath}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        // 如果删除失败，记录错误日志，不影响主流程
-                        logger.LogError($"尝试删除临时 DWG 失败: {ex.Message}");
-                    }
-                }
-
-                // 重置 WinForm 状态标志
-                VariableDictionary.winForm_Status = false;
-            }
-            catch (Exception ex) // 捕获整个执行过程中的任何未预期异常
-            {
-                // 记录异常消息到 failReason
-                failReason = ex.Message;
-                // 记录错误日志
-                logger.LogError($"COPYDWGALLFAST 执行失败: {ex.Message}");
-                // 记录堆栈跟踪日志，方便排查深层错误
-                logger.LogError($"堆栈跟踪: {ex.StackTrace}");
-            }
-            finally // 无论成功失败都会执行的收尾工作
-            {
-                // 确保拖拽状态被清除
-                _isCopyDwgAllFastDragging = false;
-                // 释放互斥锁，允许下次执行
-                ExitCopyDwgAllFastBusy();
-                // 通知上层调用者最终结果
-                RaiseCopyDwgAllFastCompleted(insertSuccess, insertSuccess ? null : failReason);
-                // 记录命令执行结束日志
-                logger.LogInfo("<<< [DEBUG] 命令执行结束");
-            }
-        }
-
-        /// <summary>
-        /// 焦点切换：尝试将焦点切换回 AutoCAD 的绘图区域，确保用户在插入块后能够直接看到并操作新插入的图元。
-        /// </summary>
-        private static void EnsureDwgViewFocus()
-        {
-            try
-            {
-                // 优先尝试 AutoCAD 内部焦点切换（用反射避免强依赖）
-                var t1 = Type.GetType("Autodesk.AutoCAD.Internal.Utils, AcMgd", false);
-                var m1 = t1?.GetMethod("SetFocusToDwgView", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                if (m1 != null)
-                {
-                    m1.Invoke(null, null);
-                }
-                else
-                {
-                    // 兼容部分版本程序集名
-                    var t2 = Type.GetType("Autodesk.AutoCAD.Internal.Utils, AcCoreMgd", false);
-                    var m2 = t2?.GetMethod("SetFocusToDwgView", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                    m2?.Invoke(null, null);
-                }
-            }
-            catch
-            {
-                // 忽略焦点切换异常，避免中断主流程
-            }
-
-            try
-            {
-                System.Windows.Forms.Application.DoEvents();
-            }
-            catch { }
-
-            try
-            {
-                Env.Editor.UpdateScreen();
-            }
-            catch { }
-        }
-
-
-        /// <summary>
-        /// 插入外部条件图元
-        /// </summary>
-        [CommandMethod(nameof(GB_InsertBlock_Ptj))]
-        public static void GB_InsertBlock_Ptj()
-        {
-            #region 方法2：
-            try
-            {
-                Directory.CreateDirectory(GetPath.referenceFile);  //获取到本工具的系统目录；
-                if (VariableDictionary.btnFileName == null) return; //判断点现的按键名是不是空；
-                if (VariableDictionary.resourcesFile == null) return; //判断点现的原文件是不是空；
-                using var tr = new DBTrans();
-                var referenceFileObId = tr.BlockTable.GetBlockFormA(VariableDictionary.resourcesFile, VariableDictionary.btnFileName, true);//拿到本工具的系统目录下的按键名的原文件的objectid；
-                var refFileRec = tr.GetObject(referenceFileObId, OpenMode.ForRead) as BlockTableRecord;//拿到原文件的块表记录；
-                int isNo = -1;
-                if (refFileRec != null)
-                    foreach (var fileId in refFileRec)
-                    {
-                        isNo++;
-                        if (VariableDictionary.btnFileName == "PTJ_给水点") isNo = -1;
-                        else if (isNo != VariableDictionary.TCH_Ptj_No) continue;
-                        //判读是不是为0，0就是天正元素
-                        //if (fileId.ObjectClass.DxfName == "INSERT") continue;
-                        var fileEntity = tr.GetObject(fileId, OpenMode.ForRead) as Entity;
-                        //LogManager.Instance.LogInfo("PTJ元素！");
-                        if (fileEntity == null) continue;
-                        var fileEntityCopy = fileEntity.Clone() as Entity;
-                        //tr.CurrentSpace.DeepCloneEx(fileEntity,)//深度克隆，可以复制天正图元；
-                        //(vlax-dump-object (vlax-ename->vla-object (car (entsel )))T)//这个是在cad命令里能读出天正属性的lisp命令；
-                        if (fileEntityCopy == null) continue;
-                        var dxfName = fileId.ObjectClass.DxfName;//抓取图元的DXFName,判断是不是天正的图元
-                        var fileType = dxfName.Split('_');//截取‘_’字符
-                        if (fileType[0] == "TCH")
-                        {
-                            LogManager.Instance.LogInfo("TCH！");
-                            var fileEntityCopyObId = tr.CurrentSpace.AddEntity(fileEntityCopy);
-                            double tempAngle = 0;
-                            var startPoint = new Point3d(0, 0, 0);
-                            var entityBlock = new JigEx((mpw, _) =>
-                            {
-                                fileEntityCopy.Move(startPoint, mpw);
-                                startPoint = mpw;
-                                if (VariableDictionary.entityRotateAngle == tempAngle)
-                                {
-                                    return;
-                                }
-                                else if (VariableDictionary.entityRotateAngle != tempAngle)
-                                {
-                                    fileEntityCopy.Rotation(center: mpw, 0);
-                                    tempAngle = VariableDictionary.entityRotateAngle;
-                                    fileEntityCopy.Rotation(center: mpw, tempAngle);
-                                }
-                            });
-                            entityBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(fileEntityCopy));
-                            entityBlock.SetOptions(msg: "\n指定插入点");
-                            //entityBlock.SetOptions(startPoint, msg: "\n指定插入点");这个startpoint，是有个参考线在里面，用于托拽时的辅助；
-                            var endPoint = Env.Editor.Drag(entityBlock);
-                            if (endPoint.Status != PromptStatus.OK) return;
-                            tr.BlockTable.Remove(referenceFileObId);
-                        }
-                        else if (fileEntityCopy is BlockReference)
-                        {
-                            LogManager.Instance.LogInfo("PTJ-块表记录！");
-                            //if (fileEntityCopy.ColorIndex.ToString() != "130") return;
-                            var fileEntityCopyObId = tr.CurrentSpace.AddEntity(fileEntityCopy);//在当前图纸空间中加入这个实体并获取它的ObjoectId
-                            double tempAngle = 0;
-                            var startPoint = new Point3d(0, 0, 0);
-                            var entityBlock = new JigEx((mpw, _) =>
-                            {
-                                fileEntityCopy.Move(startPoint, mpw);
-                                startPoint = mpw;
-                                if (VariableDictionary.entityRotateAngle == tempAngle)
-                                {
-                                    return;
-                                }
-                                else if (VariableDictionary.entityRotateAngle != tempAngle)
-                                {
-                                    fileEntityCopy.Rotation(center: mpw, 0);
-                                    tempAngle = VariableDictionary.entityRotateAngle;
-                                    fileEntityCopy.Rotation(center: mpw, tempAngle);
-                                }
-                            });
-                            entityBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(fileEntityCopy));
-                            entityBlock.SetOptions(msg: "\n指定插入点");
-                            //entityBlock.SetOptions(startPoint, msg: "\n指定插入点");这个startpoint，是有个参考线在里面，用于托拽时的辅助；
-                            var endPoint = Env.Editor.Drag(entityBlock);
-                            if (endPoint.Status != PromptStatus.OK) return;
-                            tr.BlockTable.Remove(referenceFileObId);
-                        }
-                        //else
-                        //{
-                        //    LogManager.Instance.LogInfo("PTJ-块！");
-                        //    var referenceFileBlock = tr.CurrentSpace.InsertBlock(Point3d.Origin, referenceFileObId);
-                        //    //tr.BlockTable.Remove(referenceFileObId);
-                        //    if (tr.GetObject(referenceFileBlock) is not Entity referenceFileEntity) return;
-                        //    double tempAngle = 0;
-                        //    var startPoint = new Point3d(0, 0, 0);
-                        //    var entityBlock = new JigEx((mpw, _) =>
-                        //    {
-                        //        referenceFileEntity.Move(startPoint, mpw);
-                        //        startPoint = mpw;
-                        //        if (VariableDictionary.entityRotateAngle == tempAngle)
-                        //        {
-                        //            return;
-                        //        }
-                        //        else if (VariableDictionary.entityRotateAngle != tempAngle)
-                        //        {
-                        //            referenceFileEntity.Rotation(center: mpw, 0);
-                        //            tempAngle = VariableDictionary.entityRotateAngle;
-                        //            referenceFileEntity.Rotation(center: mpw, tempAngle);
-                        //        }
-                        //    });
-                        //    entityBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(referenceFileEntity));
-                        //    entityBlock.SetOptions(msg: "\n指定插入点");
-                        //    var endPoint = Env.Editor.Drag(entityBlock);
-                        //    if (endPoint.Status != PromptStatus.OK) return;
-                        //    referenceFileEntity.Layer = VariableDictionary.btnBlockLayer;
-                        //    break;
-                        //}
-                    }
-
-                tr.Commit();
-                Env.Editor.Redraw();
-
-            }
-            catch (Exception ex)
-            {
-                // 记录错误日志  
-                LogManager.Instance.LogInfo("插入图元失败！");
-                LogManager.Instance.LogInfo("错误信息: " + ex.Message);
-            }
-            #endregion
-        }
-
-        /// <summary>
-        /// 一个块反复插入图中
-        /// </summary>
-        [CommandMethod(nameof(GB_InsertBlock_5))]
-        public static void GB_InsertBlock_5()
-        {
-            #region 方法1：  
-            try
-            {
-                pointS.Clear();
-                Directory.CreateDirectory(GetPath.referenceFile);
-                if (VariableDictionary.btnFileName == null) return;
-
-                if (VariableDictionary.resourcesFile == null) return; //判断点现的原文件是不是空；
-                using var tr = new DBTrans();
-
-                // 获取对应块的 ObjectId  
-                var referenceFileObId = tr.BlockTable.GetBlockFormA(
-                    VariableDictionary.resourcesFile,
-                    VariableDictionary.btnFileName,
-                    VariableDictionary.btnFileName_blockName,
-                    true);
-
-                var refFileRec = tr.GetObject(referenceFileObId, OpenMode.ForRead) as BlockTableRecord;
-                if (refFileRec == null)
-                {
-                    LogManager.Instance.LogInfo("未找到块记录！");
-                    return;
-                }
-
-                LogManager.Instance.LogInfo("块！");
-                while (true)
-                {
-                    // 把块插入到当前空间  
-                    var referenceFileBlock = tr.CurrentSpace.InsertBlock(Point3d.Origin, referenceFileObId);
-
-                    // 检查是否为实体  
-                    if (tr.GetObject(referenceFileBlock) is not Entity referenceFileEntity)
-                        return;
-
-                    // 设置图层和颜色等属性  
-                    referenceFileEntity.Layer = VariableDictionary.btnBlockLayer;
-                    referenceFileEntity.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
-                    referenceFileEntity.Scale(new Point3d(0, 0, 0), VariableDictionary.blockScale);
-
-                    //double tempAngle = 0; // 原始角度  
-                    var startPoint = new Point3d(0, 0, 0);
-
-                    var jigBlock = new JigEx((mpw, _) =>
-                    {
-                        // 先移动  
-                        referenceFileEntity.Move(startPoint, mpw);
-                        startPoint = mpw;
-                    });
-                    jigBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(referenceFileEntity));
-                    jigBlock.SetOptions(msg: "\n指定插入点");
-
-                    // 拖拽  
-                    var endPoint = Env.Editor.Drag(jigBlock);
-                    if (endPoint.Status != PromptStatus.OK)
-                    {
-                        // 用户取消插入，则删除已插入的块  
-                        tr.GetObject(referenceFileBlock, OpenMode.ForWrite);
-                        referenceFileBlock.Erase();
-                        break;
-                    }
-
-                    // 存储插入点坐标（WCS）  
-                    var UcsEndPoint = jigBlock.MousePointWcsLast;
-                    pointS.Add(UcsEndPoint);
-
-
-                    Env.Editor.Redraw();
-                }
-
-                // ======================  
-                // 在此处根据插入数量绘图  
-                // ======================  
-                int count = pointS.Count;
-                LogManager.Instance.LogInfo($"\n已插入 {count} 个块，开始绘制外围图形...");
-
-                if (count == 3)
-                { // 三点生成外接圆，圆心与3点等距  
-                    Point3d p1 = pointS[0];
-                    Point3d p2 = pointS[1];
-                    Point3d p3 = pointS[2];
-
-                    // 计算三角形外接圆圆心（与三点等距的点）  
-                    Point3d circleCenter = GetCircumcenter(p1, p2, p3);
-
-                    // 计算圆心到三个点的距离，取最大值，然后加上150作为新圆的半径  
-                    double radius = p1.DistanceTo(circleCenter) + 150.0;
-
-                    // 检查计算出的圆心是否与三点等距  
-                    double dist1 = circleCenter.DistanceTo(p1);
-                    double dist2 = circleCenter.DistanceTo(p2);
-                    double dist3 = circleCenter.DistanceTo(p3);
-
-                    // 记录到日志，以验证计算正确性  
-                    LogManager.Instance.LogInfo($"\n圆心到三点的距离: {dist1:F4}, {dist2:F4}, {dist3:F4}");
-
-                    // 正确创建圆：使用外接圆圆心和半径  
-                    var circle = new Circle(circleCenter, Vector3d.ZAxis, radius);
-                    circle.Layer = VariableDictionary.btnBlockLayer;
-                    circle.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
-                    tr.CurrentSpace.AddEntity(circle);
-                    Env.Editor.Redraw();
-                    LogManager.Instance.LogInfo("\n已创建外围圆形，与三点等距并向外扩展150。");
-                }
-                else if (count == 4)
-                {
-                    // 计算中心点  
-                    var center = new Point3d(
-                        pointS.Average(p => p.X),
-                        pointS.Average(p => p.Y),
-                        pointS.Average(p => p.Z)
-                    );
-
-                    // 绘制矩形 - 使用原始4点作为矩形顶点，向外扩展150  
-                    List<Point2d> expandedPoints = new List<Point2d>();
-
-                    foreach (var point in pointS)
-                    {
-                        // 计算从中心到点的方向向量  
-                        Vector3d dirVector = point - center;
-                        dirVector = dirVector.GetNormal(); // 单位化向量  
-
-                        // 创建新点：沿着方向向量延伸150的距离  
-                        Point3d expandedPoint3d = point + dirVector * 150.0;
-                        Point2d expandedPoint = new Point2d(expandedPoint3d.X, expandedPoint3d.Y);
-                        expandedPoints.Add(expandedPoint);
-                    }
-
-                    // 确保点按顺时针或逆时针排序  
-                    // 对顶点按角度排序  
-                    var sortedPoints = expandedPoints.Select((p, index) => new
-                    {
-                        Point = p,
-                        Angle = Math.Atan2(p.Y - center.Y, p.X - center.X)
-                    })
-                    .OrderBy(item => item.Angle)
-                    .Select(item => item.Point)
-                    .ToList();
-
-                    // 创建Polyline并添加扩展后的顶点  
-                    var pl = new Polyline();
-                    for (int i = 0; i < sortedPoints.Count; i++)
-                    {
-                        pl.AddVertexAt(i, sortedPoints[i], 0, 30, 30);
-                    }
-
-                    // 闭合  
-                    pl.Closed = true;
-                    pl.Layer = VariableDictionary.btnBlockLayer;
-                    pl.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
-                    tr.CurrentSpace.AddEntity(pl);
-                    Env.Editor.Redraw();
-                    LogManager.Instance.LogInfo("\n已创建外围矩形，向外扩展150。");
-                }
-                else if (count > 4)
-                {
-                    // 计算中心点  
-                    var center = new Point3d(
-                        pointS.Average(p => p.X),
-                        pointS.Average(p => p.Y),
-                        pointS.Average(p => p.Z)
-                    );
-
-                    // 创建多边形 - 使用原始点作为多边形顶点，向外扩展150  
-                    List<Point2d> expandedPoints = new List<Point2d>();
-                    foreach (var point in pointS)
-                    {
-                        // 计算从中心到点的方向向量  
-                        Vector3d dirVector = point - center;
-                        dirVector = dirVector.GetNormal(); // 单位化向量  
-                        // 创建新点：沿着方向向量延伸150的距离  
-                        Point3d expandedPoint3d = point + dirVector * 150.0;
-                        Point2d expandedPoint = new Point2d(expandedPoint3d.X, expandedPoint3d.Y);
-                        expandedPoints.Add(expandedPoint);
-                    }
-                    // 对顶点按角度排序，确保多边形正确  
-                    var sortedPoints = expandedPoints.Select((p, index) => new
-                    {
-                        Point = p,
-                        Angle = Math.Atan2(p.Y - center.Y, p.X - center.X)
-                    })
-                    .OrderBy(item => item.Angle)
-                    .Select(item => item.Point)
-                    .ToList();
-
-                    // 创建多边形  
-                    var polygon = new Polyline();
-                    for (int i = 0; i < sortedPoints.Count; i++)
-                    {
-                        polygon.AddVertexAt(i, sortedPoints[i], 0, 30, 30);
-                    }
-                    // 闭合多边形  
-                    polygon.Closed = true;
-                    polygon.Layer = VariableDictionary.btnBlockLayer;
-                    polygon.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
-                    tr.CurrentSpace.AddEntity(polygon);
-                    Env.Editor.Redraw();
-                    LogManager.Instance.LogInfo($"\n已创建{count}边形外围，向外扩展150。");
-                }
-                else if (count > 0)
-                {
-                    LogManager.Instance.LogInfo($"\n已插入{count}个块，但数量不满足绘制外围图形的条件（需要至少3个点）。");
-                }
-                //加标注
-                // DDimLinear("总重:" + VariableDictionary.dimString + "kg" + "\n" + $"{count}点着地", Convert.ToInt16(pointS.Count));
-                var dimColorLine = VariableDictionary.layerColorIndex;
-                if (VariableDictionary.btnFileName.Contains("结构"))
-                {
-                    dimColorLine = 3;
-                }
-                if (VariableDictionary.dimString != null)
-                    Command.DDimLinear(tr, VariableDictionary.dimString, count.ToString(), Convert.ToInt16(dimColorLine));
-                tr.Commit();
-                Env.Editor.Redraw();
-                LogManager.Instance.LogInfo("\n操作完成。");
-                pointS.Clear();
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"\n插入图元失败：{ex.Message}");
-                // 可以添加更详细的错误信息记录  
-                LogManager.Instance.LogInfo($"\n错误详情：{ex.StackTrace}");
-            }
-            #endregion
-        }
-
-        /// <summary>
-        /// 计算三角形外接圆圆心，确保圆心与三个点等距 
-        /// </summary>
-        /// <param name="A">A</param>
-        /// <param name="B">B</param>
-        /// <param name="C">C</param>
-        /// <returns></returns>
-        private static Point3d GetCircumcenter(Point3d A, Point3d B, Point3d C)
-        {
-            // 处理共线情况：如果三点共线，则返回三点的平均点  
-            if (ArePointsCollinear(A, B, C))
-            {
-                return new Point3d(
-                    (A.X + B.X + C.X) / 3.0,
-                    (A.Y + B.Y + C.Y) / 3.0,
-                    (A.Z + B.Z + C.Z) / 3.0
-                );
-            }
-            // 计算分母 d  
-            double d = 2 * (A.X * (B.Y - C.Y) + B.X * (C.Y - A.Y) + C.X * (A.Y - B.Y));
-            if (Math.Abs(d) < 1e-10)
-            {
-                // 保护性返回：当分母太小时则视为共线，返回平均值  
-                return new Point3d(
-                    (A.X + B.X + C.X) / 3.0,
-                    (A.Y + B.Y + C.Y) / 3.0,
-                    (A.Z + B.Z + C.Z) / 3.0
-                );
-            }
-            // 分别计算各点的 (x^2 + y^2)  
-            double Asq = A.X * A.X + A.Y * A.Y;
-            double Bsq = B.X * B.X + B.Y * B.Y;
-            double Csq = C.X * C.X + C.Y * C.Y;
-            // 使用标准公式计算圆心 X/Y 坐标  
-            double centerX = (Asq * (B.Y - C.Y) + Bsq * (C.Y - A.Y) + Csq * (A.Y - B.Y)) / d;
-            double centerY = (Asq * (C.X - B.X) + Bsq * (A.X - C.X) + Csq * (B.X - A.X)) / d;
-            double centerZ = (A.Z + B.Z + C.Z) / 3.0; // Z 坐标取平均值  
-            return new Point3d(centerX, centerY, centerZ);
-        }
-
-        /// <summary>
-        /// 检查三点是否共线
-        /// </summary>
-        /// <param name="A">A</param>
-        /// <param name="B">B</param>
-        /// <param name="C">C</param>
-        /// <returns></returns>
-
-        private static bool ArePointsCollinear(Point3d A, Point3d B, Point3d C)
-        {
-            Vector3d v1 = B - A;
-            Vector3d v2 = C - A;
-            Vector3d crossProduct = v1.CrossProduct(v2);
-            return crossProduct.Length < 1e-8;
-        }
+       
         #endregion
     }
 }

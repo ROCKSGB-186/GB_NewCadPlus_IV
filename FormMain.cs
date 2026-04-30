@@ -8879,7 +8879,43 @@ namespace GB_NewCadPlus_IV
 
         #endregion
 
-        #region
+        #region 工艺图层开关控制按钮
+        private void button_开关所有工艺图层_Click(object sender, EventArgs e)
+        {
+            VariableDictionary.tjtBtn = VariableDictionary.tjtBtnNull;
+            if (button_开关所有工艺图层.ForeColor.Name == "Black" || button_开关所有工艺图层.ForeColor.Name == "ControlText")
+            {
+                button_开关所有工艺图层.ForeColor = System.Drawing.SystemColors.ActiveCaption; VariableDictionary.btnState = true;
+            }
+            else
+            {
+                button_开关所有工艺图层.ForeColor = System.Drawing.SystemColors.ControlText; VariableDictionary.btnState = false;
+            }
+            //NewTjLayer();//初始化allTjLayer
+            VariableDictionary.selectTjtLayer.Clear();
+            VariableDictionary.selectTjtLayer.Add("ZG-PW");
+            VariableDictionary.selectTjtLayer.Add("ZG-PW");
+            VariableDictionary.selectTjtLayer.Add("ZG-WFI");
+            VariableDictionary.selectTjtLayer.Add("ZG-CWS");
+            VariableDictionary.selectTjtLayer.Add("ZG-EGS");
+            VariableDictionary.selectTjtLayer.Add("ZG-SC");
+            VariableDictionary.selectTjtLayer.Add("ZG-RWS");
+            VariableDictionary.selectTjtLayer.Add("ZG-HWS");
+            VariableDictionary.selectTjtLayer.Add("ZG-CA");
+            VariableDictionary.selectTjtLayer.Add("ZG-IA");
+            VariableDictionary.selectTjtLayer.Add("ZG-O2");
+            VariableDictionary.selectTjtLayer.Add("ZG-CO2");
+            VariableDictionary.selectTjtLayer.Add("ZG-N2");
+            VariableDictionary.selectTjtLayer.Add("ZG-LS");
+            VariableDictionary.selectTjtLayer.Add("ZG-PS");
+            VariableDictionary.selectTjtLayer.Add("ZG-VE");
+            VariableDictionary.selectTjtLayer.Add("ZG-VT");
+            VariableDictionary.selectTjtLayer.Add("ZG-PL");
+            VariableDictionary.selectTjtLayer.Add("ZG-其他");
+            VariableDictionary.selectTjtLayer.Add("ZG-标管1");
+            VariableDictionary.selectTjtLayer.Add("ZG-标管2");
+            Env.Document.SendStringToExecute("IsFrozenLayer ", false, false, false);
+        }
 
         private void button纯化水_Click(object sender, EventArgs e)
         {
@@ -9238,6 +9274,8 @@ namespace GB_NewCadPlus_IV
             Env.Document.SendStringToExecute("IsFrozenLayer ", false, false, false);
         }
         #endregion
+
+        
     }
 }
 

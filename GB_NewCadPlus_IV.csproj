@@ -12,9 +12,9 @@
 		<Platforms>AnyCPU;x64</Platforms>
 		<AssemblyName>$(MSBuildProjectName)</AssemblyName>
 		<ErrorReport>prompt</ErrorReport>
-                <AssemblyVersion>3.26.04.20119</AssemblyVersion>
-                <FileVersion>3.26.04.20119</FileVersion>
-                <Version>3.26.04.20119</Version>      
+                <AssemblyVersion>3.26.04.30121</AssemblyVersion>
+                <FileVersion>3.26.04.30121</FileVersion>
+                <Version>3.26.04.30121</Version>      
 	</PropertyGroup>
 
 
@@ -67,11 +67,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Costura.Fody" Version="6.0.0">
+		<PackageReference Include="Costura.Fody" Version="6.1.0">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Dapper.Database" Version="6.0.0.23" />
+		<PackageReference Include="DM.DmProvider" Version="8.3.1.47463" />
 		<PackageReference Include="IFox.CAD.ACAD" Version="0.9.9.1" />
 		<PackageReference Include="MySql.Data" Version="9.7.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
