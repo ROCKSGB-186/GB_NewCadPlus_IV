@@ -1649,7 +1649,7 @@ namespace GB_NewCadPlus_IV
                 if (sender is Button btn)
                 {
                     // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
-                    VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
+                    VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
 
                     // 记录双击日志
                     LogManager.Instance.LogInfo($"双击了按钮: {btn.Content}");
@@ -1682,12 +1682,12 @@ namespace GB_NewCadPlus_IV
                         //VariableDictionary.wpfTextBoxScale = 0;
                         if (VariableDictionary.wpfTextBoxScale <= 0) // 如果获取失败，使用原有逻辑
                         {
-                            AutoCadHelper.GetScale();//获取当前绘图比例
+                            AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
                             VariableDictionary.wpfTextBoxScale = VariableDictionary.blockScale;
                         }
                         // 新增：Drag期间禁止再次触发，避免重入崩溃
-                        if (GB_NewCadPlus_IV.FunctionalMethod.Command.IsCopyDwgAllFastDragging ||
-                            GB_NewCadPlus_IV.FunctionalMethod.Command.IsCopyDwgAllFastBusy)
+                        if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
                         {
                             LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次双击触发。");
                             return;
@@ -1702,7 +1702,7 @@ namespace GB_NewCadPlus_IV
                             using (doc.LockDocument())
                             {
                                 // 统一走可重复命令入口，不再直接调用 CopyDwgAllFast
-                                GB_NewCadPlus_IV.FunctionalMethod.Command.ExecuteCopyDwgAllFastWithRepeat(localDwg);
+                                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwg);
                                 //GB_NewCadPlus_III.FunctionalMethod.Command.CopyDwgAllFast(localDwg);
                             }
                         }
@@ -1795,8 +1795,8 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 新增：Drag期间禁止再次触发，避免命令重入导致崩溃
-                if (GB_NewCadPlus_IV.FunctionalMethod.Command.IsCopyDwgAllFastDragging ||
-                    GB_NewCadPlus_IV.FunctionalMethod.Command.IsCopyDwgAllFastBusy)
+                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
                 {
                     LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次拖拽触发。");
                     return;
@@ -1823,7 +1823,7 @@ namespace GB_NewCadPlus_IV
                 VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
 
                 // 快速重复执行所有图纸复制操作
-                GB_NewCadPlus_IV.FunctionalMethod.Command.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
 
                 var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);
                 if (ok)
@@ -2257,8 +2257,8 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 新增：Drag期间禁止再次触发，避免命令重入导致崩溃
-                if (GB_NewCadPlus_IV.FunctionalMethod.Command.IsCopyDwgAllFastDragging ||
-                    GB_NewCadPlus_IV.FunctionalMethod.Command.IsCopyDwgAllFastBusy)
+                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
                 {
                     MessageBox.Show("当前图元正在跟随插入，请先左键落点或按 Esc 结束当前插入。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
@@ -2311,7 +2311,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 调用统一插入方法
-                GB_NewCadPlus_IV.FunctionalMethod.Command.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
             }
             catch (Exception ex)
             {
@@ -4708,10 +4708,10 @@ namespace GB_NewCadPlus_IV
                 tcs.TrySetResult((success, error ?? string.Empty));
             }
 
-            GB_NewCadPlus_IV.FunctionalMethod.Command.CopyDwgAllFastCompleted += OnCompleted;
+            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted += OnCompleted;
             try
             {
-                GB_NewCadPlus_IV.FunctionalMethod.Command.ExecuteCopyDwgAllFastWithRepeat(sourcePath);
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(sourcePath);
 
                 var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
                 if (completed != tcs.Task)
@@ -4721,7 +4721,7 @@ namespace GB_NewCadPlus_IV
             }
             finally
             {
-                GB_NewCadPlus_IV.FunctionalMethod.Command.CopyDwgAllFastCompleted -= OnCompleted;
+                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.CopyDwgAllFastCompleted -= OnCompleted;
             }
         }
 

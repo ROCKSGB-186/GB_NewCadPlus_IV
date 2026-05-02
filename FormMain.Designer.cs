@@ -32,20 +32,7 @@ namespace GB_NewCadPlus_IV
             this.tabPage_检查 = new System.Windows.Forms.TabPage();
             this.共用 = new System.Windows.Forms.TabControl();
             this.tabPage公用 = new System.Windows.Forms.TabPage();
-            this.groupBox_设备_区域_门窗 = new System.Windows.Forms.GroupBox();
-            this.button_开关设备图层 = new System.Windows.Forms.Button();
-            this.button_开关区域图层 = new System.Windows.Forms.Button();
-            this.button测试打开条件 = new System.Windows.Forms.Button();
-            this.button_开关门窗编号 = new System.Windows.Forms.Button();
-            this.groupBox共用图层控制 = new System.Windows.Forms.GroupBox();
-            this.button_开关所有条件 = new System.Windows.Forms.Button();
-            this.button_检查共用条件 = new System.Windows.Forms.Button();
-            this.button_保留共用条件 = new System.Windows.Forms.Button();
-            this.button_关闭共用条件 = new System.Windows.Forms.Button();
-            this.tabPage工艺 = new System.Windows.Forms.TabPage();
             this.groupBox工艺图层 = new System.Windows.Forms.GroupBox();
-            this.button_关闭所有工艺图层 = new System.Windows.Forms.Button();
-            this.button_开关所有工艺图层 = new System.Windows.Forms.Button();
             this.button标管2 = new System.Windows.Forms.Button();
             this.button标管1 = new System.Windows.Forms.Button();
             this.button其他 = new System.Windows.Forms.Button();
@@ -67,6 +54,17 @@ namespace GB_NewCadPlus_IV
             this.button纯蒸汽 = new System.Windows.Forms.Button();
             this.button注射用水 = new System.Windows.Forms.Button();
             this.button纯化水 = new System.Windows.Forms.Button();
+            this.groupBox_设备_区域_门窗 = new System.Windows.Forms.GroupBox();
+            this.button_开关设备图层 = new System.Windows.Forms.Button();
+            this.button_开关区域图层 = new System.Windows.Forms.Button();
+            this.button测试打开条件 = new System.Windows.Forms.Button();
+            this.button_开关门窗编号 = new System.Windows.Forms.Button();
+            this.groupBox共用图层控制 = new System.Windows.Forms.GroupBox();
+            this.button_开关所有条件 = new System.Windows.Forms.Button();
+            this.button_检查共用条件 = new System.Windows.Forms.Button();
+            this.button_保留共用条件 = new System.Windows.Forms.Button();
+            this.button_关闭共用条件 = new System.Windows.Forms.Button();
+            this.tabPage工艺 = new System.Windows.Forms.TabPage();
             this.groupBox工艺接收建筑外参控制 = new System.Windows.Forms.GroupBox();
             this.button工艺收建筑吊顶高度 = new System.Windows.Forms.Button();
             this.button工艺收建筑房间编号 = new System.Windows.Forms.Button();
@@ -835,10 +833,10 @@ namespace GB_NewCadPlus_IV
             this.tabPage_检查.SuspendLayout();
             this.共用.SuspendLayout();
             this.tabPage公用.SuspendLayout();
+            this.groupBox工艺图层.SuspendLayout();
             this.groupBox_设备_区域_门窗.SuspendLayout();
             this.groupBox共用图层控制.SuspendLayout();
             this.tabPage工艺.SuspendLayout();
-            this.groupBox工艺图层.SuspendLayout();
             this.groupBox工艺接收建筑外参控制.SuspendLayout();
             this.groupBox工艺接收外参控制.SuspendLayout();
             this.groupBox布局视口外参控制.SuspendLayout();
@@ -1008,6 +1006,7 @@ namespace GB_NewCadPlus_IV
             // 
             // tabPage公用
             // 
+            this.tabPage公用.Controls.Add(this.groupBox工艺图层);
             this.tabPage公用.Controls.Add(this.groupBox_设备_区域_门窗);
             this.tabPage公用.Controls.Add(this.groupBox共用图层控制);
             this.tabPage公用.Location = new System.Drawing.Point(4, 4);
@@ -1017,6 +1016,311 @@ namespace GB_NewCadPlus_IV
             this.tabPage公用.TabIndex = 7;
             this.tabPage公用.Text = "共用";
             this.tabPage公用.UseVisualStyleBackColor = true;
+            // 
+            // groupBox工艺图层
+            // 
+            this.groupBox工艺图层.Controls.Add(this.button标管2);
+            this.groupBox工艺图层.Controls.Add(this.button标管1);
+            this.groupBox工艺图层.Controls.Add(this.button其他);
+            this.groupBox工艺图层.Controls.Add(this.button物料);
+            this.groupBox工艺图层.Controls.Add(this.button放空);
+            this.groupBox工艺图层.Controls.Add(this.button真空);
+            this.groupBox工艺图层.Controls.Add(this.button软化水);
+            this.groupBox工艺图层.Controls.Add(this.button热水);
+            this.groupBox工艺图层.Controls.Add(this.button乙二醇);
+            this.groupBox工艺图层.Controls.Add(this.button氧气);
+            this.groupBox工艺图层.Controls.Add(this.button氮气);
+            this.groupBox工艺图层.Controls.Add(this.button二氧化碳);
+            this.groupBox工艺图层.Controls.Add(this.button凝结水);
+            this.groupBox工艺图层.Controls.Add(this.button工业蒸汽);
+            this.groupBox工艺图层.Controls.Add(this.button冷冻水);
+            this.groupBox工艺图层.Controls.Add(this.button循环水);
+            this.groupBox工艺图层.Controls.Add(this.btn仪表压缩空气);
+            this.groupBox工艺图层.Controls.Add(this.btn洁净压缩空气);
+            this.groupBox工艺图层.Controls.Add(this.button纯蒸汽);
+            this.groupBox工艺图层.Controls.Add(this.button注射用水);
+            this.groupBox工艺图层.Controls.Add(this.button纯化水);
+            this.groupBox工艺图层.Location = new System.Drawing.Point(2, 215);
+            this.groupBox工艺图层.Margin = new System.Windows.Forms.Padding(0);
+            this.groupBox工艺图层.Name = "groupBox工艺图层";
+            this.groupBox工艺图层.Padding = new System.Windows.Forms.Padding(0);
+            this.groupBox工艺图层.Size = new System.Drawing.Size(250, 273);
+            this.groupBox工艺图层.TabIndex = 120;
+            this.groupBox工艺图层.TabStop = false;
+            this.groupBox工艺图层.Text = "工艺图层控制";
+            // 
+            // button标管2
+            // 
+            this.button标管2.BackColor = System.Drawing.Color.PowderBlue;
+            this.button标管2.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button标管2.Location = new System.Drawing.Point(167, 234);
+            this.button标管2.Margin = new System.Windows.Forms.Padding(0);
+            this.button标管2.Name = "button标管2";
+            this.button标管2.Size = new System.Drawing.Size(82, 30);
+            this.button标管2.TabIndex = 99;
+            this.button标管2.Text = "标管2";
+            this.button标管2.UseVisualStyleBackColor = false;
+            this.button标管2.Click += new System.EventHandler(this.button标管2_Click);
+            // 
+            // button标管1
+            // 
+            this.button标管1.BackColor = System.Drawing.Color.PowderBlue;
+            this.button标管1.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button标管1.Location = new System.Drawing.Point(85, 234);
+            this.button标管1.Margin = new System.Windows.Forms.Padding(0);
+            this.button标管1.Name = "button标管1";
+            this.button标管1.Size = new System.Drawing.Size(82, 30);
+            this.button标管1.TabIndex = 98;
+            this.button标管1.Text = "标管1";
+            this.button标管1.UseVisualStyleBackColor = false;
+            this.button标管1.Click += new System.EventHandler(this.button标管1_Click);
+            // 
+            // button其他
+            // 
+            this.button其他.BackColor = System.Drawing.Color.PowderBlue;
+            this.button其他.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button其他.Location = new System.Drawing.Point(3, 234);
+            this.button其他.Margin = new System.Windows.Forms.Padding(0);
+            this.button其他.Name = "button其他";
+            this.button其他.Size = new System.Drawing.Size(82, 30);
+            this.button其他.TabIndex = 96;
+            this.button其他.Text = "其他";
+            this.button其他.UseVisualStyleBackColor = false;
+            this.button其他.Click += new System.EventHandler(this.button其他_Click);
+            // 
+            // button物料
+            // 
+            this.button物料.BackColor = System.Drawing.Color.PowderBlue;
+            this.button物料.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button物料.Location = new System.Drawing.Point(167, 204);
+            this.button物料.Margin = new System.Windows.Forms.Padding(0);
+            this.button物料.Name = "button物料";
+            this.button物料.Size = new System.Drawing.Size(82, 30);
+            this.button物料.TabIndex = 95;
+            this.button物料.Text = "物料";
+            this.button物料.UseVisualStyleBackColor = false;
+            this.button物料.Click += new System.EventHandler(this.button物料_Click);
+            // 
+            // button放空
+            // 
+            this.button放空.BackColor = System.Drawing.Color.PowderBlue;
+            this.button放空.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button放空.Location = new System.Drawing.Point(85, 204);
+            this.button放空.Margin = new System.Windows.Forms.Padding(0);
+            this.button放空.Name = "button放空";
+            this.button放空.Size = new System.Drawing.Size(82, 30);
+            this.button放空.TabIndex = 94;
+            this.button放空.Text = "放空";
+            this.button放空.UseVisualStyleBackColor = false;
+            this.button放空.Click += new System.EventHandler(this.button放空_Click);
+            // 
+            // button真空
+            // 
+            this.button真空.BackColor = System.Drawing.Color.PowderBlue;
+            this.button真空.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button真空.Location = new System.Drawing.Point(3, 204);
+            this.button真空.Margin = new System.Windows.Forms.Padding(0);
+            this.button真空.Name = "button真空";
+            this.button真空.Size = new System.Drawing.Size(82, 30);
+            this.button真空.TabIndex = 93;
+            this.button真空.Text = "真空";
+            this.button真空.UseVisualStyleBackColor = false;
+            this.button真空.Click += new System.EventHandler(this.button真空_Click);
+            // 
+            // button软化水
+            // 
+            this.button软化水.BackColor = System.Drawing.Color.PowderBlue;
+            this.button软化水.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button软化水.Location = new System.Drawing.Point(3, 54);
+            this.button软化水.Margin = new System.Windows.Forms.Padding(0);
+            this.button软化水.Name = "button软化水";
+            this.button软化水.Size = new System.Drawing.Size(123, 30);
+            this.button软化水.TabIndex = 92;
+            this.button软化水.Text = "软化水";
+            this.button软化水.UseVisualStyleBackColor = false;
+            this.button软化水.Click += new System.EventHandler(this.button软化水_Click);
+            // 
+            // button热水
+            // 
+            this.button热水.BackColor = System.Drawing.Color.PowderBlue;
+            this.button热水.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button热水.Location = new System.Drawing.Point(168, 84);
+            this.button热水.Margin = new System.Windows.Forms.Padding(0);
+            this.button热水.Name = "button热水";
+            this.button热水.Size = new System.Drawing.Size(82, 30);
+            this.button热水.TabIndex = 91;
+            this.button热水.Text = "热水";
+            this.button热水.UseVisualStyleBackColor = false;
+            this.button热水.Click += new System.EventHandler(this.button热水_Click);
+            // 
+            // button乙二醇
+            // 
+            this.button乙二醇.BackColor = System.Drawing.Color.PowderBlue;
+            this.button乙二醇.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button乙二醇.Location = new System.Drawing.Point(126, 54);
+            this.button乙二醇.Margin = new System.Windows.Forms.Padding(0);
+            this.button乙二醇.Name = "button乙二醇";
+            this.button乙二醇.Size = new System.Drawing.Size(123, 30);
+            this.button乙二醇.TabIndex = 90;
+            this.button乙二醇.Text = "乙二醇";
+            this.button乙二醇.UseVisualStyleBackColor = false;
+            this.button乙二醇.Click += new System.EventHandler(this.button乙二醇_Click);
+            // 
+            // button氧气
+            // 
+            this.button氧气.BackColor = System.Drawing.Color.PowderBlue;
+            this.button氧气.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button氧气.Location = new System.Drawing.Point(3, 144);
+            this.button氧气.Margin = new System.Windows.Forms.Padding(0);
+            this.button氧气.Name = "button氧气";
+            this.button氧气.Size = new System.Drawing.Size(82, 30);
+            this.button氧气.TabIndex = 89;
+            this.button氧气.Text = "氧气";
+            this.button氧气.UseVisualStyleBackColor = false;
+            this.button氧气.Click += new System.EventHandler(this.button氧气_Click);
+            // 
+            // button氮气
+            // 
+            this.button氮气.BackColor = System.Drawing.Color.PowderBlue;
+            this.button氮气.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button氮气.Location = new System.Drawing.Point(167, 144);
+            this.button氮气.Margin = new System.Windows.Forms.Padding(0);
+            this.button氮气.Name = "button氮气";
+            this.button氮气.Size = new System.Drawing.Size(82, 30);
+            this.button氮气.TabIndex = 88;
+            this.button氮气.Text = "氮气";
+            this.button氮气.UseVisualStyleBackColor = false;
+            this.button氮气.Click += new System.EventHandler(this.button氮气_Click);
+            // 
+            // button二氧化碳
+            // 
+            this.button二氧化碳.BackColor = System.Drawing.Color.PowderBlue;
+            this.button二氧化碳.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button二氧化碳.Location = new System.Drawing.Point(85, 144);
+            this.button二氧化碳.Margin = new System.Windows.Forms.Padding(0);
+            this.button二氧化碳.Name = "button二氧化碳";
+            this.button二氧化碳.Size = new System.Drawing.Size(82, 30);
+            this.button二氧化碳.TabIndex = 87;
+            this.button二氧化碳.Text = "二氧化碳";
+            this.button二氧化碳.UseVisualStyleBackColor = false;
+            this.button二氧化碳.Click += new System.EventHandler(this.button二氧化碳_Click);
+            // 
+            // button凝结水
+            // 
+            this.button凝结水.BackColor = System.Drawing.Color.PowderBlue;
+            this.button凝结水.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button凝结水.Location = new System.Drawing.Point(3, 84);
+            this.button凝结水.Margin = new System.Windows.Forms.Padding(0);
+            this.button凝结水.Name = "button凝结水";
+            this.button凝结水.Size = new System.Drawing.Size(82, 30);
+            this.button凝结水.TabIndex = 86;
+            this.button凝结水.Text = "凝结水";
+            this.button凝结水.UseVisualStyleBackColor = false;
+            this.button凝结水.Click += new System.EventHandler(this.button凝结水_Click);
+            // 
+            // button工业蒸汽
+            // 
+            this.button工业蒸汽.BackColor = System.Drawing.Color.PowderBlue;
+            this.button工业蒸汽.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button工业蒸汽.Location = new System.Drawing.Point(3, 174);
+            this.button工业蒸汽.Margin = new System.Windows.Forms.Padding(0);
+            this.button工业蒸汽.Name = "button工业蒸汽";
+            this.button工业蒸汽.Size = new System.Drawing.Size(123, 30);
+            this.button工业蒸汽.TabIndex = 85;
+            this.button工业蒸汽.Text = "工业蒸汽";
+            this.button工业蒸汽.UseVisualStyleBackColor = false;
+            this.button工业蒸汽.Click += new System.EventHandler(this.button工业蒸汽_Click);
+            // 
+            // button冷冻水
+            // 
+            this.button冷冻水.BackColor = System.Drawing.Color.PowderBlue;
+            this.button冷冻水.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button冷冻水.Location = new System.Drawing.Point(85, 84);
+            this.button冷冻水.Margin = new System.Windows.Forms.Padding(0);
+            this.button冷冻水.Name = "button冷冻水";
+            this.button冷冻水.Size = new System.Drawing.Size(82, 30);
+            this.button冷冻水.TabIndex = 84;
+            this.button冷冻水.Text = "冷冻水";
+            this.button冷冻水.UseVisualStyleBackColor = false;
+            this.button冷冻水.Click += new System.EventHandler(this.button冷冻水_Click);
+            // 
+            // button循环水
+            // 
+            this.button循环水.BackColor = System.Drawing.Color.PowderBlue;
+            this.button循环水.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button循环水.Location = new System.Drawing.Point(167, 24);
+            this.button循环水.Margin = new System.Windows.Forms.Padding(0);
+            this.button循环水.Name = "button循环水";
+            this.button循环水.Size = new System.Drawing.Size(82, 30);
+            this.button循环水.TabIndex = 83;
+            this.button循环水.Text = "循环水";
+            this.button循环水.UseVisualStyleBackColor = false;
+            this.button循环水.Click += new System.EventHandler(this.button循环水_Click);
+            // 
+            // btn仪表压缩空气
+            // 
+            this.btn仪表压缩空气.BackColor = System.Drawing.Color.PowderBlue;
+            this.btn仪表压缩空气.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.btn仪表压缩空气.Location = new System.Drawing.Point(125, 114);
+            this.btn仪表压缩空气.Margin = new System.Windows.Forms.Padding(0);
+            this.btn仪表压缩空气.Name = "btn仪表压缩空气";
+            this.btn仪表压缩空气.Size = new System.Drawing.Size(123, 30);
+            this.btn仪表压缩空气.TabIndex = 82;
+            this.btn仪表压缩空气.Text = "仪表压缩空气";
+            this.btn仪表压缩空气.UseVisualStyleBackColor = false;
+            this.btn仪表压缩空气.Click += new System.EventHandler(this.btn仪表压缩空气_Click);
+            // 
+            // btn洁净压缩空气
+            // 
+            this.btn洁净压缩空气.BackColor = System.Drawing.Color.PowderBlue;
+            this.btn洁净压缩空气.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.btn洁净压缩空气.Location = new System.Drawing.Point(2, 114);
+            this.btn洁净压缩空气.Margin = new System.Windows.Forms.Padding(0);
+            this.btn洁净压缩空气.Name = "btn洁净压缩空气";
+            this.btn洁净压缩空气.Size = new System.Drawing.Size(123, 30);
+            this.btn洁净压缩空气.TabIndex = 80;
+            this.btn洁净压缩空气.Text = "洁净压缩空气";
+            this.btn洁净压缩空气.UseVisualStyleBackColor = false;
+            this.btn洁净压缩空气.Click += new System.EventHandler(this.btn洁净压缩空气_Click);
+            // 
+            // button纯蒸汽
+            // 
+            this.button纯蒸汽.BackColor = System.Drawing.Color.PowderBlue;
+            this.button纯蒸汽.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button纯蒸汽.Location = new System.Drawing.Point(126, 174);
+            this.button纯蒸汽.Margin = new System.Windows.Forms.Padding(0);
+            this.button纯蒸汽.Name = "button纯蒸汽";
+            this.button纯蒸汽.Size = new System.Drawing.Size(123, 30);
+            this.button纯蒸汽.TabIndex = 79;
+            this.button纯蒸汽.Text = "纯蒸汽";
+            this.button纯蒸汽.UseVisualStyleBackColor = false;
+            this.button纯蒸汽.Click += new System.EventHandler(this.button纯蒸汽_Click);
+            // 
+            // button注射用水
+            // 
+            this.button注射用水.BackColor = System.Drawing.Color.PowderBlue;
+            this.button注射用水.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button注射用水.Location = new System.Drawing.Point(85, 24);
+            this.button注射用水.Margin = new System.Windows.Forms.Padding(0);
+            this.button注射用水.Name = "button注射用水";
+            this.button注射用水.Size = new System.Drawing.Size(82, 30);
+            this.button注射用水.TabIndex = 78;
+            this.button注射用水.Text = " 注射用水";
+            this.button注射用水.UseVisualStyleBackColor = false;
+            this.button注射用水.Click += new System.EventHandler(this.button注射用水_Click);
+            // 
+            // button纯化水
+            // 
+            this.button纯化水.BackColor = System.Drawing.Color.PowderBlue;
+            this.button纯化水.Font = new System.Drawing.Font("微软雅黑", 10F);
+            this.button纯化水.Location = new System.Drawing.Point(3, 24);
+            this.button纯化水.Margin = new System.Windows.Forms.Padding(0);
+            this.button纯化水.Name = "button纯化水";
+            this.button纯化水.Size = new System.Drawing.Size(82, 30);
+            this.button纯化水.TabIndex = 77;
+            this.button纯化水.Text = " 纯化水";
+            this.button纯化水.UseVisualStyleBackColor = false;
+            this.button纯化水.Click += new System.EventHandler(this.button纯化水_Click);
             // 
             // groupBox_设备_区域_门窗
             // 
@@ -1142,7 +1446,6 @@ namespace GB_NewCadPlus_IV
             // tabPage工艺
             // 
             this.tabPage工艺.AutoScroll = true;
-            this.tabPage工艺.Controls.Add(this.groupBox工艺图层);
             this.tabPage工艺.Controls.Add(this.groupBox工艺接收建筑外参控制);
             this.tabPage工艺.Controls.Add(this.groupBox工艺接收外参控制);
             this.tabPage工艺.Controls.Add(this.groupBox布局视口外参控制);
@@ -1155,336 +1458,6 @@ namespace GB_NewCadPlus_IV
             this.tabPage工艺.TabIndex = 0;
             this.tabPage工艺.Text = "工艺";
             this.tabPage工艺.UseVisualStyleBackColor = true;
-            // 
-            // groupBox工艺图层
-            // 
-            this.groupBox工艺图层.Controls.Add(this.button_关闭所有工艺图层);
-            this.groupBox工艺图层.Controls.Add(this.button_开关所有工艺图层);
-            this.groupBox工艺图层.Controls.Add(this.button标管2);
-            this.groupBox工艺图层.Controls.Add(this.button标管1);
-            this.groupBox工艺图层.Controls.Add(this.button其他);
-            this.groupBox工艺图层.Controls.Add(this.button物料);
-            this.groupBox工艺图层.Controls.Add(this.button放空);
-            this.groupBox工艺图层.Controls.Add(this.button真空);
-            this.groupBox工艺图层.Controls.Add(this.button软化水);
-            this.groupBox工艺图层.Controls.Add(this.button热水);
-            this.groupBox工艺图层.Controls.Add(this.button乙二醇);
-            this.groupBox工艺图层.Controls.Add(this.button氧气);
-            this.groupBox工艺图层.Controls.Add(this.button氮气);
-            this.groupBox工艺图层.Controls.Add(this.button二氧化碳);
-            this.groupBox工艺图层.Controls.Add(this.button凝结水);
-            this.groupBox工艺图层.Controls.Add(this.button工业蒸汽);
-            this.groupBox工艺图层.Controls.Add(this.button冷冻水);
-            this.groupBox工艺图层.Controls.Add(this.button循环水);
-            this.groupBox工艺图层.Controls.Add(this.btn仪表压缩空气);
-            this.groupBox工艺图层.Controls.Add(this.btn洁净压缩空气);
-            this.groupBox工艺图层.Controls.Add(this.button纯蒸汽);
-            this.groupBox工艺图层.Controls.Add(this.button注射用水);
-            this.groupBox工艺图层.Controls.Add(this.button纯化水);
-            this.groupBox工艺图层.Location = new System.Drawing.Point(2, 326);
-            this.groupBox工艺图层.Margin = new System.Windows.Forms.Padding(0);
-            this.groupBox工艺图层.Name = "groupBox工艺图层";
-            this.groupBox工艺图层.Padding = new System.Windows.Forms.Padding(0);
-            this.groupBox工艺图层.Size = new System.Drawing.Size(250, 293);
-            this.groupBox工艺图层.TabIndex = 133;
-            this.groupBox工艺图层.TabStop = false;
-            this.groupBox工艺图层.Text = "工艺图层控制";
-            // 
-            // button_关闭所有工艺图层
-            // 
-            this.button_关闭所有工艺图层.BackColor = System.Drawing.Color.PowderBlue;
-            this.button_关闭所有工艺图层.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button_关闭所有工艺图层.Location = new System.Drawing.Point(-2, 18);
-            this.button_关闭所有工艺图层.Name = "button_关闭所有工艺图层";
-            this.button_关闭所有工艺图层.Size = new System.Drawing.Size(125, 28);
-            this.button_关闭所有工艺图层.TabIndex = 121;
-            this.button_关闭所有工艺图层.Text = "...";
-            this.button_关闭所有工艺图层.UseVisualStyleBackColor = false;
-            // 
-            // button_开关所有工艺图层
-            // 
-            this.button_开关所有工艺图层.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(224)))), ((int)(((byte)(192)))));
-            this.button_开关所有工艺图层.Font = new System.Drawing.Font("微软雅黑", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.button_开关所有工艺图层.Location = new System.Drawing.Point(123, 18);
-            this.button_开关所有工艺图层.Name = "button_开关所有工艺图层";
-            this.button_开关所有工艺图层.Size = new System.Drawing.Size(125, 28);
-            this.button_开关所有工艺图层.TabIndex = 120;
-            this.button_开关所有工艺图层.Text = "开\\关工艺图层";
-            this.button_开关所有工艺图层.UseVisualStyleBackColor = false;
-            this.button_开关所有工艺图层.Click += new System.EventHandler(this.button_开关所有工艺图层_Click);
-            // 
-            // button标管2
-            // 
-            this.button标管2.BackColor = System.Drawing.Color.PowderBlue;
-            this.button标管2.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button标管2.Location = new System.Drawing.Point(167, 257);
-            this.button标管2.Margin = new System.Windows.Forms.Padding(0);
-            this.button标管2.Name = "button标管2";
-            this.button标管2.Size = new System.Drawing.Size(82, 30);
-            this.button标管2.TabIndex = 99;
-            this.button标管2.Text = "标管2";
-            this.button标管2.UseVisualStyleBackColor = false;
-            this.button标管2.Click += new System.EventHandler(this.button标管2_Click);
-            // 
-            // button标管1
-            // 
-            this.button标管1.BackColor = System.Drawing.Color.PowderBlue;
-            this.button标管1.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button标管1.Location = new System.Drawing.Point(85, 257);
-            this.button标管1.Margin = new System.Windows.Forms.Padding(0);
-            this.button标管1.Name = "button标管1";
-            this.button标管1.Size = new System.Drawing.Size(82, 30);
-            this.button标管1.TabIndex = 98;
-            this.button标管1.Text = "标管1";
-            this.button标管1.UseVisualStyleBackColor = false;
-            this.button标管1.Click += new System.EventHandler(this.button标管1_Click);
-            // 
-            // button其他
-            // 
-            this.button其他.BackColor = System.Drawing.Color.PowderBlue;
-            this.button其他.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button其他.Location = new System.Drawing.Point(3, 257);
-            this.button其他.Margin = new System.Windows.Forms.Padding(0);
-            this.button其他.Name = "button其他";
-            this.button其他.Size = new System.Drawing.Size(82, 30);
-            this.button其他.TabIndex = 96;
-            this.button其他.Text = "其他";
-            this.button其他.UseVisualStyleBackColor = false;
-            this.button其他.Click += new System.EventHandler(this.button其他_Click);
-            // 
-            // button物料
-            // 
-            this.button物料.BackColor = System.Drawing.Color.PowderBlue;
-            this.button物料.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button物料.Location = new System.Drawing.Point(167, 227);
-            this.button物料.Margin = new System.Windows.Forms.Padding(0);
-            this.button物料.Name = "button物料";
-            this.button物料.Size = new System.Drawing.Size(82, 30);
-            this.button物料.TabIndex = 95;
-            this.button物料.Text = "物料";
-            this.button物料.UseVisualStyleBackColor = false;
-            this.button物料.Click += new System.EventHandler(this.button物料_Click);
-            // 
-            // button放空
-            // 
-            this.button放空.BackColor = System.Drawing.Color.PowderBlue;
-            this.button放空.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button放空.Location = new System.Drawing.Point(85, 227);
-            this.button放空.Margin = new System.Windows.Forms.Padding(0);
-            this.button放空.Name = "button放空";
-            this.button放空.Size = new System.Drawing.Size(82, 30);
-            this.button放空.TabIndex = 94;
-            this.button放空.Text = "放空";
-            this.button放空.UseVisualStyleBackColor = false;
-            this.button放空.Click += new System.EventHandler(this.button放空_Click);
-            // 
-            // button真空
-            // 
-            this.button真空.BackColor = System.Drawing.Color.PowderBlue;
-            this.button真空.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button真空.Location = new System.Drawing.Point(3, 227);
-            this.button真空.Margin = new System.Windows.Forms.Padding(0);
-            this.button真空.Name = "button真空";
-            this.button真空.Size = new System.Drawing.Size(82, 30);
-            this.button真空.TabIndex = 93;
-            this.button真空.Text = "真空";
-            this.button真空.UseVisualStyleBackColor = false;
-            this.button真空.Click += new System.EventHandler(this.button真空_Click);
-            // 
-            // button软化水
-            // 
-            this.button软化水.BackColor = System.Drawing.Color.PowderBlue;
-            this.button软化水.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button软化水.Location = new System.Drawing.Point(3, 77);
-            this.button软化水.Margin = new System.Windows.Forms.Padding(0);
-            this.button软化水.Name = "button软化水";
-            this.button软化水.Size = new System.Drawing.Size(123, 30);
-            this.button软化水.TabIndex = 92;
-            this.button软化水.Text = "软化水";
-            this.button软化水.UseVisualStyleBackColor = false;
-            this.button软化水.Click += new System.EventHandler(this.button软化水_Click);
-            // 
-            // button热水
-            // 
-            this.button热水.BackColor = System.Drawing.Color.PowderBlue;
-            this.button热水.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button热水.Location = new System.Drawing.Point(168, 107);
-            this.button热水.Margin = new System.Windows.Forms.Padding(0);
-            this.button热水.Name = "button热水";
-            this.button热水.Size = new System.Drawing.Size(82, 30);
-            this.button热水.TabIndex = 91;
-            this.button热水.Text = "热水";
-            this.button热水.UseVisualStyleBackColor = false;
-            this.button热水.Click += new System.EventHandler(this.button热水_Click);
-            // 
-            // button乙二醇
-            // 
-            this.button乙二醇.BackColor = System.Drawing.Color.PowderBlue;
-            this.button乙二醇.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button乙二醇.Location = new System.Drawing.Point(126, 77);
-            this.button乙二醇.Margin = new System.Windows.Forms.Padding(0);
-            this.button乙二醇.Name = "button乙二醇";
-            this.button乙二醇.Size = new System.Drawing.Size(123, 30);
-            this.button乙二醇.TabIndex = 90;
-            this.button乙二醇.Text = "乙二醇";
-            this.button乙二醇.UseVisualStyleBackColor = false;
-            this.button乙二醇.Click += new System.EventHandler(this.button乙二醇_Click);
-            // 
-            // button氧气
-            // 
-            this.button氧气.BackColor = System.Drawing.Color.PowderBlue;
-            this.button氧气.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button氧气.Location = new System.Drawing.Point(3, 167);
-            this.button氧气.Margin = new System.Windows.Forms.Padding(0);
-            this.button氧气.Name = "button氧气";
-            this.button氧气.Size = new System.Drawing.Size(82, 30);
-            this.button氧气.TabIndex = 89;
-            this.button氧气.Text = "氧气";
-            this.button氧气.UseVisualStyleBackColor = false;
-            this.button氧气.Click += new System.EventHandler(this.button氧气_Click);
-            // 
-            // button氮气
-            // 
-            this.button氮气.BackColor = System.Drawing.Color.PowderBlue;
-            this.button氮气.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button氮气.Location = new System.Drawing.Point(167, 167);
-            this.button氮气.Margin = new System.Windows.Forms.Padding(0);
-            this.button氮气.Name = "button氮气";
-            this.button氮气.Size = new System.Drawing.Size(82, 30);
-            this.button氮气.TabIndex = 88;
-            this.button氮气.Text = "氮气";
-            this.button氮气.UseVisualStyleBackColor = false;
-            this.button氮气.Click += new System.EventHandler(this.button氮气_Click);
-            // 
-            // button二氧化碳
-            // 
-            this.button二氧化碳.BackColor = System.Drawing.Color.PowderBlue;
-            this.button二氧化碳.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button二氧化碳.Location = new System.Drawing.Point(85, 167);
-            this.button二氧化碳.Margin = new System.Windows.Forms.Padding(0);
-            this.button二氧化碳.Name = "button二氧化碳";
-            this.button二氧化碳.Size = new System.Drawing.Size(82, 30);
-            this.button二氧化碳.TabIndex = 87;
-            this.button二氧化碳.Text = "二氧化碳";
-            this.button二氧化碳.UseVisualStyleBackColor = false;
-            this.button二氧化碳.Click += new System.EventHandler(this.button二氧化碳_Click);
-            // 
-            // button凝结水
-            // 
-            this.button凝结水.BackColor = System.Drawing.Color.PowderBlue;
-            this.button凝结水.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button凝结水.Location = new System.Drawing.Point(3, 107);
-            this.button凝结水.Margin = new System.Windows.Forms.Padding(0);
-            this.button凝结水.Name = "button凝结水";
-            this.button凝结水.Size = new System.Drawing.Size(82, 30);
-            this.button凝结水.TabIndex = 86;
-            this.button凝结水.Text = "凝结水";
-            this.button凝结水.UseVisualStyleBackColor = false;
-            this.button凝结水.Click += new System.EventHandler(this.button凝结水_Click);
-            // 
-            // button工业蒸汽
-            // 
-            this.button工业蒸汽.BackColor = System.Drawing.Color.PowderBlue;
-            this.button工业蒸汽.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button工业蒸汽.Location = new System.Drawing.Point(3, 197);
-            this.button工业蒸汽.Margin = new System.Windows.Forms.Padding(0);
-            this.button工业蒸汽.Name = "button工业蒸汽";
-            this.button工业蒸汽.Size = new System.Drawing.Size(123, 30);
-            this.button工业蒸汽.TabIndex = 85;
-            this.button工业蒸汽.Text = "工业蒸汽";
-            this.button工业蒸汽.UseVisualStyleBackColor = false;
-            this.button工业蒸汽.Click += new System.EventHandler(this.button工业蒸汽_Click);
-            // 
-            // button冷冻水
-            // 
-            this.button冷冻水.BackColor = System.Drawing.Color.PowderBlue;
-            this.button冷冻水.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button冷冻水.Location = new System.Drawing.Point(85, 107);
-            this.button冷冻水.Margin = new System.Windows.Forms.Padding(0);
-            this.button冷冻水.Name = "button冷冻水";
-            this.button冷冻水.Size = new System.Drawing.Size(82, 30);
-            this.button冷冻水.TabIndex = 84;
-            this.button冷冻水.Text = "冷冻水";
-            this.button冷冻水.UseVisualStyleBackColor = false;
-            this.button冷冻水.Click += new System.EventHandler(this.button冷冻水_Click);
-            // 
-            // button循环水
-            // 
-            this.button循环水.BackColor = System.Drawing.Color.PowderBlue;
-            this.button循环水.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button循环水.Location = new System.Drawing.Point(167, 47);
-            this.button循环水.Margin = new System.Windows.Forms.Padding(0);
-            this.button循环水.Name = "button循环水";
-            this.button循环水.Size = new System.Drawing.Size(82, 30);
-            this.button循环水.TabIndex = 83;
-            this.button循环水.Text = "循环水";
-            this.button循环水.UseVisualStyleBackColor = false;
-            this.button循环水.Click += new System.EventHandler(this.button循环水_Click);
-            // 
-            // btn仪表压缩空气
-            // 
-            this.btn仪表压缩空气.BackColor = System.Drawing.Color.PowderBlue;
-            this.btn仪表压缩空气.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.btn仪表压缩空气.Location = new System.Drawing.Point(125, 137);
-            this.btn仪表压缩空气.Margin = new System.Windows.Forms.Padding(0);
-            this.btn仪表压缩空气.Name = "btn仪表压缩空气";
-            this.btn仪表压缩空气.Size = new System.Drawing.Size(123, 30);
-            this.btn仪表压缩空气.TabIndex = 82;
-            this.btn仪表压缩空气.Text = "仪表压缩空气";
-            this.btn仪表压缩空气.UseVisualStyleBackColor = false;
-            this.btn仪表压缩空气.Click += new System.EventHandler(this.btn仪表压缩空气_Click);
-            // 
-            // btn洁净压缩空气
-            // 
-            this.btn洁净压缩空气.BackColor = System.Drawing.Color.PowderBlue;
-            this.btn洁净压缩空气.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.btn洁净压缩空气.Location = new System.Drawing.Point(2, 137);
-            this.btn洁净压缩空气.Margin = new System.Windows.Forms.Padding(0);
-            this.btn洁净压缩空气.Name = "btn洁净压缩空气";
-            this.btn洁净压缩空气.Size = new System.Drawing.Size(123, 30);
-            this.btn洁净压缩空气.TabIndex = 80;
-            this.btn洁净压缩空气.Text = "洁净压缩空气";
-            this.btn洁净压缩空气.UseVisualStyleBackColor = false;
-            this.btn洁净压缩空气.Click += new System.EventHandler(this.btn洁净压缩空气_Click);
-            // 
-            // button纯蒸汽
-            // 
-            this.button纯蒸汽.BackColor = System.Drawing.Color.PowderBlue;
-            this.button纯蒸汽.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button纯蒸汽.Location = new System.Drawing.Point(126, 197);
-            this.button纯蒸汽.Margin = new System.Windows.Forms.Padding(0);
-            this.button纯蒸汽.Name = "button纯蒸汽";
-            this.button纯蒸汽.Size = new System.Drawing.Size(123, 30);
-            this.button纯蒸汽.TabIndex = 79;
-            this.button纯蒸汽.Text = "纯蒸汽";
-            this.button纯蒸汽.UseVisualStyleBackColor = false;
-            this.button纯蒸汽.Click += new System.EventHandler(this.button纯蒸汽_Click);
-            // 
-            // button注射用水
-            // 
-            this.button注射用水.BackColor = System.Drawing.Color.PowderBlue;
-            this.button注射用水.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button注射用水.Location = new System.Drawing.Point(85, 47);
-            this.button注射用水.Margin = new System.Windows.Forms.Padding(0);
-            this.button注射用水.Name = "button注射用水";
-            this.button注射用水.Size = new System.Drawing.Size(82, 30);
-            this.button注射用水.TabIndex = 78;
-            this.button注射用水.Text = " 注射用水";
-            this.button注射用水.UseVisualStyleBackColor = false;
-            this.button注射用水.Click += new System.EventHandler(this.button注射用水_Click);
-            // 
-            // button纯化水
-            // 
-            this.button纯化水.BackColor = System.Drawing.Color.PowderBlue;
-            this.button纯化水.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.button纯化水.Location = new System.Drawing.Point(3, 47);
-            this.button纯化水.Margin = new System.Windows.Forms.Padding(0);
-            this.button纯化水.Name = "button纯化水";
-            this.button纯化水.Size = new System.Drawing.Size(82, 30);
-            this.button纯化水.TabIndex = 77;
-            this.button纯化水.Text = " 纯化水";
-            this.button纯化水.UseVisualStyleBackColor = false;
-            this.button纯化水.Click += new System.EventHandler(this.button纯化水_Click);
             // 
             // groupBox工艺接收建筑外参控制
             // 
@@ -4309,7 +4282,7 @@ namespace GB_NewCadPlus_IV
             this.label_VER.Name = "label_VER";
             this.label_VER.Size = new System.Drawing.Size(109, 20);
             this.label_VER.TabIndex = 0;
-            this.label_VER.Text = "2.26.04.30.0121";
+            this.label_VER.Text = "2.26.04.20.0119";
             // 
             // button_向右下
             // 
@@ -10673,10 +10646,10 @@ namespace GB_NewCadPlus_IV
             this.tabPage_检查.ResumeLayout(false);
             this.共用.ResumeLayout(false);
             this.tabPage公用.ResumeLayout(false);
+            this.groupBox工艺图层.ResumeLayout(false);
             this.groupBox_设备_区域_门窗.ResumeLayout(false);
             this.groupBox共用图层控制.ResumeLayout(false);
             this.tabPage工艺.ResumeLayout(false);
-            this.groupBox工艺图层.ResumeLayout(false);
             this.groupBox工艺接收建筑外参控制.ResumeLayout(false);
             this.groupBox工艺接收外参控制.ResumeLayout(false);
             this.groupBox布局视口外参控制.ResumeLayout(false);
@@ -11646,10 +11619,7 @@ namespace GB_NewCadPlus_IV
         private Button button_开关所有条件;
         private Button button_检查共用条件;
         private GroupBox groupBox工艺图层;
-        private Button button标管2;
-        private Button button标管1;
-        private Button button其他;
-        private Button button物料;
+        private Button button纯化水;
         private Button button放空;
         private Button button真空;
         private Button button软化水;
@@ -11666,8 +11636,9 @@ namespace GB_NewCadPlus_IV
         private Button btn洁净压缩空气;
         private Button button纯蒸汽;
         private Button button注射用水;
-        private Button button纯化水;
-        private Button button_关闭所有工艺图层;
-        private Button button_开关所有工艺图层;
+        private Button button标管2;
+        private Button button标管1;
+        private Button button其他;
+        private Button button物料;
     }
 }

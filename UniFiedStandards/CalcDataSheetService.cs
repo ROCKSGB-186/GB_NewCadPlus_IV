@@ -6,9 +6,6 @@ using System.Threading.Tasks;
 
 namespace GB_NewCadPlus_IV.FunctionalMethod.Calculation
 {
-    /// <summary>
-    /// 计算数据表输入
-    /// </summary>
     public sealed class CalcDataSheetInput
     {
         // 页面直接输入（兼容现有 UI）
@@ -32,9 +29,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod.Calculation
         public Dictionary<string, double> CellOverrides { get; } =
             new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
     }
-    /// <summary>
-    /// 计算数据表结果
-    /// </summary>
+
     public sealed class CalcDataSheetResult
     {
         // 兼容现有页面展示
@@ -55,9 +50,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod.Calculation
 
         public List<string> Warnings { get; } = new List<string>();
     }
-    /// <summary>
-    /// 数据表计算服务
-    /// </summary>
+
     public sealed class CalcDataSheetService
     {
         public bool TryCalculate(CalcDataSheetInput input, out CalcDataSheetResult result, out string error)

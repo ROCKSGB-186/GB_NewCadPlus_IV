@@ -692,157 +692,157 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 初始化分类属性编辑网格
         /// </summary>
-        //private void InitializeCategoryPropertyGrid(ItemsControl categoryPropertiesDataGrid)
-        //{
-        //    var initialRows = new List<CategoryPropertyEditModel>
-        //        {
-        //            new CategoryPropertyEditModel(),
-        //            new CategoryPropertyEditModel(),
-        //            new CategoryPropertyEditModel()
-        //        };
+        private void InitializeCategoryPropertyGrid(ItemsControl categoryPropertiesDataGrid)
+        {
+            var initialRows = new List<CategoryPropertyEditModel>
+                {
+                    new CategoryPropertyEditModel(),
+                    new CategoryPropertyEditModel(),
+                    new CategoryPropertyEditModel()
+                };
 
-        //    categoryPropertiesDataGrid.ItemsSource = initialRows;
-        //    LogManager.Instance.LogInfo("初始化分类属性编辑网格成功:InitializeCategoryPropertyGrid()");
-        //}
+            categoryPropertiesDataGrid.ItemsSource = initialRows;
+            LogManager.Instance.LogInfo("初始化分类属性编辑网格成功:InitializeCategoryPropertyGrid()");
+        }
 
         /// <summary>
         /// 初始化子分类属性编辑界面
         /// </summary>
         /// <param name="parentNode"></param>
-        //private void InitializeSubcategoryPropertiesForEditing(CategoryTreeNode parentNode,ItemsControl categoryPropertiesDataGrid)
-        //{
-        //    var subcategoryProperties = new List<CategoryPropertyEditModel>
-        //    {
-        //        new CategoryPropertyEditModel { PropertyName1 = "父分类ID", PropertyValue1 = parentNode.Id.ToString(), PropertyName2 = "名称", PropertyValue2 = "" },
-        //        new CategoryPropertyEditModel { PropertyName1 = "显示名称", PropertyValue1 = "", PropertyName2 = "排序序号", PropertyValue2 = "自动生成" } // 留空，表示自动生成
-        //    };
+        private void InitializeSubcategoryPropertiesForEditing(CategoryTreeNode parentNode,ItemsControl categoryPropertiesDataGrid)
+        {
+            var subcategoryProperties = new List<CategoryPropertyEditModel>
+            {
+                new CategoryPropertyEditModel { PropertyName1 = "父分类ID", PropertyValue1 = parentNode.Id.ToString(), PropertyName2 = "名称", PropertyValue2 = "" },
+                new CategoryPropertyEditModel { PropertyName1 = "显示名称", PropertyValue1 = "", PropertyName2 = "排序序号", PropertyValue2 = "自动生成" } // 留空，表示自动生成
+            };
 
-        //    // 添加参考信息
-        //    subcategoryProperties.Add(new CategoryPropertyEditModel
-        //    {
-        //        PropertyName1 = "父级名称",
-        //        PropertyValue1 = parentNode.DisplayText,
-        //        PropertyName2 = "",
-        //        PropertyValue2 = ""
-        //    });
+            // 添加参考信息
+            subcategoryProperties.Add(new CategoryPropertyEditModel
+            {
+                PropertyName1 = "父级名称",
+                PropertyValue1 = parentNode.DisplayText,
+                PropertyName2 = "",
+                PropertyValue2 = ""
+            });
 
-        //    // 添加空行用于用户输入
-        //    subcategoryProperties.Add(new CategoryPropertyEditModel());
-        //    subcategoryProperties.Add(new CategoryPropertyEditModel());
+            // 添加空行用于用户输入
+            subcategoryProperties.Add(new CategoryPropertyEditModel());
+            subcategoryProperties.Add(new CategoryPropertyEditModel());
 
-        //    categoryPropertiesDataGrid.ItemsSource = subcategoryProperties;
-        //}
+            categoryPropertiesDataGrid.ItemsSource = subcategoryProperties;
+        }
 
         /// <summary>
         /// 初始化主分类属性编辑界面
         /// </summary>
-        //private void InitializeCategoryPropertiesForCategory(ItemsControl categoryPropertiesDataGrid)
-        //{
-        //    var categoryProperties = new List<CategoryPropertyEditModel>
-        //    {
-        //        new CategoryPropertyEditModel { PropertyName1 = "名称", PropertyValue1 = "", PropertyName2 = "显示名称", PropertyValue2 = "" },
-        //        new CategoryPropertyEditModel { PropertyName1 = "排序序号", PropertyValue1 = "自动生成", PropertyName2 = "", PropertyValue2 = "" } // 留空，表示自动生成
-        //    };
+        private void InitializeCategoryPropertiesForCategory(ItemsControl categoryPropertiesDataGrid)
+        {
+            var categoryProperties = new List<CategoryPropertyEditModel>
+            {
+                new CategoryPropertyEditModel { PropertyName1 = "名称", PropertyValue1 = "", PropertyName2 = "显示名称", PropertyValue2 = "" },
+                new CategoryPropertyEditModel { PropertyName1 = "排序序号", PropertyValue1 = "自动生成", PropertyName2 = "", PropertyValue2 = "" } // 留空，表示自动生成
+            };
 
-        //    // 添加空行用于用户输入
-        //    categoryProperties.Add(new CategoryPropertyEditModel());
-        //    categoryProperties.Add(new CategoryPropertyEditModel());
+            // 添加空行用于用户输入
+            categoryProperties.Add(new CategoryPropertyEditModel());
+            categoryProperties.Add(new CategoryPropertyEditModel());
 
-        //    categoryPropertiesDataGrid.ItemsSource = categoryProperties;
-        //}
+            categoryPropertiesDataGrid.ItemsSource = categoryProperties;
+        }
 
         /// <summary>
         /// 显示节点属性用于编辑
         /// </summary>
         /// <param name="node"></param>
-        //private void DisplayNodePropertiesForEditing(CategoryTreeNode node,ItemsControl categoryPropertiesDataGrid)
-        //{
-        //    try
-        //    {
-        //        var propertyRows = new List<CategoryPropertyEditModel>();
+        private void DisplayNodePropertiesForEditing(CategoryTreeNode node,ItemsControl categoryPropertiesDataGrid)
+        {
+            try
+            {
+                var propertyRows = new List<CategoryPropertyEditModel>();
 
-        //        if (node.Level == 0 && node.Data is CadCategory category)
-        //        {
-        //            // 主分类
-        //            propertyRows.Add(new CategoryPropertyEditModel
-        //            {
-        //                PropertyName1 = "ID",
-        //                PropertyValue1 = category.Id.ToString(),
-        //                PropertyName2 = "名称",
-        //                PropertyValue2 = category.Name
-        //            });
-        //            propertyRows.Add(new CategoryPropertyEditModel
-        //            {
-        //                PropertyName1 = "显示名称",
-        //                PropertyValue1 = category.DisplayName,
-        //                PropertyName2 = "排序序号",
-        //                PropertyValue2 = category.SortOrder.ToString()
-        //            });
-        //            propertyRows.Add(new CategoryPropertyEditModel
-        //            {
-        //                PropertyName1 = "子分类数",
-        //                PropertyValue1 = GetSubcategoryCount(category).ToString(),
-        //                PropertyName2 = "",
-        //                PropertyValue2 = ""
-        //            });
-        //        }
-        //        else if (node.Data is CadSubcategory subcategory)
-        //        {
-        //            // 子分类
-        //            propertyRows.Add(new CategoryPropertyEditModel
-        //            {
-        //                PropertyName1 = "ID",
-        //                PropertyValue1 = subcategory.Id.ToString(),
-        //                PropertyName2 = "父ID",
-        //                PropertyValue2 = subcategory.ParentId.ToString()
-        //            });
-        //            propertyRows.Add(new CategoryPropertyEditModel
-        //            {
-        //                PropertyName1 = "名称",
-        //                PropertyValue1 = subcategory.Name,
-        //                PropertyName2 = "显示名称",
-        //                PropertyValue2 = subcategory.DisplayName
-        //            });
-        //            propertyRows.Add(new CategoryPropertyEditModel
-        //            {
-        //                PropertyName1 = "排序序号",
-        //                PropertyValue1 = subcategory.SortOrder.ToString(),
-        //                PropertyName2 = "层级",
-        //                PropertyValue2 = subcategory.Level.ToString()
-        //            });
-        //            propertyRows.Add(new CategoryPropertyEditModel
-        //            {
-        //                PropertyName1 = "子分类数",
-        //                PropertyValue1 = subcategory.SubcategoryIds.Split(',').Length.ToString(),
-        //                PropertyName2 = "",
-        //                PropertyValue2 = ""
-        //            });
-        //        }
+                if (node.Level == 0 && node.Data is CadCategory category)
+                {
+                    // 主分类
+                    propertyRows.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "ID",
+                        PropertyValue1 = category.Id.ToString(),
+                        PropertyName2 = "名称",
+                        PropertyValue2 = category.Name
+                    });
+                    propertyRows.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "显示名称",
+                        PropertyValue1 = category.DisplayName,
+                        PropertyName2 = "排序序号",
+                        PropertyValue2 = category.SortOrder.ToString()
+                    });
+                    propertyRows.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "子分类数",
+                        PropertyValue1 = GetSubcategoryCount(category).ToString(),
+                        PropertyName2 = "",
+                        PropertyValue2 = ""
+                    });
+                }
+                else if (node.Data is CadSubcategory subcategory)
+                {
+                    // 子分类
+                    propertyRows.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "ID",
+                        PropertyValue1 = subcategory.Id.ToString(),
+                        PropertyName2 = "父ID",
+                        PropertyValue2 = subcategory.ParentId.ToString()
+                    });
+                    propertyRows.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "名称",
+                        PropertyValue1 = subcategory.Name,
+                        PropertyName2 = "显示名称",
+                        PropertyValue2 = subcategory.DisplayName
+                    });
+                    propertyRows.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "排序序号",
+                        PropertyValue1 = subcategory.SortOrder.ToString(),
+                        PropertyName2 = "层级",
+                        PropertyValue2 = subcategory.Level.ToString()
+                    });
+                    propertyRows.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "子分类数",
+                        PropertyValue1 = subcategory.SubcategoryIds.Split(',').Length.ToString(),
+                        PropertyName2 = "",
+                        PropertyValue2 = ""
+                    });
+                }
 
-        //        // 添加空行用于编辑
-        //        propertyRows.Add(new CategoryPropertyEditModel());
-        //        propertyRows.Add(new CategoryPropertyEditModel());
+                // 添加空行用于编辑
+                propertyRows.Add(new CategoryPropertyEditModel());
+                propertyRows.Add(new CategoryPropertyEditModel());
 
-        //        categoryPropertiesDataGrid.ItemsSource = propertyRows;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"显示节点属性失败: {ex.Message}");
-        //    }
-        //}
+                categoryPropertiesDataGrid.ItemsSource = propertyRows;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"显示节点属性失败: {ex.Message}");
+            }
+        }
 
         /// <summary>
         /// 获取分类数量
         /// </summary>
         /// <param name="category"></param>
         /// <returns></returns>
-        //private int GetSubcategoryCount(CadCategory category)
-        //{
-        //    if (string.IsNullOrEmpty(category.SubcategoryIds))
-        //        return 0;
+        private int GetSubcategoryCount(CadCategory category)
+        {
+            if (string.IsNullOrEmpty(category.SubcategoryIds))
+                return 0;
 
-        //    return category.SubcategoryIds.Split(',').Length;
-        //}
+            return category.SubcategoryIds.Split(',').Length;
+        }
 
         /// <summary>
         /// 确定分类层级

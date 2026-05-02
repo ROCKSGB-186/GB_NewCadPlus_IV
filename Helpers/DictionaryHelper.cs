@@ -48,9 +48,9 @@ namespace GB_NewCadPlus_IV.Helpers
         public static readonly Dictionary<string, string> AttributeSynonyms = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             // 材料类
-            { "阀体材料", "材质" },
-            { "阀体材质", "材质" },
-            { "材料", "材质" },
+            { "阀体材料", "材料" },
+            { "阀体材质", "材料" },
+            { "材质", "材料" },
 
             // 规格/型号
             { "规格型号", "规格" },
