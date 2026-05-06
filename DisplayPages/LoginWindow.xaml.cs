@@ -69,10 +69,10 @@ namespace GB_NewCadPlus_IV
             string selectedDb = "DM"; // 默认使用达梦
             try
             {
-                if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
-                    selectedDb = s.ToUpper().Trim();
-                else if (!string.IsNullOrWhiteSpace(VariableDictionary._databaseType))
-                    selectedDb = VariableDictionary._databaseType.ToUpper().Trim();
+                if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)// 尝试从 UI 读取数据库类型
+                    selectedDb = s.ToUpper().Trim();// 标准化为大写并去除空白
+                else if (!string.IsNullOrWhiteSpace(VariableDictionary._databaseType))// 如果 UI 没有选择但全局变量中有配置，则使用全局变量（例如从配置文件加载时）
+                    selectedDb = VariableDictionary._databaseType.ToUpper().Trim(); // 标准化为大写并去除空白
             }
             catch { /* 忽略读取失败 */ }
 
@@ -144,108 +144,209 @@ namespace GB_NewCadPlus_IV
             {
                 // 在切换到后台线程之前，先读取需要的 UI 值，避免后台线程直接访问 UI 控件引发跨线程异常
                 // 读取用户名和密码并做默认处理（在 UI 线程读取安全）
-                var uiUser = string.IsNullOrWhiteSpace(TxtUsername.Text) ? "SYSDBA" : TxtUsername.Text.Trim(); // 用户名（在后台使用）
-                var uiPwd = string.IsNullOrWhiteSpace(PwdBox.Password) ? "SYSDBA" : PwdBox.Password; // 密码（在后台使用）
+                //var uiUser = string.IsNullOrWhiteSpace(TxtUsername.Text) ? "SYSDBA" : TxtUsername.Text.Trim(); // 用户名（在后台使用）
+                //var uiPwd = string.IsNullOrWhiteSpace(PwdBox.Password) ? "SYSDBA" : PwdBox.Password; // 密码（在后台使用）
 
-                return await Task.Run(() =>
+
+                var uiUser = "SYSDBA" ; // 用户名（在后台使用）
+                var uiPwd = "675756SGBsgb" ; // 密码（在后台使用）
+
+                try
                 {
+                    // 使用在 UI 线程捕获的用户名/密码创建服务实例，避免直接访问控件
+                    // 根据当前选择的数据库类型决定使用 DM 或 MySQL 的 AuthService
+                    var selectedDb = VariableDictionary._databaseType ?? "DM";
                     try
                     {
-                        // 使用在 UI 线程捕获的用户名/密码创建服务实例，避免直接访问控件
-                        // 根据当前选择的数据库类型决定使用 DM 或 MySQL 的 AuthService
-                        var selectedDb = VariableDictionary._databaseType ?? "DM";
+                        if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
+                            selectedDb = s.ToUpper().Trim();
+                    }
+                    catch { }
+
+                    List<DepartmentModel> depts = null;
+                    if (selectedDb == "MYSQL")
+                    {
+                        // 使用 MySqlAuthService，并传入 UI 提供的用户名/密码（例如 sa）
+                        var mySvc = new MySqlAuthService(host, port.ToString(), uiUser, uiPwd);
                         try
                         {
-                            if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
-                                selectedDb = s.ToUpper().Trim();
+                            mySvc.EnsureAllTablesExist();
+                            try { mySvc.SyncDepartmentsFromCadCategories(); } catch (Exception exSync) { LogManager.Instance.LogInfo($"MySql SyncDepartmentsFromCadCategories 失败: {exSync.Message}"); }
+                            depts = mySvc.GetDepartmentsWithCounts();
                         }
-                        catch { }
-
-                        List<DepartmentModel> depts = null;
-                        if (selectedDb == "MYSQL")
+                        catch (Exception exMyAuth)
                         {
-                            // 使用 MySqlAuthService，并传入 UI 提供的用户名/密码（例如 sa）
-                            var mySvc = new MySqlAuthService(host, port.ToString(), uiUser, uiPwd);
-                            try
+                            LogManager.Instance.LogInfo($"使用 MySqlAuthService 读取部门失败 host={host}, port={port}, user={uiUser}: {exMyAuth}");
+                            throw;
+                        }
+                    }
+                    else
+                    {
+                        var svc = new DMAuthService(host, port.ToString(), uiUser, uiPwd);// 使用 DMAuthService，并传入 UI 提供的用户名/密码（例如 SYSDBA）
+
+                        svc.EnsureAllTablesExist();// 确保表存在（如果连接成功但表不存在会抛异常）
+                        try
+                        {
+                            svc.SyncDepartmentsFromCadCategories();// 尝试同步部门数据（如果 CAD_CATEGORIES 表存在但 DEPARTMENTS 表未正确同步可能会抛异常）
+                        }
+                        catch (Exception exSync)
+                        {
+                            LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories 失败: {exSync.Message}");
+                        }
+
+                        depts = svc.GetDepartmentsWithCounts();
+                    }
+
+                    LogManager.Instance.LogInfo($"读取到部门数量: {depts?.Count ?? 0}");
+                    LogManager.Instance.LogInfo($"读取到部门数量: {depts?.Count ?? 0}");
+                    // 记录获取到的部门数及其名称，便于排查为何 UI 未显示
+                    LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: retrieved departments count={depts?.Count ?? 0} from {host}:{port} user={uiUser}");
+                    // 仅记录数量，避免在此处使用匿名类型或可能的类型不一致导致编译问题
+                    LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: departments list exists={depts != null}, count={depts?.Count ?? 0}");
+
+                    // 将结果回到 UI 线程更新控件（直接使用 DepartmentModel 列表，避免匿名类型导致的问题）
+                    // 将结果回到 UI 线程更新控件
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (depts != null && depts.Count > 0)
+                        {
+                            // 绑定整个对象列表
+                            CmbDepartments.ItemsSource = depts;
+                            // 关键：必须与 DepartmentModel 的属性名一致，且与 XAML 中的 DisplayMemberPath 一致
+                            CmbDepartments.DisplayMemberPath = "DisplayName";
+                            CmbDepartments.SelectedValuePath = "Id";
+                            CmbDepartments.SelectedIndex = 0;
+                            LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: UI绑定完成，ItemsSourceCount={depts.Count}，ComboBoxItemsCount={CmbDepartments.Items.Count}，SelectedIndex={CmbDepartments.SelectedIndex}");
+
+                            if (CmbDepartments.SelectedItem is DepartmentModel selectedDept)
                             {
-                                mySvc.EnsureAllTablesExist();
-                                try { mySvc.SyncDepartmentsFromCadCategories(); } catch (Exception exSync) { LogManager.Instance.LogInfo($"MySql SyncDepartmentsFromCadCategories 失败: {exSync.Message}"); }
-                                depts = mySvc.GetDepartmentsWithCounts();
+                                LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: 当前选中部门 Id={selectedDept.Id}, Name={selectedDept.Name}, DisplayName={selectedDept.DisplayName}");
                             }
-                            catch (Exception exMyAuth)
+                            else
                             {
-                                LogManager.Instance.LogInfo($"使用 MySqlAuthService 读取部门失败 host={host}, port={port}, user={uiUser}: {exMyAuth}");
-                                throw;
+                                LogManager.Instance.LogInfo("TryLoadDepartmentsAsync: 当前 SelectedItem 不是 DepartmentModel 或为空。");
                             }
                         }
                         else
                         {
-                            var svc = new DMAuthService(host, port.ToString(), uiUser, uiPwd);
-
-                            svc.EnsureAllTablesExist();
-                            try
-                            {
-                                svc.SyncDepartmentsFromCadCategories();
-                            }
-                            catch (Exception exSync)
-                            {
-                                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories 失败: {exSync.Message}");
-                            }
-
-                            depts = svc.GetDepartmentsWithCounts();
-                        }
-
-                        LogManager.Instance.LogInfo($"读取到部门数量: {depts?.Count ?? 0}");
-                        LogManager.Instance.LogInfo($"读取到部门数量: {depts?.Count ?? 0}");
-                        // 记录获取到的部门数及其名称，便于排查为何 UI 未显示
-                        LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: retrieved departments count={depts?.Count ?? 0} from {host}:{port} user={uiUser}");
-                        // 仅记录数量，避免在此处使用匿名类型或可能的类型不一致导致编译问题
-                        LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: departments list exists={depts != null}, count={depts?.Count ?? 0}");
-
-                        // 将结果回到 UI 线程更新控件（直接使用 DepartmentModel 列表，避免匿名类型导致的问题）
-                        // 将结果回到 UI 线程更新控件
-                        Dispatcher.Invoke(() =>
-                        {
-                            if (depts != null && depts.Count > 0)
-                            {
-                                // 绑定整个对象列表
-                                CmbDepartments.ItemsSource = depts;
-                                // 关键：必须与 DepartmentModel 的属性名一致，且与 XAML 中的 DisplayMemberPath 一致
-                                CmbDepartments.DisplayMemberPath = "DisplayName";
-                                CmbDepartments.SelectedValuePath = "Id";
-                                CmbDepartments.SelectedIndex = 0;
-                                LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: UI绑定完成，ItemsSourceCount={depts.Count}，ComboBoxItemsCount={CmbDepartments.Items.Count}，SelectedIndex={CmbDepartments.SelectedIndex}");
-
-                                if (CmbDepartments.SelectedItem is DepartmentModel selectedDept)
-                                {
-                                    LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: 当前选中部门 Id={selectedDept.Id}, Name={selectedDept.Name}, DisplayName={selectedDept.DisplayName}");
-                                }
-                                else
-                                {
-                                    LogManager.Instance.LogInfo("TryLoadDepartmentsAsync: 当前 SelectedItem 不是 DepartmentModel 或为空。");
-                                }
-                            }
-                            else
-                            {
-                                CmbDepartments.ItemsSource = null;
-                                LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: UI绑定完成但无数据，ComboBoxItemsCount={CmbDepartments.Items.Count}");
-                                LogManager.Instance.LogInfo("警告：部门列表为空，请检查后台 CAD_CATEGORIES 数据是否已成功同步至 DEPARTMENTS。");
-                            }
-                        });
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        // 这里不能访问 TxtUsername.Text（可能导致跨线程异常），改用在外层捕获的 uiUser 变量记录日志
-                        LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync 失败 host={host}, port={port}, user={uiUser}: {ex}");
-                        Dispatcher.Invoke(() =>
-                        {
-                            TxtStatus.Text = "读取或初始化部门失败：" + ex.Message;
                             CmbDepartments.ItemsSource = null;
-                        });
-                        return false;
-                    }
-                });
+                            LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: UI绑定完成但无数据，ComboBoxItemsCount={CmbDepartments.Items.Count}");
+                            LogManager.Instance.LogInfo("警告：部门列表为空，请检查后台 CAD_CATEGORIES 数据是否已成功同步至 DEPARTMENTS。");
+                        }
+                    });
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    // 这里不能访问 TxtUsername.Text（可能导致跨线程异常），改用在外层捕获的 uiUser 变量记录日志
+                    LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync 失败 host={host}, port={port}, user={uiUser}: {ex}");
+                    Dispatcher.Invoke(() =>
+                    {
+                        TxtStatus.Text = "读取或初始化部门失败：" + ex.Message;
+                        CmbDepartments.ItemsSource = null;
+                    });
+                    return false;
+                }
+
+                //return await Task.Run(() =>
+                //{
+                //    try
+                //    {
+                //        // 使用在 UI 线程捕获的用户名/密码创建服务实例，避免直接访问控件
+                //        // 根据当前选择的数据库类型决定使用 DM 或 MySQL 的 AuthService
+                //        var selectedDb = VariableDictionary._databaseType ?? "DM";
+                //        try
+                //        {
+                //            if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
+                //                selectedDb = s.ToUpper().Trim();
+                //        }
+                //        catch { }
+
+                //        List<DepartmentModel> depts = null;
+                //        if (selectedDb == "MYSQL")
+                //        {
+                //            // 使用 MySqlAuthService，并传入 UI 提供的用户名/密码（例如 sa）
+                //            var mySvc = new MySqlAuthService(host, port.ToString(), uiUser, uiPwd);
+                //            try
+                //            {
+                //                mySvc.EnsureAllTablesExist();
+                //                try { mySvc.SyncDepartmentsFromCadCategories(); } catch (Exception exSync) { LogManager.Instance.LogInfo($"MySql SyncDepartmentsFromCadCategories 失败: {exSync.Message}"); }
+                //                depts = mySvc.GetDepartmentsWithCounts();
+                //            }
+                //            catch (Exception exMyAuth)
+                //            {
+                //                LogManager.Instance.LogInfo($"使用 MySqlAuthService 读取部门失败 host={host}, port={port}, user={uiUser}: {exMyAuth}");
+                //                throw;
+                //            }
+                //        }
+                //        else
+                //        {
+                //            var svc = new DMAuthService(host, port.ToString(), uiUser, uiPwd);// 使用 DMAuthService，并传入 UI 提供的用户名/密码（例如 SYSDBA）
+
+                //            svc.EnsureAllTablesExist();// 确保表存在（如果连接成功但表不存在会抛异常）
+                //            try
+                //            {
+                //                svc.SyncDepartmentsFromCadCategories();// 尝试同步部门数据（如果 CAD_CATEGORIES 表存在但 DEPARTMENTS 表未正确同步可能会抛异常）
+                //            }
+                //            catch (Exception exSync)
+                //            {
+                //                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories 失败: {exSync.Message}");
+                //            }
+
+                //            depts = svc.GetDepartmentsWithCounts();
+                //        }
+
+                //        LogManager.Instance.LogInfo($"读取到部门数量: {depts?.Count ?? 0}");
+                //        LogManager.Instance.LogInfo($"读取到部门数量: {depts?.Count ?? 0}");
+                //        // 记录获取到的部门数及其名称，便于排查为何 UI 未显示
+                //        LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: retrieved departments count={depts?.Count ?? 0} from {host}:{port} user={uiUser}");
+                //        // 仅记录数量，避免在此处使用匿名类型或可能的类型不一致导致编译问题
+                //        LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: departments list exists={depts != null}, count={depts?.Count ?? 0}");
+
+                //        // 将结果回到 UI 线程更新控件（直接使用 DepartmentModel 列表，避免匿名类型导致的问题）
+                //        // 将结果回到 UI 线程更新控件
+                //        Dispatcher.Invoke(() =>
+                //        {
+                //            if (depts != null && depts.Count > 0)
+                //            {
+                //                // 绑定整个对象列表
+                //                CmbDepartments.ItemsSource = depts;
+                //                // 关键：必须与 DepartmentModel 的属性名一致，且与 XAML 中的 DisplayMemberPath 一致
+                //                CmbDepartments.DisplayMemberPath = "DisplayName";
+                //                CmbDepartments.SelectedValuePath = "Id";
+                //                CmbDepartments.SelectedIndex = 0;
+                //                LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: UI绑定完成，ItemsSourceCount={depts.Count}，ComboBoxItemsCount={CmbDepartments.Items.Count}，SelectedIndex={CmbDepartments.SelectedIndex}");
+
+                //                if (CmbDepartments.SelectedItem is DepartmentModel selectedDept)
+                //                {
+                //                    LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: 当前选中部门 Id={selectedDept.Id}, Name={selectedDept.Name}, DisplayName={selectedDept.DisplayName}");
+                //                }
+                //                else
+                //                {
+                //                    LogManager.Instance.LogInfo("TryLoadDepartmentsAsync: 当前 SelectedItem 不是 DepartmentModel 或为空。");
+                //                }
+                //            }
+                //            else
+                //            {
+                //                CmbDepartments.ItemsSource = null;
+                //                LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: UI绑定完成但无数据，ComboBoxItemsCount={CmbDepartments.Items.Count}");
+                //                LogManager.Instance.LogInfo("警告：部门列表为空，请检查后台 CAD_CATEGORIES 数据是否已成功同步至 DEPARTMENTS。");
+                //            }
+                //        });
+                //        return true;
+                //    }
+                //    catch (Exception ex)
+                //    {
+                //        // 这里不能访问 TxtUsername.Text（可能导致跨线程异常），改用在外层捕获的 uiUser 变量记录日志
+                //        LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync 失败 host={host}, port={port}, user={uiUser}: {ex}");
+                //        Dispatcher.Invoke(() =>
+                //        {
+                //            TxtStatus.Text = "读取或初始化部门失败：" + ex.Message;
+                //            CmbDepartments.ItemsSource = null;
+                //        });
+                //        return false;
+                //    }
+                //});
             }
             catch (Exception ex)
             {
@@ -762,8 +863,8 @@ namespace GB_NewCadPlus_IV
             // 禁用按钮，避免重复点击
             BtnTestServer测试服务器.IsEnabled = false;
             TxtStatus.Text = "正在测试服务器连接并读取数据库架构...";
-            var user = "";
-            var pwd = "";
+            //var user = "";
+            //var pwd = "";
             try
             {
                 // 根据所选数据库类型执行不同测试
@@ -825,10 +926,10 @@ namespace GB_NewCadPlus_IV
                     {
                         TxtServerIP.Text.Trim(), // 服务器地址
                         TxtServerPort.Text.Trim(), // 服务器端口
-                        TxtUsername.Text.Trim(), // 用户名
-                        PwdBox.Password.Trim() // 密码
-                        //"SYSDBA",
-                        //"675756SGBsgb"
+                        //TxtUsername.Text.Trim(), // 用户名
+                        //PwdBox.Password.Trim() // 密码
+                        "SYSDBA",
+                        "675756SGBsgb"
                     };
                     
                     // 调用 DMDatabaseReaderMethod 方法

@@ -346,13 +346,15 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 if (DateTime.Now < setDate)
                 {
                     LogManager.Instance.LogInfo("\n开始显示主窗体...");
-
+                    //打开登录窗口
                     var login = new LoginWindow();
                     if (login.ShowDialog() != true)
                     {
                         LogManager.Instance.LogInfo("\n登录窗口取消或关闭。");
                         return;
                     }
+
+                    //WpfMainWindow.wpfMainWindowsIsOpenClose = true;
 
                     if (Wpf_Cad_PaletteSet is null)
                     {
@@ -363,6 +365,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             Wpf_Cad_PaletteSet.MinimumSize = new System.Drawing.Size(350, 800);//初始化窗体容器最小的尺寸
 
                             var wpfWindows = new WpfMainWindow();//初始化这个图库管理窗体；
+
+                            // 如果登录窗口已经创建了成功的数据库连接，直接注入到主窗体中，避免其 Loaded 事件再次触发登录弹窗
+                            if (login.CreatedDatabaseManager != null)
+                            {
+                                wpfWindows.SetInitialDatabase(login.CreatedDatabaseManager);
+                            }
+
                             var host = new ElementHost()//初始化子面板
                             {
                                 AutoSize = true,//设置子面板自动大小

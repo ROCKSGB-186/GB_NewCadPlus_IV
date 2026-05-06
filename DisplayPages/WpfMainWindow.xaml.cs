@@ -162,7 +162,10 @@ namespace GB_NewCadPlus_IV
         /// 层数据源
         /// </summary>
         private ObservableCollection<LayerInfo>? _layerData;
-
+        /// <summary>
+        /// 标记 WpfMainWindow 是否已打开或关闭
+        /// </summary>
+        public static bool wpfMainWindowsIsOpenClose = false;
         #endregion
 
         /// <summary>
@@ -222,6 +225,7 @@ namespace GB_NewCadPlus_IV
             LogManager.Instance.LogInfo("WPF实例已注册到UnifiedUIManager"); // 调试输出，确认注册成功
             NewTjLayer();//初始化图层
             Loaded += WpfMainWindow_Loaded;//加载按钮
+            //wpfMainWindowsIsOpenClose = true;
             // 初始化预览图片缓存路径
             _previewCachePath = Path.Combine(AppPath, "PreviewCache");
             //_fileManager = new FileManager(_databaseManager);
@@ -324,6 +328,60 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         /// <param Name="sender"></param>
         /// <param Name="e"></param>
+        //private async void WpfMainWindow_Loaded(object sender, RoutedEventArgs e)
+        //{
+        //    try
+        //    {
+        //        // 尝试从 login_config 或界面同步服务器设置
+        //        LoadServerConfigFromLogin();
+        //        // 加载绘图配置
+        //        LoadDrawingConfig();
+        //        // 尝试连接数据库（若失败会弹出登录窗口让用户修正）
+        //        // 恢复数据库连接与管理器初始化逻辑，确保_categoryManager初始化前_databaseManager已可用
+        //        bool connected = await EnsureDatabaseConnectedOrShowLoginAsync();
+        //        if (!connected)
+        //        {
+        //            _useDatabaseMode = false;
+        //            MessageBox.Show("未能连接到数据库，已进入离线模式。部分功能将不可用。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+        //        }
+        //        else
+        //        {
+        //            _useDatabaseMode = true;
+        //            // 初始化管理器（如果尚未初始化）
+        //            if (_databaseManager != null)
+        //            {
+        //                _fileManager = new FileManager(_databaseManager);
+        //                _categoryManager = new CategoryManager(_databaseManager);
+        //            }
+        //            // 后续数据库相关初始化（例如加载分类树）
+        //            ReinitializeDatabase();
+        //            // 根据当前登录用户决定是否显示管理员/部门模块
+        //            UpdateAdminTabsVisibility();
+        //        }
+        //        // 继续其它 UI 初始化（保持原有逻辑）
+        //        AddContextMenuToTreeView(CategoryTreeView);
+        //        PropertiesDataGrid = FindVisualChild<DataGrid>(this, "PropertiesDataGrid");
+        //        // 初始化图层字典数据源（等待 CategoryNames 可用后绑定列的 ItemsSource）
+        //        await InitializeLayerDictionaryDataGridSource();
+        //        Loaded += DepartmentAdminControl_Loaded;//注册加载完成事件
+        //        //Load();
+        //        // 替换原有的版本号显示代码，修复 CS0120 错误
+        //        //TextBox_PluginVersion.Text = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}" +
+        //        //    $"\n{System.Reflection.Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}";
+        //        //显示版本号
+        //        TextBox_PluginVersion.Text = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogWarning($"WpfMainWindow_Loaded 异常: {ex.Message}");
+        //    }
+        //}
+
+
+
+        /// <summary>
+        /// 窗口初始化时运行加载项（细化异常处理与离线模式兼容）
+        /// </summary>
         private async void WpfMainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             try
@@ -332,58 +390,77 @@ namespace GB_NewCadPlus_IV
                 LoadServerConfigFromLogin();
                 // 加载绘图配置
                 LoadDrawingConfig();
-                // 尝试连接数据库（若失败会弹出登录窗口让用户修正）
-                //bool connected = await EnsureDatabaseConnectedOrShowLoginAsync();
-                //if (!connected)
-                //{
-                //    _useDatabaseMode = false;
-                //    MessageBox.Show("未能连接到数据库，已进入离线模式。部分功能将不可用。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                //}
-                //else
-                //{
-                //    _useDatabaseMode = true;
-                //    // 初始化管理器（如果尚未初始化）
-                //    if (_databaseManager != null)
-                //    {
-                //        _fileManager = new FileManager(_databaseManager);
-                //        _categoryManager = new CategoryManager(_databaseManager);
-                //    }
-                //    // 后续数据库相关初始化（例如加载分类树）
-                //    ReinitializeDatabase();
-                //    // 根据当前登录用户决定是否显示管理员/部门模块
-                //    UpdateAdminTabsVisibility();
-                //}
-                //_useDatabaseMode = true;
-                // 初始化管理器（如果尚未初始化）
-                if (_databaseManager != null)
+
+                // 尝试连接数据库（已修正：避免重复弹窗）
+                bool connected = false;
+                try
                 {
+                    // 核心修复：如果已经在 ffff 中注入了管理器，则直接信任并使用
+                    if (_databaseManager != null && _databaseManager.IsDatabaseAvailable)
+                    {
+                        connected = true;
+                        // 确保静态打开位被锁定，防止其它逻辑误触发
+                        wpfMainWindowsIsOpenClose = true;
+                    }
+                    else
+                    {
+                        // 只有在完全没有连接且未锁定状态时，才尝试一次“静默”重连
+                        // 注意：这里我们不再等待可能弹窗的 Ensure... 方法，而是调用静默检测
+                        //connected = await EnsureDatabaseConnectedSilentAsync();
+                        connected = await EnsureDatabaseConnectedSilentAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogWarning($"主窗口加载连接检测异常: {ex.Message}");
+                    connected = false;
+                }
+
+                if (connected && _databaseManager != null)
+                {
+                    _useDatabaseMode = true;
                     _fileManager = new FileManager(_databaseManager);
                     _categoryManager = new CategoryManager(_databaseManager);
+
+                    try { ReinitializeDatabase(); } catch { }
+                    try { UpdateAdminTabsVisibility(); } catch { }
                 }
-                // 后续数据库相关初始化（例如加载分类树）
-                ReinitializeDatabase();
+                else
+                {
+                    _useDatabaseMode = false;
+                    LogManager.Instance.LogInfo("主窗口启动：由于没有可用数据库连接或外部未注入成功，当前处于离线模式。");
+                }
+
                 // 根据当前登录用户决定是否显示管理员/部门模块
-                UpdateAdminTabsVisibility();
+                try
+                {
+                    UpdateAdminTabsVisibility();
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogWarning($"管理员标签页初始化异常: {ex.Message}");
+                }
+
+
                 // 继续其它 UI 初始化（保持原有逻辑）
                 AddContextMenuToTreeView(CategoryTreeView);
                 PropertiesDataGrid = FindVisualChild<DataGrid>(this, "PropertiesDataGrid");
                 // 初始化图层字典数据源（等待 CategoryNames 可用后绑定列的 ItemsSource）
                 await InitializeLayerDictionaryDataGridSource();
-                Loaded += DepartmentAdminControl_Loaded;//注册加载完成事件
-                                                        //Load();
-                                                        // 替换原有的版本号显示代码，修复 CS0120 错误
-                                                        //TextBox_PluginVersion.Text = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}" +
-                                                        //    $"\n{System.Reflection.Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}";
-                                                        //显示版本号
+                Loaded += DepartmentAdminControl_Loaded; //注册加载完成事件
+
+                // 显示版本号
                 TextBox_PluginVersion.Text = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
-
-
             }
             catch (Exception ex)
             {
+                // 捕获整个加载流程的异常，避免界面崩溃
                 LogManager.Instance.LogWarning($"WpfMainWindow_Loaded 异常: {ex.Message}");
+                MessageBox.Show($"主界面加载异常: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+
         }
+
 
         /// <summary>
         /// 根据当前用户（VariableDictionary._userName 或界面用户名）显示/隐藏“管理员模块”与“部门\\人员模块”
@@ -397,7 +474,7 @@ namespace GB_NewCadPlus_IV
                 // 优先获取原始用户名（保留大小写以便后续数据库查询），再构造小写用于简单白名单判断
                 var userNameRaw = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
                 var userName = userNameRaw.ToLowerInvariant();
-                // 先做保守的白名单匹配（避免在数据库不可用时放宽权限）
+                // 白名单匹配：系统设置的3个常规管理员和达梦/MySQL的两个超级管理员
                 bool isAdmin = userName == "sa" || userName == "admin" || userName == "root" || userName == "sysdba";
 
                 // 若白名单未命中且数据库可用，则以 USERS 表中的 ROLE 字段为准进行角色判定（更灵活且可由管理员在 DB 中维护）
@@ -801,6 +878,70 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
+        /// 供外部（如 Command 命令入口）在创建窗口后直接注入已登录成功的数据库管理器，
+        /// 从而避免 WpfMainWindow_Loaded 内部再次弹出登录窗口。
+        /// </summary>
+        /// <param name="db">已初始化的数据库管理器实例</param>
+        public void SetInitialDatabase(DatabaseManager db)
+        {
+            if (db != null && db.IsDatabaseAvailable)
+            {
+                _databaseManager = db;
+                _useDatabaseMode = true;
+                // 核心修复：注入时立即锁定状态位，防止 WpfMainWindow_Loaded 内部逻辑再次尝试连接或弹窗
+                wpfMainWindowsIsOpenClose = true;
+
+                // 强制同步 UI 控件显示（确保在 UI 线程）
+                if (System.Windows.Application.Current != null)
+                {
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (TextBox_Set_ServiceIP != null) TextBox_Set_ServiceIP.Text = VariableDictionary._serverIP;
+                        if (TextBox_Set_ServicePort != null) TextBox_Set_ServicePort.Text = VariableDictionary._serverPort.ToString();
+                    });
+                }
+                LogManager.Instance.LogInfo("WpfMainWindow: 已从外部注入数据库管理器并锁定联机状态。");
+            }
+        }
+
+        // 恢复静态打开位的同步检测
+        private async Task<bool> EnsureDatabaseConnectedSilentAsync()
+        {
+            if (_databaseManager != null && _databaseManager.IsDatabaseAvailable) return true;
+
+            try
+            {
+                // 适配双数据库模式：如果当前未传入用户/密码，则根据类型给予超级管理员凭据进行探测
+                var dbtype = (VariableDictionary._databaseType ?? "DM").ToUpper().Trim();
+
+                var defaultUser = dbtype == "MYSQL" ? "root" : "SYSDBA";
+                var defaultPwd = dbtype == "MYSQL" ? "123456" : "675756SGBsgb";
+                var defaultPort = dbtype == "MYSQL" ? 3308 : 5236; // 依据说明 MySQL 为 3308
+
+                var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._userName) ? defaultUser : VariableDictionary._userName.Trim();
+                var dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? defaultPwd : VariableDictionary._passWord;
+                var dbPort = VariableDictionary._serverPort > 0 ? VariableDictionary._serverPort : defaultPort;
+                var schemaName = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? "CAD_SW_LIBRARY" : VariableDictionary._dataBaseName.Trim();
+
+                if (string.IsNullOrEmpty(VariableDictionary._serverIP)) return false;
+
+                bool tcpOk = await Task.Run(() => LoginWindow.TestNetworkConnection(VariableDictionary._serverIP, dbPort));
+                if (tcpOk)
+                {
+                    string conn = $"Server={VariableDictionary._serverIP};Port={dbPort};Schema={schemaName};User Id={dbUser};Password={dbPassword};";
+                    var db = new DatabaseManager(conn);
+                    if (db.IsDatabaseAvailable)
+                    {
+                        _databaseManager = db;
+                        return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
         /// 尝试使用当前界面/配置连接数据库；失败时弹出 LoginWindow 让用户登录并返回 login.CreatedDatabaseManager（若创建成功）。
         /// 成功时设置 _databaseManager 并返回 true；失败返回 false。
         /// </summary>
@@ -808,34 +949,46 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                // 1. 如果已存在可用连接，直接复用（外部注入会在此处命中并直接返回成功）
                 if (_databaseManager != null && _databaseManager.IsDatabaseAvailable)
                 {
-                    LogManager.Instance.LogInfo("EnsureDatabaseConnectedOrShowLoginAsync: 当前 DatabaseManager 已可用，直接复用现有连接。");
+                    LogManager.Instance.LogInfo("EnsureDatabaseConnectedOrShowLoginAsync: 已有活动连接，静默返回成功。");
                     return true;
                 }
+
+                // 2. 如果已经标记为打开或处理中，即便没有连接也不允许弹窗，防止重复触发
+                // 追加检测：如果当前处于明确的“离线模式”标志，系统将屏蔽由于 UI 刷新组件链式触发的自动弹窗行为。
+                if (wpfMainWindowsIsOpenClose)
+                {
+                    LogManager.Instance.LogInfo("EnsureDatabaseConnectedOrShowLoginAsync: 状态位已锁定（主窗体已被调用），禁止进行二次自动化弹窗。");
+                    return false;
+                }
+
+                // 3. 尝试从全局配置同步到界面控件
+                if (TextBox_Set_ServiceIP != null && string.IsNullOrWhiteSpace(TextBox_Set_ServiceIP.Text))
+                    TextBox_Set_ServiceIP.Text = VariableDictionary._serverIP;
+                if (TextBox_Set_ServicePort != null && (string.IsNullOrWhiteSpace(TextBox_Set_ServicePort.Text) || TextBox_Set_ServicePort.Text == "0"))
+                    TextBox_Set_ServicePort.Text = VariableDictionary._serverPort > 0 ? VariableDictionary._serverPort.ToString() : "5236";
 
                 // 读取当前界面配置（优先）
                 VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim();
                 if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
                 {
-                    // 如果界面无值，尝试从 login_config 中加载（LoadServerConfigFromLogin 已被调用）
-                    VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim() ?? "127.0.0.1";
-
+                    // 如果界面无值，尝试从全局变量读取
+                    VariableDictionary._serverIP = !string.IsNullOrWhiteSpace(VariableDictionary._serverIP) ? VariableDictionary._serverIP : "127.0.0.1";
                 }
-                // 端口：达梦默认 5236，而不是 MySQL 的 3306
+                // 端口：优先使用界面值
                 VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var p) ? p : 5236;
 
-                // 用户名与密码优先沿用登录成功后的全局值，避免退回到旧的 root/root MySQL 默认值
+                // 用户名与密码优先沿用全局值
                 var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._userName) ? "SYSDBA" : VariableDictionary._userName.Trim();
-                var dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? "SYSDBA" : VariableDictionary._passWord;
+                var dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? "675756SGBsgb" : VariableDictionary._passWord;
                 var schemaName = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? "CAD_SW_LIBRARY" : VariableDictionary._dataBaseName.Trim();
 
-
-                // 快速 TCP 检测
+                // 3. 快速 TCP 检测尝试自动连接
                 bool tcpOk = await Task.Run(() => LoginWindow.TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._serverPort));
                 if (tcpOk)
                 {
-                    // 尝试创建 DatabaseManager（使用当前登录成功后的达梦参数）
                     string conn = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Schema={schemaName};User Id={dbUser};Password={dbPassword};";
                     try
                     {
@@ -844,69 +997,45 @@ namespace GB_NewCadPlus_IV
                         {
                             _databaseManager = db;
                             _useDatabaseMode = true;
-                            LogManager.Instance.LogInfo($"直接连接数据库成功：{VariableDictionary._serverIP}:{VariableDictionary._serverPort}，schema={schemaName}，user={dbUser}");
+                            LogManager.Instance.LogInfo($"静默连接成功：{VariableDictionary._serverIP}:{VariableDictionary._serverPort}");
                             return true;
                         }
-
-                        LogManager.Instance.LogInfo($"直接创建 DatabaseManager 失败：server={VariableDictionary._serverIP}, port={VariableDictionary._serverPort}, schema={schemaName}, user={dbUser}");
                     }
                     catch (Exception ex)
                     {
-                        LogManager.Instance.LogInfo($"直接构造 DatabaseManager 失败: {ex.Message}");
+                        LogManager.Instance.LogInfo($"静默构造 DatabaseManager 失败: {ex.Message}");
+                    }
+                }
+
+                // 4. 【核心修复】如果自动连接失败且尚未正式打开窗口（或是由需要交互的动作触发），才弹出登录窗
+                if (!wpfMainWindowsIsOpenClose)
+                {
+                    LogManager.Instance.LogInfo("无法自动连接数据库，弹出登录窗口。");
+                    var login = new LoginWindow();
+                    try
+                    {
+                        var owner = Window.GetWindow(this);
+                        if (owner != null) login.Owner = owner;
+                    }
+                    catch { /* 忽略 */ }
+
+                    if (login.ShowDialog() == true)
+                    {
+                        if (login.CreatedDatabaseManager != null && login.CreatedDatabaseManager.IsDatabaseAvailable)
+                        {
+                            _databaseManager = login.CreatedDatabaseManager;
+                            _useDatabaseMode = true;
+                            // 登录成功后回写界面
+                            LoadServerConfigFromLogin();
+                            return true;
+                        }
                     }
                 }
                 else
                 {
-                    LogManager.Instance.LogInfo("TCP 层不可达，准备弹出登录窗口让用户更新配置。");
+                    LogManager.Instance.LogInfo("由于主窗口已在处理流程中，跳过重复的登录弹窗。");
                 }
 
-                // 弹出登录窗口（模态），由 LoginWindow 尝试创建 DatabaseManager
-                var login = new LoginWindow();
-                try
-                {
-                    var owner = Window.GetWindow(this);
-                    if (owner != null) login.Owner = owner;
-                }
-                catch { /* 忽略 */ }
-
-                var dlg = login.ShowDialog();
-                if (dlg == true)
-                {
-                    // 如果 LoginWindow 创建了 DatabaseManager，直接使用
-                    if (login.CreatedDatabaseManager != null && login.CreatedDatabaseManager.IsDatabaseAvailable)
-                    {
-                        _databaseManager = login.CreatedDatabaseManager;
-                        _useDatabaseMode = true;
-                        LogManager.Instance.LogInfo("使用 LoginWindow 返回的 DatabaseManager 成功连接数据库。");
-                        return true;
-                    }
-
-                    // 否则尝试使用登录窗口保存的界面值重试一次（LoadServerConfigFromLogin 会把配置同步到界面）
-                    LoadServerConfigFromLogin();
-                    VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim() ?? VariableDictionary._serverIP;
-                    VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var pp) ? pp : VariableDictionary._serverPort;
-                    dbUser = string.IsNullOrWhiteSpace(VariableDictionary._userName) ? dbUser : VariableDictionary._userName.Trim();
-                    dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? dbPassword : VariableDictionary._passWord;
-                    schemaName = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? schemaName : VariableDictionary._dataBaseName.Trim();
-                    string conn2 = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Schema={schemaName};User Id={dbUser};Password={dbPassword};";
-                    try
-                    {
-                        var db2 = new DatabaseManager(conn2);
-                        if (db2.IsDatabaseAvailable)
-                        {
-                            _databaseManager = db2;
-                            _useDatabaseMode = true;
-                            LogManager.Instance.LogInfo($"使用登录后配置创建 DatabaseManager 成功：server={VariableDictionary._serverIP}, port={VariableDictionary._serverPort}, schema={schemaName}, user={dbUser}");
-                            return true;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogManager.Instance.LogInfo($"使用登录后配置创建 DatabaseManager 失败: {ex.Message}");
-                    }
-                }
-
-                // 所有尝试均失败
                 return false;
             }
             catch (Exception ex)
@@ -3033,7 +3162,7 @@ namespace GB_NewCadPlus_IV
                                     var buttonInfo = buttonInfoList[i + j];//按钮信息
                                     string buttonName = buttonInfo.Item1;//按钮名称
                                     string fullPath = buttonInfo.Item2;//完整文件路径
-                                    //string buttonName = graphic.DisplayName;
+                                                                       //string buttonName = graphic.DisplayName;
                                     if (!string.IsNullOrWhiteSpace(buttonName))
                                     {
                                         int lastUnderscore = buttonName.LastIndexOf('_');
@@ -10520,7 +10649,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 string currentUser = VariableDictionary._userName ?? ""; // 当前登录用户名
-                // 如果是管理员用户，直接加载该管理员的个人数据（sa/root/admin）
+                                                                         // 如果是管理员用户，直接加载该管理员的个人数据（sa/root/admin）
                 if (IsAdminUser(currentUser))
                 {
                     var list = await _databaseManager.GetLayerDictionaryByUsernameAsync(currentUser).ConfigureAwait(false); // 获取数据
@@ -11683,7 +11812,7 @@ namespace GB_NewCadPlus_IV
         }
         #endregion
 
-        
+
         #region 部门与人员管理相关代码
         /// <summary>
         /// 加载完成
@@ -12563,7 +12692,7 @@ namespace GB_NewCadPlus_IV
             }
 
             BuildDynamicCalcGrids(sections);// 根据分段构建动态页面
-            // 导出总 CSV（如果需要）
+                                            // 导出总 CSV（如果需要）
             if (exportCsv)
             {
                 string csvPath = ExportSectionsToMasterCsv(sections);// 导出总 CSV
@@ -13233,7 +13362,7 @@ namespace GB_NewCadPlus_IV
         /// 
         /// </summary>
         private readonly Dictionary<string, double> _calcCsvLastKnownInputValues =
-    new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
 
         /// <summary>
@@ -14717,7 +14846,7 @@ namespace GB_NewCadPlus_IV
 
         #endregion
 
-      
+
         #region 计算表插入到图纸空间中的相关代码
 
 

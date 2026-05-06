@@ -1,4 +1,6 @@
 using Dm; // 达梦驱动命名空间
+using GB_NewCadPlus_IV.DMDatabaseReader;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -6,7 +8,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using GB_NewCadPlus_IV.DMDatabaseReader;
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
 {
@@ -104,17 +105,18 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         private string ResolvePreferredTableName(DmConnection conn, string tableName, string preferredOwner = null)
         {
-            var normalizedTableName = (tableName ?? string.Empty).Trim().ToUpperInvariant();
-            var candidates = new List<Tuple<string, string, int>>();
+            var normalizedTableName = (tableName ?? string.Empty).Trim().ToUpperInvariant(); // 达梦数据库默认大写，且不区分大小写，但为了保险起见，统一转换为大写进行比较
+            var candidates = new List<Tuple<string, string, int>>();//候选列表：Owner, QualifiedTableName, RowCount
 
             // 先把当前 Schema 下的同名表加入候选。
             using (var cmd = conn.CreateCommand())
             {
-                cmd.CommandText = "SELECT COUNT(1) FROM USER_TABLES WHERE TABLE_NAME = :t";
-                AddParam(cmd, "t", normalizedTableName);
-                var existsInCurrentSchema = Convert.ToInt32(cmd.ExecuteScalar() ?? 0) > 0;
-                if (existsInCurrentSchema)
+                cmd.CommandText = "SELECT COUNT(1) FROM USER_TABLES WHERE TABLE_NAME = :t";// 直接查询 USER_TABLES 以避免权限问题导致的 ALL_TABLES 无法访问
+                AddParam(cmd, "t", normalizedTableName); // 注意：达梦数据库的 USER_TABLES 视图只包含当前 Schema 的表，因此这里不需要再加 OWNER 条件了
+                var existsInCurrentSchema = Convert.ToInt32(cmd.ExecuteScalar() ?? 0) > 0; // 先确认当前 Schema 是否存在同名表，避免后续查询行数时因表不存在而抛异常
+                if (existsInCurrentSchema) // 如果当前 Schema 下存在同名表，则尝试获取行数并加入候选列表；如果不存在，则不加入，直接等待后续 ALL_TABLES 的结果
                 {
+                    // 注意：这里直接使用 normalizedTableName 作为 QualifiedTableName，因为在当前 Schema 下访问时不需要 OWNER 前缀，且达梦数据库默认不区分大小写，所以不需要加双引号保护。
                     candidates.Add(Tuple.Create(string.Empty, normalizedTableName, TryGetTableRowCount(conn, normalizedTableName)));
                 }
             }
@@ -122,20 +124,23 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             // 再从 ALL_TABLES 中查找其它 Schema 的同名表。
             try
             {
-                using (var cmd = conn.CreateCommand())
+                using (var cmd = conn.CreateCommand()) // 注意：这里不加 OWNER 条件，直接查询所有同名表，后续在 C# 端进行过滤和优先级判断，以避免权限问题导致的查询失败，同时也能兼容用户在不同 Schema 下创建同名表的情况。
                 {
+                    // 注意：达梦数据库的 ALL_TABLES 视图包含了所有 Schema 的表信息，因此这里直接查询 TABLE_NAME 即可，后续在 C# 端进行 OWNER 的过滤和优先级判断。
                     cmd.CommandText = "SELECT OWNER FROM ALL_TABLES WHERE TABLE_NAME = :t ORDER BY OWNER";
-                    AddParam(cmd, "t", normalizedTableName);
-                    using (var reader = cmd.ExecuteReader())
+                    AddParam(cmd, "t", normalizedTableName); // 注意：达梦数据库的 ALL_TABLES 视图中的 TABLE_NAME 字段默认是大写的，因此这里直接使用 normalizedTableName 进行比较，以避免大小写不一致导致的匹配失败。
+                    using (var reader = cmd.ExecuteReader()) // 直接读取 OWNER 列，后续在 C# 端构建完整的 QualifiedTableName 并进行优先级判断，以避免权限问题导致的查询失败，同时也能兼容用户在不同 Schema 下创建同名表的情况。
                     {
-                        while (reader.Read())
+                        while (reader.Read())// 注意：这里直接使用 OWNER 列的值来构建 QualifiedTableName，因为在 ALL_TABLES 视图中 OWNER 列已经包含了表所属的 Schema 信息，后续在 C# 端进行优先级判断时也会使用这个 OWNER 值来判断是否匹配首选 Schema。
                         {
+                            // 注意：这里直接使用 OWNER 列的值来构建 QualifiedTableName，因为在 ALL_TABLES 视图中 OWNER 列已经包含了表所属的 Schema 信息，后续在 C# 端进行优先级判断时也会使用这个 OWNER 值来判断是否匹配首选 Schema。
                             var owner = reader.IsDBNull(0) ? string.Empty : Convert.ToString(reader.GetValue(0));
+                            // 注意：达梦数据库的 ALL_TABLES 视图中的 OWNER 列默认是大写的，因此这里直接使用 reader.GetString(0) 来获取 OWNER 的值，并且不需要再进行 ToUpper 操作了，因为之前在查询时已经使用 normalizedTableName 进行了大写比较，确保了匹配的一致性。
                             if (string.IsNullOrWhiteSpace(owner))
                             {
                                 continue;
                             }
-
+                            // 注意：这里直接使用 normalizedTableName 作为 QualifiedTableName，因为在访问时不需要 OWNER 前缀，且达梦数据库默认不区分大小写，所以不需要加双引号保护。同时，在后续的优先级判断中会使用 OWNER 来判断是否匹配首选 Schema。
                             var qualifiedName = owner + "." + normalizedTableName;
                             if (candidates.Any(c => string.Equals(c.Item2, qualifiedName, StringComparison.OrdinalIgnoreCase)))
                             {
@@ -149,24 +154,26 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
             catch (Exception ex)
             {
+                // 注意：这里捕获所有异常并记录日志，而不是让异常冒泡中断流程，因为在某些环境下用户可能没有权限访问 ALL_TABLES 视图，如果直接抛异常会导致整个功能无法使用。通过捕获异常并记录日志，我们可以在没有 ALL_TABLES 访问权限的环境下仍然正常工作，只不过无法优先选择有数据的表了。
                 LogManager.Instance.LogInfo($"ResolvePreferredTableName: 查询 ALL_TABLES 失败，table={normalizedTableName}，{ex.Message}");
             }
-
+            // 注意：这里不直接抛异常，而是继续使用当前 Schema 下的表（如果存在）或者后续 ALL_TABLES 查询到的表（如果有）进行优先级判断和选择，以确保在没有 ALL_TABLES 访问权限的环境下仍然能够正常工作。
             if (candidates.Count == 0)
             {
+                // 既然 ALL_TABLES 无法访问或者没有找到任何同名表，那么我们就退回到直接使用默认表名的方式，虽然可能会因为权限问题导致后续访问失败，但至少不会因为找不到表而抛异常中断整个流程。
                 LogManager.Instance.LogInfo($"ResolvePreferredTableName: 未找到 {normalizedTableName}，将直接使用默认表名。\n");
-                return normalizedTableName;
+                return normalizedTableName;// 直接返回原始表名，后续访问时如果权限不足导致找不到表会自然抛异常，这样至少不会因为找不到表而抛异常中断整个流程。
             }
 
             // 先优先使用指定 Owner 且有数据的表。
             if (!string.IsNullOrWhiteSpace(preferredOwner))
             {
                 var preferred = candidates.FirstOrDefault(c =>
-                    string.Equals(c.Item1, preferredOwner, StringComparison.OrdinalIgnoreCase) && c.Item3 > 0);
+                    string.Equals(c.Item1, preferredOwner, StringComparison.OrdinalIgnoreCase) && c.Item3 > 0);// 注意：这里直接使用 OWNER 列的值来判断是否匹配首选 Schema，因为在 ALL_TABLES 视图中 OWNER 列已经包含了表所属的 Schema 信息。同时，优先选择行数大于0的表，以确保我们选择的是有数据的表，而不是空表。
                 if (preferred != null)
                 {
                     LogManager.Instance.LogInfo($"ResolvePreferredTableName: {normalizedTableName} 命中首选 Schema={preferred.Item1}，Rows={preferred.Item3}");
-                    return preferred.Item2;
+                    return preferred.Item2;// 注意：这里直接返回 qualifiedName，因为在访问时不需要 OWNER 前缀，且达梦数据库默认不区分大小写，所以不需要加双引号保护。同时，在后续的访问中也会使用这个 qualifiedName 来访问表，以确保访问的一致性。
                 }
             }
 
@@ -209,17 +216,17 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         private static string GetOwnerFromQualifiedTableName(string qualifiedTableName)
         {
-            if (string.IsNullOrWhiteSpace(qualifiedTableName))
+            if (string.IsNullOrWhiteSpace(qualifiedTableName))// 注意：这里直接使用 string.IsNullOrWhiteSpace 来判断输入是否合法，因为在某些环境下可能会出现空格或者其他不可见字符导致的表名异常，如果直接使用 string.IsNullOrEmpty 可能无法正确识别这些情况。通过使用 string.IsNullOrWhiteSpace，我们可以更全面地判断输入是否合法，避免因为表名异常而导致后续访问失败。
             {
                 return string.Empty;
             }
-
+            // 注意：这里直接使用 '.' 来分割 Owner 和 TableName，因为在达梦数据库中，表的限定名通常是以 "OWNER.TABLE_NAME" 的形式出现的。同时，在后续的访问中也会使用这个 qualifiedName 来访问表，以确保访问的一致性。
             var index = qualifiedTableName.IndexOf('.');
-            if (index <= 0)
+            if (index <= 0)// 注意：这里直接使用 index <= 0 来判断是否存在有效的 Owner，因为在达梦数据库中，表的限定名通常是以 "OWNER.TABLE_NAME" 的形式出现的，如果没有 '.' 或者 '.' 在开头，那么就说明没有有效的 Owner 信息。
             {
-                return string.Empty;
+                return string.Empty;// 注意：这里直接返回空字符串来表示没有 Owner 信息，因为在达梦数据库中，如果表名没有 Owner 前缀，那么默认就是当前 Schema 下的表，我们可以通过全局 Set Schema 来确保访问的一致性，而不需要在表名前加上默认的 Schema 前缀。
             }
-
+            // 注意：这里直接使用 Substring 来提取 Owner 部分，因为在达梦数据库中，表的限定名通常是以 "OWNER.TABLE_NAME" 的形式出现的，我们可以通过 Substring 来提取 Owner 部分，同时在后续的访问中也会使用这个 qualifiedName 来访问表，以确保访问的一致性。
             return qualifiedTableName.Substring(0, index);
         }
 
@@ -790,117 +797,379 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 从CAD类别同步部门信息：将 CAD_CATEGORIES 表中的分类信息同步到 DEPARTMENTS 表中，已存在的记录则更新，不存在的记录则插入（兼容最终模式：无前缀，无双引号）  
         /// </summary>
+        //public void SyncDepartmentsFromCadCategories()
+        //{
+        //    EnsureAllTablesExist();// 确保表存在，避免因表不存在导致的同步失败
+        //    using (var conn = CreateOpenConnection())// 使用单一连接执行整个同步过程，确保事务一致性和性能优化
+        //    {
+        //        var categoriesTableName = ResolvePreferredTableName(conn, "CAD_CATEGORIES", _dbUser);
+        //        var categoriesOwner = GetOwnerFromQualifiedTableName(categoriesTableName);
+        //        var departmentsTableName = string.IsNullOrWhiteSpace(categoriesOwner) ? "DEPARTMENTS" : categoriesOwner + ".DEPARTMENTS";
+
+        //        LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: categoriesTable={categoriesTableName}, departmentsTable={departmentsTableName}");
+
+        //        // 1. 读取基础表数据
+        //        var list = new List<(int Id, string Name, string Display, int So)>();
+        //        using (var sel = conn.CreateCommand())
+        //        {
+        //            // 明确指定列名，避免因表中存在额外字段（如您提到的逗号字符串或日期列）导致的索引混乱
+        //            sel.CommandText = $"SELECT ID, NAME, DISPLAY_NAME, SORT_ORDER FROM {categoriesTableName}";
+        //            using (var r = sel.ExecuteReader())
+        //            {
+        //                while (r.Read())
+        //                {
+        //                    // 增加严谨的 NULL 判断和显式转换，确保能读到您表中的数据
+        //                    int id = r.GetInt32(0);
+        //                    string name = r.IsDBNull(1) ? "未命名分类" : r.GetString(1);
+        //                    string disp = r.IsDBNull(2) ? name : r.GetString(2);
+        //                    int sort = r.IsDBNull(3) ? 0 : Convert.ToInt32(r.GetValue(3));
+
+        //                    list.Add((id, name, disp, sort));
+        //                }
+        //            }
+        //        }
+
+        //        // 如果源表没数据，记录日志以便排查
+        //        if (list.Count == 0)
+        //        {
+        //            LogManager.Instance.LogInfo("SyncDepartmentsFromCadCategories: CAD_CATEGORIES 表为空，无数据可同步。");
+        //            return;
+        //        }
+
+        //        LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: 已从 CAD_CATEGORIES 读取到 {list.Count} 条分类数据。");
+
+        //        // 2. 执行同步逻辑
+        //        // 先按 CAD_CATEGORY_ID 匹配；若未命中，再按 NAME 匹配，避免已有同名部门时重复插入触发唯一约束。
+        //        var affectedRows = 0;
+        //        foreach (var c in list)
+        //        {
+        //            int? matchedDepartmentId = null;
+        //            string matchMode = string.Empty;
+
+        //            using (var chkByCategory = conn.CreateCommand())
+        //            {
+        //                chkByCategory.CommandText = $"SELECT ID FROM {departmentsTableName} WHERE CAD_CATEGORY_ID = :id";
+        //                AddParam(chkByCategory, "id", c.Id);
+        //                var existingId = chkByCategory.ExecuteScalar();
+        //                if (existingId != null && existingId != DBNull.Value)
+        //                {
+        //                    matchedDepartmentId = Convert.ToInt32(existingId);
+        //                    matchMode = "CAD_CATEGORY_ID";
+        //                }
+        //            }
+
+        //            if (!matchedDepartmentId.HasValue)
+        //            {
+        //                using (var chkByName = conn.CreateCommand())
+        //                {
+        //                    chkByName.CommandText = $"SELECT ID FROM {departmentsTableName} WHERE NAME = :name";
+        //                    AddParam(chkByName, "name", c.Name);
+        //                    var existingId = chkByName.ExecuteScalar();
+        //                    if (existingId != null && existingId != DBNull.Value)
+        //                    {
+        //                        matchedDepartmentId = Convert.ToInt32(existingId);
+        //                        matchMode = "NAME";
+        //                    }
+        //                }
+        //            }
+
+        //            using (var cmd = conn.CreateCommand())
+        //            {
+        //                if (matchedDepartmentId.HasValue)
+        //                {
+        //                    // 命中现有部门后统一按主键更新，同时回填 CAD_CATEGORY_ID，避免后续再次误判为不存在。
+        //                    cmd.CommandText = $"UPDATE {departmentsTableName} SET CAD_CATEGORY_ID = :cid, NAME = :n, DISPLAY_NAME = :d, SORT_ORDER = :s, IS_ACTIVE = 1, UPDATED_AT = SYSDATE WHERE ID = :deptId";
+        //                    AddParam(cmd, "deptId", matchedDepartmentId.Value);
+        //                }
+        //                else
+        //                {
+        //                    // 只有按分类ID和名称都未命中时，才执行插入。
+        //                    cmd.CommandText = $"INSERT INTO {departmentsTableName} (CAD_CATEGORY_ID, NAME, DISPLAY_NAME, SORT_ORDER, IS_ACTIVE, CREATED_AT) VALUES (:cid, :n, :d, :s, 1, SYSDATE)";
+        //                }
+
+        //                AddParam(cmd, "cid", c.Id);
+        //                AddParam(cmd, "n", c.Name);
+        //                AddParam(cmd, "d", string.IsNullOrEmpty(c.Display) ? c.Name : c.Display);
+        //                AddParam(cmd, "s", c.So);
+        //                affectedRows += cmd.ExecuteNonQuery();
+        //            }
+
+        //            if (matchedDepartmentId.HasValue)
+        //            {
+        //                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: 分类 {c.Id}-{c.Name} 通过 {matchMode} 命中部门 ID={matchedDepartmentId.Value}，已执行更新。");
+        //            }
+        //        }
+
+        //        // 达梦当前连接下 DML 结果需要显式提交，否则后续新连接读取不到刚同步的数据。
+        //        using (var commitCmd = conn.CreateCommand())
+        //        {
+        //            commitCmd.CommandText = "COMMIT";
+        //            commitCmd.ExecuteNonQuery();
+        //        }
+
+        //        LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: 同步完成，受影响行数={affectedRows}。");
+        //    }
+        //}
+
+
+        // 同步 CAD_CATEGORIES 到 DEPARTMENTS，自动区分数据库类型
+
+        
+        /// <summary>
+        /// 同步 CAD_CATEGORIES 到 DEPARTMENTS，自动区分数据库类型
+        /// </summary>
         public void SyncDepartmentsFromCadCategories()
         {
-            EnsureAllTablesExist();
-            using (var conn = CreateOpenConnection())
+            // 判断当前数据库类型，分别调用不同实现
+            var dbType = VariableDictionary._databaseType?.ToUpper() ?? "DM";
+            if (dbType == "MYSQL")
             {
-                var categoriesTableName = ResolvePreferredTableName(conn, "CAD_CATEGORIES", _dbUser);
-                var categoriesOwner = GetOwnerFromQualifiedTableName(categoriesTableName);
-                var departmentsTableName = string.IsNullOrWhiteSpace(categoriesOwner) ? "DEPARTMENTS" : categoriesOwner + ".DEPARTMENTS";
+                SyncDepartmentsFromCadCategories_MySQL();// MySQL 版本的同步方法，兼容 MySQL 的 SQL 语法和特性
+            }
+            else
+            {
+                SyncDepartmentsFromCadCategories_DM();// 达梦数据库版本的同步方法，兼容达梦数据库的 SQL 语法和特性
+            }
+        }
 
-                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: categoriesTable={categoriesTableName}, departmentsTable={departmentsTableName}");
+        /// <summary>
+        /// 达梦数据库专用同步方法
+        /// </summary>
+        private void SyncDepartmentsFromCadCategories_DM()
+        {
+            EnsureAllTablesExist();// 确保表存在，避免因表不存在导致的同步失败
+            using (var conn = CreateOpenConnection())// 使用单一连接执行整个同步过程，确保事务一致性和性能优化
+            {
+                // 解析表名和所属用户，构建正确的表访问路径，兼容不同环境下可能存在的前缀或用户差异
+                var categoriesTableName = ResolvePreferredTableName(conn, "CAD_CATEGORIES", _dbUser);
+                // 从解析到的表名中提取所属用户（如果有），以便构建部门表的访问路径
+                var categoriesOwner = GetOwnerFromQualifiedTableName(categoriesTableName);
+                // 根据分类表的所属用户动态构建部门表的访问路径，确保在同一用户下访问部门表，避免跨用户访问权限问题
+                var departmentsTableName = string.IsNullOrWhiteSpace(categoriesOwner) ? "DEPARTMENTS" : categoriesOwner + ".DEPARTMENTS";
+                // 记录解析结果以便排查日志，确保能正确识别表名和访问路径
+                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_DM: categoriesTable={categoriesTableName}, departmentsTable={departmentsTableName}");
 
                 // 1. 读取基础表数据
                 var list = new List<(int Id, string Name, string Display, int So)>();
-                using (var sel = conn.CreateCommand())
+                using (var sel = conn.CreateCommand())// 明确指定列名，避免因表中存在额外字段（如您提到的逗号字符串或日期列）导致的索引混乱
                 {
-                    // 明确指定列名，避免因表中存在额外字段（如您提到的逗号字符串或日期列）导致的索引混乱
+                    // 兼容不同环境下可能存在的字段差异，增加严谨的 NULL 判断和显式转换，确保能读到您表中的数据
                     sel.CommandText = $"SELECT ID, NAME, DISPLAY_NAME, SORT_ORDER FROM {categoriesTableName}";
-                    using (var r = sel.ExecuteReader())
+                    using (var r = sel.ExecuteReader())// 使用 ExecuteReader 逐行读取，避免一次性加载大量数据导致的内存问题，同时能更灵活地处理数据转换和异常
                     {
-                        while (r.Read())
+                        while (r.Read())// 逐行读取数据，增加异常处理和数据验证，确保能正确处理各种数据情况
                         {
-                            // 增加严谨的 NULL 判断和显式转换，确保能读到您表中的数据
-                            int id = r.GetInt32(0);
-                            string name = r.IsDBNull(1) ? "未命名分类" : r.GetString(1);
-                            string disp = r.IsDBNull(2) ? name : r.GetString(2);
-                            int sort = r.IsDBNull(3) ? 0 : Convert.ToInt32(r.GetValue(3));
-
-                            list.Add((id, name, disp, sort));
+                            int id = r.GetInt32(0);// ID 列必须存在且不能为空，否则无法同步
+                            string name = r.IsDBNull(1) ? "未命名分类" : r.GetString(1);// NAME 列如果不存在或为空，使用默认值避免同步失败
+                            string disp = r.IsDBNull(2) ? name : r.GetString(2);// DISPLAY_NAME 列如果不存在或为空，使用 NAME 作为显示名称，确保界面有值可显示
+                            int sort = r.IsDBNull(3) ? 0 : Convert.ToInt32(r.GetValue(3));// SORT_ORDER 列如果不存在或为空，使用默认值 0，确保同步逻辑有排序依据
+                            list.Add((id, name, disp, sort));// 将读取到的数据添加到列表中，后续进行同步处理
                         }
                     }
                 }
 
-                // 如果源表没数据，记录日志以便排查
-                if (list.Count == 0)
+                if (list.Count == 0)// 如果源表没数据，记录日志以便排查
                 {
-                    LogManager.Instance.LogInfo("SyncDepartmentsFromCadCategories: CAD_CATEGORIES 表为空，无数据可同步。");
+                    LogManager.Instance.LogInfo("SyncDepartmentsFromCadCategories_DM: CAD_CATEGORIES 表为空，无数据可同步。");
                     return;
                 }
-
-                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: 已从 CAD_CATEGORIES 读取到 {list.Count} 条分类数据。");
+                // 记录成功读取到的数据量，确保能确认同步的基础数据情况
+                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_DM: 已从 CAD_CATEGORIES 读取到 {list.Count} 条分类数据。");
 
                 // 2. 执行同步逻辑
-                // 先按 CAD_CATEGORY_ID 匹配；若未命中，再按 NAME 匹配，避免已有同名部门时重复插入触发唯一约束。
                 var affectedRows = 0;
-                foreach (var c in list)
+                foreach (var c in list)// 先按 CAD_CATEGORY_ID 匹配；若未命中，再按 NAME 匹配，避免已有同名部门时重复插入触发唯一约束。
                 {
-                    int? matchedDepartmentId = null;
-                    string matchMode = string.Empty;
-
-                    using (var chkByCategory = conn.CreateCommand())
+                    int? matchedDepartmentId = null;// 先尝试通过 CAD_CATEGORY_ID 匹配，确保同一分类ID对应同一部门，避免重复插入
+                    string matchMode = string.Empty;// 记录匹配方式，便于后续日志分析和问题排查
+                    // 通过 CAD_CATEGORY_ID 匹配部门，确保分类与部门的一一对应关系，避免同一分类被多个部门重复引用
+                    using (var chkByCategory = conn.CreateCommand())// 使用单一连接执行匹配查询，确保事务一致性和性能优化
                     {
-                        chkByCategory.CommandText = $"SELECT ID FROM {departmentsTableName} WHERE CAD_CATEGORY_ID = :id";
-                        AddParam(chkByCategory, "id", c.Id);
-                        var existingId = chkByCategory.ExecuteScalar();
-                        if (existingId != null && existingId != DBNull.Value)
+                        chkByCategory.CommandText = $"SELECT ID FROM {departmentsTableName} WHERE CAD_CATEGORY_ID = :id";// 兼容不同环境下可能存在的字段差异，增加严谨的 NULL 判断和显式转换，确保能正确处理数据
+                        AddParam(chkByCategory, "id", c.Id);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
+                        var existingId = chkByCategory.ExecuteScalar();// 直接获取匹配的部门ID，如果存在且不为 NULL，则说明找到了对应的部门
+                        if (existingId != null && existingId != DBNull.Value)// 如果查询结果不为 NULL，说明找到了匹配的部门，记录匹配的部门ID和匹配方式
                         {
+                            // 将匹配到的部门ID转换为整数类型，并记录匹配方式为 CAD_CATEGORY_ID，便于后续日志分析和问题排查
                             matchedDepartmentId = Convert.ToInt32(existingId);
+                            // 记录匹配方式为 CAD_CATEGORY_ID，便于后续日志分析和问题排查
                             matchMode = "CAD_CATEGORY_ID";
                         }
                     }
 
-                    if (!matchedDepartmentId.HasValue)
+                    if (!matchedDepartmentId.HasValue)// 如果未通过 CAD_CATEGORY_ID 匹配到部门，再尝试通过 NAME 匹配，确保同一名称的分类能对应到同一部门，避免重复插入
                     {
+                        // 通过 NAME 匹配部门，确保同一名称的分类能对应到同一部门，避免重复插入触发唯一约束，同时兼容已有数据中可能存在的 CAD_CATEGORY_ID 为空但名称匹配的情况
                         using (var chkByName = conn.CreateCommand())
                         {
+                            // 使用单一连接执行匹配查询，确保事务一致性和性能优化，同时增加日志记录以便排查匹配过程中的问题
                             chkByName.CommandText = $"SELECT ID FROM {departmentsTableName} WHERE NAME = :name";
+                            // 兼容不同环境下可能存在的字段差异，增加严谨的 NULL 判断和显式转换，确保能正确处理数据，同时使用参数化查询避免 SQL 注入风险
                             AddParam(chkByName, "name", c.Name);
+                            // 直接获取匹配的部门ID，如果存在且不为 NULL，则说明找到了对应的部门，记录匹配的部门ID和匹配方式
                             var existingId = chkByName.ExecuteScalar();
+                            // 如果查询结果不为 NULL，说明找到了匹配的部门，记录匹配的部门ID和匹配方式为 NAME，便于后续日志分析和问题排查
                             if (existingId != null && existingId != DBNull.Value)
                             {
+                                // 将匹配到的部门ID转换为整数类型，并记录匹配方式为 NAME，便于后续日志分析和问题排查
                                 matchedDepartmentId = Convert.ToInt32(existingId);
+                                // 记录匹配方式为 NAME，便于后续日志分析和问题排查
                                 matchMode = "NAME";
                             }
                         }
                     }
-
+                    // 根据匹配结果执行更新或插入操作，如果匹配到现有部门则执行更新，回填 CAD_CATEGORY_ID 和其他字段；如果未匹配到则执行插入，创建新部门记录，确保同步后的部门表能完整反映分类表的数据，同时避免重复插入触发唯一约束
                     using (var cmd = conn.CreateCommand())
                     {
+                        // 如果匹配到现有部门，则执行更新操作，回填 CAD_CATEGORY_ID 和其他字段，同时记录日志说明是通过哪种方式匹配到的部门，以便后续分析和排查
                         if (matchedDepartmentId.HasValue)
                         {
-                            // 命中现有部门后统一按主键更新，同时回填 CAD_CATEGORY_ID，避免后续再次误判为不存在。
+                            // 命中现有部门后统一按主键更新，同时回填 CAD_CATEGORY_ID，避免后续再次误判为不存在，同时记录日志说明是通过哪种方式匹配到的部门，以便后续分析和排查
                             cmd.CommandText = $"UPDATE {departmentsTableName} SET CAD_CATEGORY_ID = :cid, NAME = :n, DISPLAY_NAME = :d, SORT_ORDER = :s, IS_ACTIVE = 1, UPDATED_AT = SYSDATE WHERE ID = :deptId";
+                            // 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递，同时记录日志说明是通过哪种方式匹配到的部门，以便后续分析和排查
                             AddParam(cmd, "deptId", matchedDepartmentId.Value);
                         }
                         else
                         {
-                            // 只有按分类ID和名称都未命中时，才执行插入。
+                            // 只有按分类ID和名称都未命中时，才执行插入，创建新部门记录，确保同步后的部门表能完整反映分类表的数据，同时避免重复插入触发唯一约束
                             cmd.CommandText = $"INSERT INTO {departmentsTableName} (CAD_CATEGORY_ID, NAME, DISPLAY_NAME, SORT_ORDER, IS_ACTIVE, CREATED_AT) VALUES (:cid, :n, :d, :s, 1, SYSDATE)";
                         }
-
-                        AddParam(cmd, "cid", c.Id);
-                        AddParam(cmd, "n", c.Name);
-                        AddParam(cmd, "d", string.IsNullOrEmpty(c.Display) ? c.Name : c.Display);
-                        AddParam(cmd, "s", c.So);
-                        affectedRows += cmd.ExecuteNonQuery();
+                        AddParam(cmd, "cid", c.Id);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
+                        AddParam(cmd, "n", c.Name);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
+                        AddParam(cmd, "d", string.IsNullOrEmpty(c.Display) ? c.Name : c.Display);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
+                        AddParam(cmd, "s", c.So);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
+                        affectedRows += cmd.ExecuteNonQuery();// 执行更新或插入操作，并累加受影响的行数，便于后续日志记录和分析
                     }
 
-                    if (matchedDepartmentId.HasValue)
+                    if (matchedDepartmentId.HasValue)// 如果匹配到现有部门，记录日志说明是通过哪种方式匹配到的部门，以便后续分析和排查
                     {
-                        LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: 分类 {c.Id}-{c.Name} 通过 {matchMode} 命中部门 ID={matchedDepartmentId.Value}，已执行更新。");
+                        LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_DM: 分类 {c.Id}-{c.Name} 通过 {matchMode} 命中部门 ID={matchedDepartmentId.Value}，已执行更新。");
                     }
                 }
 
                 // 达梦当前连接下 DML 结果需要显式提交，否则后续新连接读取不到刚同步的数据。
                 using (var commitCmd = conn.CreateCommand())
                 {
-                    commitCmd.CommandText = "COMMIT";
-                    commitCmd.ExecuteNonQuery();
+                    commitCmd.CommandText = "COMMIT";// 执行 COMMIT 命令提交事务，确保同步后的数据能被其他连接读取到，同时记录日志说明已执行提交操作，以便后续分析和排查
+                    commitCmd.ExecuteNonQuery();// 执行 COMMIT 命令提交事务，确保同步后的数据能被其他连接读取到，同时记录日志说明已执行提交操作，以便后续分析和排查
                 }
 
-                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories: 同步完成，受影响行数={affectedRows}。");
+                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_DM: 同步完成，受影响行数={affectedRows}。");
+            }
+        }
+
+        /// <summary>
+        /// MySQL数据库专用同步方法
+        /// </summary>
+        private void SyncDepartmentsFromCadCategories_MySQL()
+        {
+            // 确保表存在
+            var mySvc = new MySqlAuthService(
+                VariableDictionary._serverIP,
+                VariableDictionary._serverPort.ToString(),
+                VariableDictionary._userName,
+                VariableDictionary._passWord
+            );
+            mySvc.EnsureAllTablesExist();
+
+            using (var conn = new MySql.Data.MySqlClient.MySqlConnection(
+                $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Database=cad_sw_library;Uid={VariableDictionary._userName};Pwd={VariableDictionary._passWord};Allow User Variables=True;"))
+            {
+                conn.Open();
+                using (var tx = conn.BeginTransaction())
+                {
+                    // 1. 读取分类表
+                    var list = new List<(int Id, string Name, string Display, int So)>();
+                    using (var sel = conn.CreateCommand())
+                    {
+                        sel.Transaction = tx;
+                        sel.CommandText = "SELECT id, name, display_name, sort_order FROM cad_categories";
+                        using (var r = sel.ExecuteReader())
+                        {
+                            while (r.Read())
+                            {
+                                int id = r.GetInt32("id");
+                                string name = r.IsDBNull(r.GetOrdinal("name")) ? "未命名分类" : r.GetString("name");
+                                string disp = r.IsDBNull(r.GetOrdinal("display_name")) ? name : r.GetString("display_name");
+                                int sort = r.IsDBNull(r.GetOrdinal("sort_order")) ? 0 : r.GetInt32("sort_order");
+                                list.Add((id, name, disp, sort));
+                            }
+                        }
+                    }
+
+                    if (list.Count == 0)
+                    {
+                        LogManager.Instance.LogInfo("SyncDepartmentsFromCadCategories_MySQL: cad_categories 表为空，无数据可同步。");
+                        tx.Commit();
+                        return;
+                    }
+
+                    LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_MySQL: 已从 cad_categories 读取到 {list.Count} 条分类数据。");
+
+                    // 2. 执行同步逻辑
+                    var affectedRows = 0;
+                    foreach (var c in list)
+                    {
+                        int? matchedDepartmentId = null;
+                        string matchMode = string.Empty;
+
+                        using (var chkByCategory = conn.CreateCommand())
+                        {
+                            chkByCategory.Transaction = tx;
+                            chkByCategory.CommandText = "SELECT id FROM departments WHERE cad_category_id = @id";
+                            chkByCategory.Parameters.AddWithValue("@id", c.Id);
+                            var existingId = chkByCategory.ExecuteScalar();
+                            if (existingId != null && existingId != DBNull.Value)
+                            {
+                                matchedDepartmentId = Convert.ToInt32(existingId);
+                                matchMode = "CAD_CATEGORY_ID";
+                            }
+                        }
+
+                        if (!matchedDepartmentId.HasValue)
+                        {
+                            using (var chkByName = conn.CreateCommand())
+                            {
+                                chkByName.Transaction = tx;
+                                chkByName.CommandText = "SELECT id FROM departments WHERE name = @name";
+                                chkByName.Parameters.AddWithValue("@name", c.Name);
+                                var existingId = chkByName.ExecuteScalar();
+                                if (existingId != null && existingId != DBNull.Value)
+                                {
+                                    matchedDepartmentId = Convert.ToInt32(existingId);
+                                    matchMode = "NAME";
+                                }
+                            }
+                        }
+
+                        using (var cmd = conn.CreateCommand())
+                        {
+                            cmd.Transaction = tx;
+                            if (matchedDepartmentId.HasValue)
+                            {
+                                cmd.CommandText = "UPDATE departments SET cad_category_id = @cid, name = @n, display_name = @d, sort_order = @s, is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = @deptId";
+                                cmd.Parameters.AddWithValue("@deptId", matchedDepartmentId.Value);
+                            }
+                            else
+                            {
+                                cmd.CommandText = "INSERT INTO departments (cad_category_id, name, display_name, sort_order, is_active, created_at) VALUES (@cid, @n, @d, @s, 1, CURRENT_TIMESTAMP)";
+                            }
+                            cmd.Parameters.AddWithValue("@cid", c.Id);
+                            cmd.Parameters.AddWithValue("@n", c.Name);
+                            cmd.Parameters.AddWithValue("@d", string.IsNullOrEmpty(c.Display) ? c.Name : c.Display);
+                            cmd.Parameters.AddWithValue("@s", c.So);
+                            affectedRows += cmd.ExecuteNonQuery();
+                        }
+
+                        if (matchedDepartmentId.HasValue)
+                        {
+                            LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_MySQL: 分类 {c.Id}-{c.Name} 通过 {matchMode} 命中部门 ID={matchedDepartmentId.Value}，已执行更新。");
+                        }
+                    }
+
+                    tx.Commit();
+                    LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_MySQL: 同步完成，受影响行数={affectedRows}。");
+                }
             }
         }
         #endregion
