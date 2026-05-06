@@ -21,6 +21,10 @@ using Path = System.IO.Path;
 public class AutodeskRun : IExtensionApplication
 {
     /// <summary>
+    /// 在 Command.cs 或启动逻辑类中
+    /// </summary>
+    private static bool _isLoginShowing = false;
+    /// <summary>
     /// 启动加载的命令扩展
     /// </summary>
     public void Initialize()

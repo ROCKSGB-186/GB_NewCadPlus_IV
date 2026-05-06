@@ -3017,7 +3017,7 @@
                     Padding="1,2,1,0"
                     Background="Azure"
                     ItemContainerStyle="{StaticResource VerticalTabStyle}"
-                    TabStripPlacement="Left" >
+                    TabStripPlacement="Left">
                     <TabItem
                         Height="68"
                         FontSize="12"
@@ -3373,9 +3373,10 @@
             </TabItem>
             <!--  第一TabControlItem(管理员模块)  -->
             <TabItem
+                Name="AdminModuleTab"
                 Width="82"
-                HorizontalAlignment="Right"
-                Header="管理员模块">
+                HorizontalAlignment="Center"
+                Header="管理员模块" Height="22" VerticalAlignment="Top">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="40" />
@@ -3779,8 +3780,7 @@
                                 CanUserDeleteRows="True"
                                 FontSize="11"
                                 GridLinesVisibility="All"
-                                HeadersVisibility="Column"
-                                SelectionChanged="CategoryPropertiesDataGrid_SelectionChanged">
+                                HeadersVisibility="Column">
                                 <DataGrid.Columns>
                                     <DataGridTemplateColumn Width="70" Header="属性名称1">
                                         <DataGridTemplateColumn.CellTemplate>

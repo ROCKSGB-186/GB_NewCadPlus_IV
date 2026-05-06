@@ -26,8 +26,7 @@ using MessageBox = System.Windows.MessageBox;
 using DataTable = Autodesk.AutoCAD.DatabaseServices.DataTable;
 using Cursors = System.Windows.Input.Cursors;
 using GB_NewCadPlus_IV.FunctionalMethod;
-using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
+using GB_NewCadPlus_IV.FunctionalMethod;
 
 namespace GB_NewCadPlus_IV.Views
 {

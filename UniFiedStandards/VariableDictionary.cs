@@ -17,6 +17,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         public static string _dataBaseName = "cad_sw_library";//数据库名称
         public static string? _userName;//用户名
         public static string? _passWord;//密码
+        public static string? _databaseType = "DM"; // 数据库类型: MySQL 或 DM
         public static string? _storagePath;//数据库存储路径
         public static bool _useDPath;//是否使用DPath
         public static bool _autoSync;//是否自动同步

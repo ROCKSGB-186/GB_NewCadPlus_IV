@@ -3,8 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using static GB_NewCadPlus_IV.WpfMainWindow;
 using MessageBox = System.Windows.MessageBox;
-using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
-using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
+using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.CadCategory;
+using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.CadSubcategory;
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
 {

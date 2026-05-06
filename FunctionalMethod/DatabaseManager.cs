@@ -4,7 +4,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Xml.Serialization;
+using Dm;
 using Dapper;
+// MySql provider is no longer used in DM migration; remove direct dependency usages.
+// Note: leave using for compatibility in files that still reference MySqlConnection via fully-qualified names.
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using System;
@@ -12,17 +15,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using static GB_NewCadPlus_IV.WpfMainWindow;
 using DataTable = System.Data.DataTable;
 using MessageBox = System.Windows.MessageBox;
 using TextBox = System.Windows.Controls.TextBox;
-using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
-// 过渡期保留旧别名，后续全部改完可删除
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
-using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
-using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
-using FileTag = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileTag;
-using FileAccessLog = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAccessLog;
+// Note: avoid file-level type aliases to nested types here to prevent alias conflicts in other files.
 using DeviceInfo = GB_NewCadPlus_IV.UniFiedStandards.DeviceInfo;
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
@@ -32,12 +30,225 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
     /// </summary>
     public class DatabaseManager
     {
+        // Model types moved to FunctionalMethod.DatabaseModels to avoid duplicate nested type definitions.
+        // Note: real DatabaseManager implementations exist later in this file. No compatibility stubs at top to avoid duplicate definitions.
+
+        /// <summary>
+        /// 数据库适配器，用于支持多数据库
+        /// </summary>
+        private readonly IDatabaseAdapter _adapter;
+
         /// <summary>
         /// 对外公开数据库连接（注意：调用方负责不要忘记关闭/处置）
         /// </summary>
-        public MySqlConnection GetConnection()
+        public IDbConnection GetConnection()
         {
-            return new MySqlConnection(_connectionString);
+            var connection = _adapter.CreateConnection();
+            if (connection is DmConnection dmConn)
+            {
+                dmConn.StateChange += Connection_StateChange;
+            }
+            return connection;
+        }
+
+        /// <summary>
+        /// 简单执行器：根据当前适配器执行查询并返回单个标量或映射类型（同步）
+        /// 对于 MySQL 使用 Dapper 快捷映射；对于达梦使用手工命令与 reader 映射（支持基本类型和简单 POCO 的单行读取）
+        /// </summary>
+        private T QuerySingleOrDefault<T>(string sql, object? param = null)
+        {
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = _adapter.CreateConnection();
+                conn.Open();
+                // 使用 Dapper 的同步扩展
+                return conn.QuerySingleOrDefault<T>(sql, param);
+            }
+
+            // DM 路径：手动执行并映射
+            using var dconn = _adapter.CreateConnection();
+            dconn.Open();
+            using var cmd = dconn.CreateCommand();
+            cmd.CommandText = _adapter.NormalizeSql(sql);
+            if (param != null)
+            {
+                // 支持字典或匿名对象
+                if (param is System.Collections.IDictionary dict)
+                {
+                    foreach (System.Collections.DictionaryEntry e in dict)
+                    {
+                        _adapter.AddParameter(cmd, e.Key.ToString(), e.Value ?? DBNull.Value);
+                    }
+                }
+                else
+                {
+                    var props = param.GetType().GetProperties();
+                    foreach (var p in props)
+                    {
+                        var val = p.GetValue(param);
+                        _adapter.AddParameter(cmd, p.Name, val ?? DBNull.Value);
+                    }
+                }
+            }
+
+            var res = cmd.ExecuteScalar();
+            if (res == null || res == DBNull.Value) return default;
+            return (T)Convert.ChangeType(res, typeof(T));
+        }
+
+        /// <summary>
+        /// 简单执行非查询 SQL 并返回受影响行数（同步）
+        /// MySQL 使用 Dapper 的 Execute；DM 使用 ExecuteNonQuery
+        /// </summary>
+        private int ExecuteNonQuery(string sql, object? param = null)
+        {
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = _adapter.CreateConnection();
+                conn.Open();
+                return conn.Execute(sql, param);
+            }
+
+            using var dconn = _adapter.CreateConnection();
+            dconn.Open();
+            using var cmd = dconn.CreateCommand();
+            cmd.CommandText = _adapter.NormalizeSql(sql);
+            if (param != null)
+            {
+                if (param is System.Collections.IDictionary dict)
+                {
+                    foreach (System.Collections.DictionaryEntry e in dict)
+                    {
+                        _adapter.AddParameter(cmd, e.Key.ToString(), e.Value ?? DBNull.Value);
+                    }
+                }
+                else
+                {
+                    var props = param.GetType().GetProperties();
+                    foreach (var p in props)
+                    {
+                        var val = p.GetValue(param);
+                        _adapter.AddParameter(cmd, p.Name, val ?? DBNull.Value);
+                    }
+                }
+            }
+            return cmd.ExecuteNonQuery();
+        }
+
+
+        /// <summary>
+        /// 连接状态变化时自动切换到目标 Schema，保证后续未带前缀的 SQL 能落到达梦目标库对象上。
+        /// </summary>
+        private void Connection_StateChange(object? sender, StateChangeEventArgs e)
+        {
+            if (e.CurrentState != ConnectionState.Open)
+            {
+                return;
+            }
+
+            if (sender is DmConnection connection)
+            {
+                ApplySchema(connection);
+            }
+        }
+
+        /// <summary>
+        /// 为当前连接设置 Schema。
+        /// </summary>
+        private void ApplySchema(IDbConnection connection)
+        {
+            if (connection == null || connection.State != ConnectionState.Open || string.IsNullOrWhiteSpace(_schemaName))
+            {
+                return;
+            }
+
+            try
+            {
+                _adapter.ApplySchema(connection, _schemaName);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DatabaseManager 设置 Schema 失败: schema={_schemaName}, {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 用于给 IDbCommand 添加参数，自动适配数据库类型
+        /// </summary>
+        /// <param name="cmd">要添加参数的命令对象</param>
+        /// <param name="name">参数名称</param>
+        /// <param name="value">参数值</param>
+        private void AddParam(IDbCommand cmd, string name, object? value)
+        {
+            _adapter.AddParameter(cmd, name, value);
+        }
+
+        /// <summary>
+        /// 达梦风格参数添加方法（为向后兼容保留，内部调用 AddParam）
+        /// </summary>
+        private void AddDmParam(IDbCommand cmd, string name, object? value)
+        {
+            AddParam(cmd, name, value);
+        }
+
+        /// <summary>
+        /// 将传入的连接串标准化为达梦驱动可识别的格式。
+        /// </summary>
+        private static string NormalizeDmConnectionString(string connectionString)
+        {
+            var server = ExtractConnectionStringValue(connectionString, "Server")
+                ?? ExtractConnectionStringValue(connectionString, "Host")
+                ?? "127.0.0.1";
+            var port = ExtractConnectionStringValue(connectionString, "Port") ?? "5236";
+            var user = ExtractConnectionStringValue(connectionString, "User Id")
+                ?? ExtractConnectionStringValue(connectionString, "Uid")
+                ?? ExtractConnectionStringValue(connectionString, "User")
+                ?? "SYSDBA";
+            var password = ExtractConnectionStringValue(connectionString, "Password")
+                ?? ExtractConnectionStringValue(connectionString, "Pwd")
+                ?? "SYSDBA";
+
+            return $"Server={server};Port={port};User Id={user};Password={password};";
+        }
+
+        /// <summary>
+        /// 从连接串中提取目标 Schema，优先 Schema，其次 Database，最后回退全局变量。
+        /// </summary>
+        private static string ResolveSchemaName(string connectionString)
+        {
+            var schemaName = ExtractConnectionStringValue(connectionString, "Schema")
+                ?? ExtractConnectionStringValue(connectionString, "Database")
+                ?? VariableDictionary._dataBaseName;
+
+            return string.IsNullOrWhiteSpace(schemaName) ? "SYSDBA" : schemaName.Trim().ToUpperInvariant();
+        }
+
+        /// <summary>
+        /// 按键名从连接串中取值。
+        /// </summary>
+        private static string? ExtractConnectionStringValue(string connectionString, string key)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            var segments = connectionString.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var segment in segments)
+            {
+                var pair = segment.Split(new[] { '=' }, 2);
+                if (pair.Length != 2)
+                {
+                    continue;
+                }
+
+                if (string.Equals(pair[0].Trim(), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return pair[1].Trim();
+                }
+            }
+
+            return null;
         }
 
         // -----------------------------
@@ -46,27 +257,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         // 在接入真实后端时，请替换为完整实现。
         // -----------------------------
 
-        /// <summary>
-        /// 文件访问日志模型（占位）
-        /// </summary>
-        public class FileAccessLog
-        {
-            public int FileId { get; set; }
-            public string? UserName { get; set; }
-            public string? ActionType { get; set; }
-            public DateTime AccessTime { get; set; }
-            public string? IpAddress { get; set; }
-        }
-
-        /// <summary>
-        /// 文件标签模型（占位）
-        /// </summary>
-        public class FileTag
-        {
-            public int FileId { get; set; }
-            public string? TagName { get; set; }
-            public DateTime CreatedAt { get; set; }
-        }
+        // Use top-level models in FunctionalMethod.DatabaseModels for FileAccessLog and FileTag.
+        // Nested placeholder types removed to avoid duplicate-type ambiguity.
 
         /// <summary>
         /// 添加文件访问日志（占位）
@@ -237,12 +429,36 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 using var conn = GetConnection();
-                var user = await conn.QuerySingleOrDefaultAsync<User>(sql, new { Username = username }).ConfigureAwait(false);
-                return user;
+                conn.Open();
+                // 诊断：记录将要执行的 SQL 与参数，帮助定位达梦解析错误（临时日志）
+                LogManager.Instance.LogDebug($"[DM-SQL] Executing GetUserByUsernameAsync SQL: {sql}, Params: Username={username}");
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql.Replace("@Username", ":Username");
+                AddDmParam(cmd, "Username", username);
+
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read()) return null;
+                var u = new User();
+                int ord;
+                ord = reader.GetOrdinal("Id"); u.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Username"); u.Username = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("PasswordHash"); u.PasswordHash = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("DisplayName"); u.DisplayName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("Gender"); u.Gender = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("Phone"); u.Phone = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("Email"); u.Email = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("DepartmentId"); u.DepartmentId = reader.IsDBNull(ord) ? (int?)null : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Role"); u.Role = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("Status"); u.Status = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("CreatedAt"); u.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("UpdatedAt"); u.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                return u;
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"GetUserByUsernameAsync 出错: {ex.Message}");
+                LogManager.Instance.LogDebug($"[DM-SQL-ERR] SQL: {sql}, Params: Username={username}");
                 return null;
             }
         }
@@ -261,7 +477,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             {
                 // 连接到目标数据库以检查表
                 var connStr = $"Server={server};Port={port};Database={database};Uid={user};Pwd={password};";
-                using var conn = new MySqlConnection(connStr);
+                // 使用 MySqlAdapter 创建连接，避免直接依赖 MySqlConnection
+                var tmpAdapter = new MySqlAdapter(connStr);
+                using var conn = tmpAdapter.CreateConnection();
                 conn.Open();
 
                 // 需要保证的核心表（含 CAD / SW / 设备表）
@@ -321,7 +539,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 第1步：确保数据库存在
                 // =========================
                 var masterConn = $"Server={server};Port={port};Uid={user};Pwd={password};";
-                using (var conn = new MySqlConnection(masterConn))
+                var tmpAdapter1 = new MySqlAdapter(masterConn);
+                using (var conn = tmpAdapter1.CreateConnection())
                 {
                     conn.Open();
                     // 创建数据库（若不存在），统一字符集与排序规则，避免中文乱码
@@ -333,7 +552,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 第2步：连接目标数据库
                 // =========================
                 var dbConn = $"Server={server};Port={port};Database={database};Uid={user};Pwd={password};Allow User Variables=True;";
-                using (var conn = new MySqlConnection(dbConn))
+                var tmpAdapter2 = new MySqlAdapter(dbConn);
+                using (var conn = tmpAdapter2.CreateConnection())
                 {
                     conn.Open();
 
@@ -693,6 +913,10 @@ ON UPDATE CASCADE;");
         /// </summary>
         public readonly string _connectionString;
         /// <summary>
+        /// 当前达梦会话需要切换到的 Schema。
+        /// </summary>
+        private readonly string _schemaName;
+        /// <summary>
         /// 数据库是否可用
         /// </summary>
         public bool IsDatabaseAvailable { get; private set; } = true;
@@ -703,8 +927,23 @@ ON UPDATE CASCADE;");
         ///  </param>
         public DatabaseManager(string connectionString)
         {
-            _connectionString = connectionString;
+            _schemaName = ResolveSchemaName(connectionString);
+
+            // 根据配置初始化适配器
+            if (VariableDictionary._databaseType?.ToUpper() == "MYSQL")
+            {
+                _adapter = new MySqlAdapter(connectionString);
+                _connectionString = connectionString;
+            }
+            else
+            {
+                _adapter = new DmAdapter(NormalizeDmConnectionString(connectionString));
+                _connectionString = NormalizeDmConnectionString(connectionString);
+            }
+
+            LogManager.Instance.LogInfo($"DatabaseManager 初始化: server={ExtractConnectionStringValue(_connectionString, "Server")}, port={ExtractConnectionStringValue(_connectionString, "Port")}, database={_schemaName}, type={_adapter.DatabaseType}");
             IsDatabaseAvailable = TestDatabaseConnection();
+            LogManager.Instance.LogInfo($"DatabaseManager 初始化完成: IsDatabaseAvailable={IsDatabaseAvailable}");
         }
         /// <summary>
         /// 测试数据库连接
@@ -716,38 +955,16 @@ ON UPDATE CASCADE;");
             {
                 using var connection = GetConnection();
                 connection.Open();
-                LogManager.Instance.LogInfo("数据库连接测试成功");
+                ApplySchema(connection);
+                using var command = connection.CreateCommand();
+                command.CommandText = _adapter.NormalizeSql("SELECT 1 FROM DUAL");
+                command.ExecuteScalar();
+                LogManager.Instance.LogInfo($"{_adapter.DatabaseType} 数据库连接测试成功: database/schema={_schemaName}");
                 return true;
-            }
-            catch (MySqlException ex)
-            {
-                LogManager.Instance.LogInfo($"MySQL连接错误: {ex.Number} - {ex.Message}");
-                switch (ex.Number)
-                {
-                    case 0:
-                        LogManager.Instance.LogInfo("无法连接到MySQL服务器");
-                        break;
-                    case 1042:
-                        LogManager.Instance.LogInfo("无法解析主机名");
-                        break;
-                    case 1045:
-                        LogManager.Instance.LogInfo("用户名或密码错误");
-                        break;
-                    case 1049:
-                        LogManager.Instance.LogInfo("未知数据库");
-                        break;
-                    case 2002:
-                        LogManager.Instance.LogInfo("连接超时或服务器无响应");
-                        break;
-                    default:
-                        LogManager.Instance.LogInfo($"MySQL错误代码: {ex.Number}");
-                        break;
-                }
-                return false;
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogInfo($"数据库连接测试失败: {ex.Message}");
+                LogManager.Instance.LogInfo($"{_adapter.DatabaseType} 连接测试失败: database/schema={_schemaName}, {ex.Message}");
                 return false;
             }
         }
@@ -786,9 +1003,30 @@ ON UPDATE CASCADE;");
               ORDER BY sort_order, name";
             try
             {
-                using var connection = new MySqlConnection(_connectionString);
-                var depts = await connection.QueryAsync<Department>(sql).ConfigureAwait(false);
-                return depts.AsList();
+                return await Task.Run(() =>
+                {
+                    using var connection = GetConnection();
+                    connection.Open();
+                    using var cmd = connection.CreateCommand();
+                    cmd.CommandText = sql;
+
+                    var list = new List<Department>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var d = new Department();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); d.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Name"); d.Name = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); d.DisplayName = reader.IsDBNull(ord) ? d.Name : reader.GetString(ord);
+                        ord = reader.GetOrdinal("SortOrder"); d.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("IsActive"); d.IsActive = !reader.IsDBNull(ord) && reader.GetInt32(ord) != 0;
+                        ord = reader.GetOrdinal("CreatedAt"); d.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        ord = reader.GetOrdinal("UpdatedAt"); d.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        list.Add(d);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -808,37 +1046,79 @@ ON UPDATE CASCADE;");
             {
                 var categories = await GetAllCadCategoriesAsync().ConfigureAwait(false);
                 if (categories == null || categories.Count == 0) return;
-
-                using var conn = GetConnection();
-                await conn.OpenAsync().ConfigureAwait(false);
-
-                foreach (var cat in categories)
+                // 使用同步事务化操作放入线程池，以便与达梦驱动兼容参数与 SQL 语法
+                await Task.Run(() =>
                 {
-                    // 检查是否已有映射
-                    var mapSql = "SELECT department_id FROM category_department_map WHERE category_id = @CategoryId";
-                    var mapped = await conn.QueryFirstOrDefaultAsync<int?>(mapSql, new { CategoryId = cat.Id }).ConfigureAwait(false);
-                    if (mapped.HasValue) continue;
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var tx = conn.BeginTransaction();
 
-                    // 尝试按名称查找已有部门
-                    var deptSql = "SELECT id FROM departments WHERE name = @Name LIMIT 1";
-                    var deptId = await conn.QueryFirstOrDefaultAsync<int?>(deptSql, new { Name = cat.Name }).ConfigureAwait(false);
-                    if (!deptId.HasValue)
+                    foreach (var cat in categories)
                     {
-                        // 插入新部门
-                        var insertDeptSql = @"INSERT INTO departments (name, display_name, sort_order, created_at, updated_at) 
-                                              VALUES (@Name, @DisplayName, @SortOrder, NOW(), NOW());
-                                              SELECT LAST_INSERT_ID();";
-                        var newDeptId = await conn.ExecuteScalarAsync<int>(insertDeptSql, new { Name = cat.Name, DisplayName = cat.DisplayName ?? cat.Name, SortOrder = cat.SortOrder }).ConfigureAwait(false);
-                        deptId = newDeptId;
+                        // 检查是否已有映射
+                        using (var mapCmd = conn.CreateCommand())
+                        {
+                            mapCmd.Transaction = tx;
+                            mapCmd.CommandText = "SELECT department_id FROM category_department_map WHERE category_id = :CategoryId";
+                            var p = mapCmd.CreateParameter(); p.ParameterName = "CategoryId"; p.Value = cat.Id; mapCmd.Parameters.Add(p);
+                            var res = mapCmd.ExecuteScalar();
+                            if (res != null && res != DBNull.Value)
+                            {
+                                continue;
+                            }
+                        }
+
+                        int? deptId = null;
+                        // 尝试按名称查找已有部门
+                        using (var findCmd = conn.CreateCommand())
+                        {
+                            findCmd.Transaction = tx;
+                            findCmd.CommandText = "SELECT id FROM departments WHERE name = :Name ORDER BY id FETCH FIRST 1 ROWS ONLY";
+                            var p = findCmd.CreateParameter(); p.ParameterName = "Name"; p.Value = cat.Name ?? (object)DBNull.Value; findCmd.Parameters.Add(p);
+                            var res = findCmd.ExecuteScalar();
+                            if (res != null && res != DBNull.Value)
+                            {
+                                deptId = Convert.ToInt32(res);
+                            }
+                        }
+
+                        if (!deptId.HasValue)
+                        {
+                            // 插入新部门
+                            using (var insCmd = conn.CreateCommand())
+                            {
+                                insCmd.Transaction = tx;
+                                insCmd.CommandText = "INSERT INTO departments (name, display_name, sort_order, created_at, updated_at) VALUES (:Name, :DisplayName, :SortOrder, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+                                var p1 = insCmd.CreateParameter(); p1.ParameterName = "Name"; p1.Value = cat.Name ?? (object)DBNull.Value; insCmd.Parameters.Add(p1);
+                                var p2 = insCmd.CreateParameter(); p2.ParameterName = "DisplayName"; p2.Value = string.IsNullOrEmpty(cat.DisplayName) ? (cat.Name ?? (object)DBNull.Value) : cat.DisplayName; insCmd.Parameters.Add(p2);
+                                var p3 = insCmd.CreateParameter(); p3.ParameterName = "SortOrder"; p3.Value = cat.SortOrder; insCmd.Parameters.Add(p3);
+                                insCmd.ExecuteNonQuery();
+                            }
+
+                            // 读取刚插入的 id（按 name 倒序取最新一条）
+                            using (var getIdCmd = conn.CreateCommand())
+                            {
+                                getIdCmd.Transaction = tx;
+                                getIdCmd.CommandText = "SELECT id FROM departments WHERE name = :Name ORDER BY id DESC FETCH FIRST 1 ROWS ONLY";
+                                var gp = getIdCmd.CreateParameter(); gp.ParameterName = "Name"; gp.Value = cat.Name ?? (object)DBNull.Value; getIdCmd.Parameters.Add(gp);
+                                var got = getIdCmd.ExecuteScalar();
+                                if (got != null && got != DBNull.Value) deptId = Convert.ToInt32(got);
+                            }
+                        }
+
+                        if (deptId.HasValue)
+                        {
+                            using var mapIns = conn.CreateCommand();
+                            mapIns.Transaction = tx;
+                            mapIns.CommandText = "INSERT INTO category_department_map (category_id, department_id) VALUES (:CategoryId, :DepartmentId)";
+                            var mp1 = mapIns.CreateParameter(); mp1.ParameterName = "CategoryId"; mp1.Value = cat.Id; mapIns.Parameters.Add(mp1);
+                            var mp2 = mapIns.CreateParameter(); mp2.ParameterName = "DepartmentId"; mp2.Value = deptId.Value; mapIns.Parameters.Add(mp2);
+                            mapIns.ExecuteNonQuery();
+                        }
                     }
 
-                    if (deptId.HasValue)
-                    {
-                        // 建立映射
-                        var insertMap = "INSERT INTO category_department_map (category_id, department_id) VALUES (@CategoryId, @DepartmentId)";
-                        await conn.ExecuteAsync(insertMap, new { CategoryId = cat.Id, DepartmentId = deptId.Value }).ConfigureAwait(false);
-                    }
-                }
+                    tx.Commit();
+                }).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -855,30 +1135,47 @@ ON UPDATE CASCADE;");
             try
             {
                 using var conn = GetConnection();
-                await conn.OpenAsync().ConfigureAwait(false);
+                conn.Open();
 
-                var getDeptSql = "SELECT department_id FROM category_department_map WHERE category_id = @CategoryId";
-                var deptId = await conn.QueryFirstOrDefaultAsync<int?>(getDeptSql, new { CategoryId = categoryId }).ConfigureAwait(false);
-                if (!deptId.HasValue)
+                int? deptId = null;
+                using (var getDeptCmd = conn.CreateCommand())
                 {
-                    // 无映射， nothing to do
-                    return;
+                    getDeptCmd.CommandText = "SELECT department_id FROM category_department_map WHERE category_id = :CategoryId";
+                    var p = getDeptCmd.CreateParameter(); p.ParameterName = "CategoryId"; p.Value = categoryId; getDeptCmd.Parameters.Add(p);
+                    var r = getDeptCmd.ExecuteScalar();
+                    if (r == null || r == DBNull.Value) return; // 无映射
+                    deptId = Convert.ToInt32(r);
                 }
 
-                // 删除映射
-                var delMapSql = "DELETE FROM category_department_map WHERE category_id = @CategoryId";
-                await conn.ExecuteAsync(delMapSql, new { CategoryId = categoryId }).ConfigureAwait(false);
+                using (var delMapCmd = conn.CreateCommand())
+                {
+                    delMapCmd.CommandText = "DELETE FROM category_department_map WHERE category_id = :CategoryId";
+                    var p = delMapCmd.CreateParameter(); p.ParameterName = "CategoryId"; p.Value = categoryId; delMapCmd.Parameters.Add(p);
+                    delMapCmd.ExecuteNonQuery();
+                }
 
-                // 检查该部门是否仍被其它分类映射或有用户
-                var usedByCatSql = "SELECT COUNT(*) FROM category_department_map WHERE department_id = @DepartmentId";
-                var usedByCat = await conn.QuerySingleAsync<int>(usedByCatSql, new { DepartmentId = deptId.Value }).ConfigureAwait(false);
-                var userCountSql = "SELECT COUNT(*) FROM users WHERE department_id = @DepartmentId";
-                var userCount = await conn.QuerySingleAsync<int>(userCountSql, new { DepartmentId = deptId.Value }).ConfigureAwait(false);
+                int usedByCat = 0;
+                using (var usedCmd = conn.CreateCommand())
+                {
+                    usedCmd.CommandText = "SELECT COUNT(*) FROM category_department_map WHERE department_id = :DepartmentId";
+                    var p = usedCmd.CreateParameter(); p.ParameterName = "DepartmentId"; p.Value = deptId.Value; usedCmd.Parameters.Add(p);
+                    var r = usedCmd.ExecuteScalar(); usedByCat = Convert.ToInt32(r ?? 0);
+                }
+
+                int userCount = 0;
+                using (var userCmd = conn.CreateCommand())
+                {
+                    userCmd.CommandText = "SELECT COUNT(*) FROM users WHERE department_id = :DepartmentId";
+                    var p = userCmd.CreateParameter(); p.ParameterName = "DepartmentId"; p.Value = deptId.Value; userCmd.Parameters.Add(p);
+                    var r = userCmd.ExecuteScalar(); userCount = Convert.ToInt32(r ?? 0);
+                }
 
                 if (usedByCat == 0 && userCount == 0)
                 {
-                    var delDeptSql = "DELETE FROM departments WHERE id = @DepartmentId";
-                    await conn.ExecuteAsync(delDeptSql, new { DepartmentId = deptId.Value }).ConfigureAwait(false);
+                    using var delDept = conn.CreateCommand();
+                    delDept.CommandText = "DELETE FROM departments WHERE id = :DepartmentId";
+                    var p = delDept.CreateParameter(); p.ParameterName = "DepartmentId"; p.Value = deptId.Value; delDept.Parameters.Add(p);
+                    delDept.ExecuteNonQuery();
                 }
             }
             catch (Exception ex)
@@ -921,7 +1218,8 @@ ON UPDATE CASCADE;");
             try
             {
                 using var conn = GetConnection();
-                await conn.OpenAsync().ConfigureAwait(false);
+                // 使用同步打开以兼容 IDbConnection 在 .NET Framework 中的实现
+                conn.Open();
                 var mapSql = "SELECT department_id FROM category_department_map WHERE category_id = @CategoryId";
                 var deptId = await conn.QueryFirstOrDefaultAsync<int?>(mapSql, new { CategoryId = category.Id }).ConfigureAwait(false);
                 if (deptId.HasValue)
@@ -974,10 +1272,28 @@ ON UPDATE CASCADE;");
                                    FROM cad_categories 
                                    ORDER BY sort_order";
 
-                using var connection = new MySqlConnection(_connectionString);
-                var categories = await connection.QueryAsync<CadCategory>(sql);
-                LogManager.Instance.LogInfo($"查询返回 {categories.AsList().Count} 条记录");
-                return categories.AsList();
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                var list = new List<CadCategory>();
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var c = new CadCategory();
+                    int ord;
+                    ord = reader.GetOrdinal("Id"); c.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Name"); c.Name = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                    ord = reader.GetOrdinal("DisplayName"); c.DisplayName = reader.IsDBNull(ord) ? c.Name : reader.GetString(ord);
+                    ord = reader.GetOrdinal("SubcategoryIds"); c.SubcategoryIds = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("SortOrder"); c.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("CreatedAt"); c.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("UpdatedAt"); c.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    list.Add(c);
+                }
+                LogManager.Instance.LogInfo($"查询返回 {list.Count} 条记录");
+                return list;
 
             }
             catch (Exception ex)
@@ -990,9 +1306,16 @@ ON UPDATE CASCADE;");
         /// <summary>
         /// 根据名称获取CAD分类
         /// </summary>
+
         public async Task<CadCategory> GetCadCategoryByNameAsync(string categoryName)
         {
-            const string sql = @"
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                return null;
+            }
+
+            // 使用 @ 作为标准参数占位符
+            string sql = @"
             SELECT 
                id AS Id,
                name AS Name,
@@ -1003,21 +1326,32 @@ ON UPDATE CASCADE;");
                updated_at AS UpdatedAt
             FROM cad_categories 
             WHERE name LIKE @Name";
+
             try
             {
-                using var connection = new MySqlConnection(_connectionString);
-                var parameters = new Dictionary<string, object>();
-                parameters.Add("Name", $"%{categoryName}%");
-                var result = await connection.QuerySingleOrDefaultAsync<CadCategory>(sql, parameters);
+                using var connection = GetConnection();
+                // 1. 如果是达梦数据库，将 @Name 替换为 :Name
+                if (_adapter.DatabaseType == "DM" || _adapter.DatabaseType == "Dm")
+                {
+                    sql = sql.Replace("@Name", ":Name");
+                }
+
+                // 2. 构造参数字典
+                var parameters = new Dictionary<string, object>
+                {
+                    { "Name", $"%{categoryName}%" }
+                };
+
+                // 3. 执行查询。Dapper 会自动根据 IDbConnection 类型处理参数绑定
+                var result = await connection.QueryFirstOrDefaultAsync<CadCategory>(sql, parameters).ConfigureAwait(false);
                 return result;
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogInfo($"数据库查询出错: {ex.Message}");
+                // 在报错信息中加入 SQL 诊断信息，便于排查
+                LogManager.Instance.LogInfo($"[数据库-{_adapter.DatabaseType}] 查询出错: {ex.Message}. SQL: {sql}");
                 throw;
             }
-
-
         }
 
         #endregion
@@ -1031,8 +1365,6 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<List<CadSubcategory>> GetAllCadSubcategoriesAsync()
         {
-            using var connection = GetConnection();
-            //var sql = "SELECT * FROM cad_subcategories ORDER BY parent_id, id, parent_id, name, display_name, level , subcategory_ids, sort_order";
             const string sql = @"
                                SELECT 
                                    id AS Id,
@@ -1046,7 +1378,44 @@ ON UPDATE CASCADE;");
                                    updated_at AS UpdatedAt
                                FROM cad_subcategories 
                                ORDER BY parent_id, id, parent_id, name, display_name, level , subcategory_ids, sort_order";
-            return (await connection.QueryAsync<CadSubcategory>(sql)).AsList();
+
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = new MySqlConnection(_connectionString);
+                var rows = await conn.QueryAsync<CadSubcategory>(sql).ConfigureAwait(false);
+                return rows.AsList();
+            }
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                var list = new List<CadSubcategory>();
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var c = new CadSubcategory();
+                    int ord;
+                    ord = reader.GetOrdinal("Id"); c.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("ParentId"); c.ParentId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Name"); c.Name = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("DisplayName"); c.DisplayName = reader.IsDBNull(ord) ? c.Name : reader.GetString(ord);
+                    ord = reader.GetOrdinal("SortOrder"); c.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Level"); c.Level = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("SubcategoryIds"); c.SubcategoryIds = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("CreatedAt"); c.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("UpdatedAt"); c.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    list.Add(c);
+                }
+                return list;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAllCadSubcategoriesAsync 出错: {ex.Message}");
+                return new List<CadSubcategory>();
+            }
         }
 
         /// <summary>
@@ -1055,6 +1424,11 @@ ON UPDATE CASCADE;");
         /// <returns>  </returns>
         public async Task<CadSubcategory> GetCadSubcategoryByIdAsync(int id)
         {
+            if (id <= 0)
+            {
+                return null;
+            }
+
             const string sql = @"
                                SELECT 
                                    id AS Id,
@@ -1068,9 +1442,39 @@ ON UPDATE CASCADE;");
                                    updated_at AS UpdatedAt
                                FROM cad_subcategories 
                                WHERE id = @id";
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = new MySqlConnection(_connectionString);
+                return await conn.QuerySingleOrDefaultAsync<CadSubcategory>(sql, new { id }).ConfigureAwait(false);
+            }
 
-            using var connection = new MySqlConnection(_connectionString);
-            return await connection.QuerySingleOrDefaultAsync<CadSubcategory>(sql, new { id });
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "id", id);
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read()) return null;
+                var c = new CadSubcategory();
+                int ord;
+                ord = reader.GetOrdinal("Id"); c.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("ParentId"); c.ParentId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Name"); c.Name = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("DisplayName"); c.DisplayName = reader.IsDBNull(ord) ? c.Name : reader.GetString(ord);
+                ord = reader.GetOrdinal("SortOrder"); c.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Level"); c.Level = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("SubcategoryIds"); c.SubcategoryIds = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("CreatedAt"); c.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("UpdatedAt"); c.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                return c;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetCadSubcategoryByIdAsync 出错: {ex.Message}");
+                return null;
+            }
         }
 
 
@@ -1079,6 +1483,11 @@ ON UPDATE CASCADE;");
         /// </summary>
         public async Task<List<CadSubcategory>> GetCadSubcategoriesByCategoryIdAsync(int categoryId)
         {
+            if (categoryId <= 0)
+            {
+                return new List<CadSubcategory>();
+            }
+
             const string sql = @"
                                SELECT 
                                     id AS Id,
@@ -1095,12 +1504,41 @@ ON UPDATE CASCADE;");
                                ORDER BY sort_order";
             try
             {
-                using var connection = new MySqlConnection(_connectionString);
-                var parameters = new Dictionary<string, object>();
-                parameters.Add("ParentId", categoryId);
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = new MySqlConnection(_connectionString);
+                    var subcategories = await conn.QueryAsync<CadSubcategory>(sql, new { ParentId = categoryId }).ConfigureAwait(false);
+                    return subcategories.AsList();
+                }
 
-                var subcategories = await connection.QueryAsync<CadSubcategory>(sql, parameters);
-                return subcategories.AsList();
+                try
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = _adapter.NormalizeSql(sql);
+                    AddDmParam(cmd, "ParentId", categoryId);
+                    var list = new List<CadSubcategory>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var c = new CadSubcategory();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); c.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("ParentId"); c.ParentId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Name"); c.Name = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); c.DisplayName = reader.IsDBNull(ord) ? c.Name : reader.GetString(ord);
+                        ord = reader.GetOrdinal("SortOrder"); c.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Level"); c.Level = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        list.Add(c);
+                    }
+                    return list;
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogInfo($"GetCadSubcategoriesByCategoryIdAsync 出错: {ex.Message}");
+                    return new List<CadSubcategory>();
+                }
             }
             catch (Exception ex)
             {
@@ -1117,6 +1555,11 @@ ON UPDATE CASCADE;");
         {
             try
             {
+                if (parentId <= 0)
+                {
+                    return new List<CadSubcategory>();
+                }
+
                 const string sql = @"
                                SELECT 
                                    *
@@ -1124,14 +1567,46 @@ ON UPDATE CASCADE;");
                                WHERE parent_id = @parentId 
                                ORDER BY sort_order";
 
-                using var connection = new MySqlConnection(_connectionString);
-                var subcategories = await connection.QueryAsync<CadSubcategory>(sql, new { parentId });
-                return subcategories.AsList();
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = _adapter.CreateConnection();
+                    conn.Open();
+                    var subcategories = await conn.QueryAsync<CadSubcategory>(sql, new { parentId }).ConfigureAwait(false);
+                    return subcategories.AsList();
+                }
+
+                try
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = _adapter.NormalizeSql(sql);
+                    AddDmParam(cmd, "parentId", parentId);
+                    var list = new List<CadSubcategory>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var c = new CadSubcategory();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); c.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("ParentId"); c.ParentId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Name"); c.Name = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); c.DisplayName = reader.IsDBNull(ord) ? c.Name : reader.GetString(ord);
+                        ord = reader.GetOrdinal("SortOrder"); c.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        list.Add(c);
+                    }
+                    return list;
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Instance.LogInfo($"GetCadSubcategoriesByParentIdAsync 出错: {ex.Message}");
+                    return new List<CadSubcategory>();
+                }
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"获取子分类时出错: {ex.Message}");
-                return null;
+                return new List<CadSubcategory>();
             }
         }
 
@@ -1175,11 +1650,36 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> UpdateCadSubcategoryAsync(CadSubcategory cadSubcategory)
         {
-            using var connection = GetConnection();
             var sql = @"UPDATE cad_subcategories 
            SET  parent_id = @ParentId, name = @Name, display_name = @DisplayName, subcategory_ids = @newSubcategoryIds, sort_order = @SortOrder, updated_at = NOW() 
            WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, cadSubcategory);
+
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = _adapter.CreateConnection();
+                conn.Open();
+                return await conn.ExecuteAsync(sql, cadSubcategory).ConfigureAwait(false);
+            }
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "ParentId", cadSubcategory.ParentId);
+                AddDmParam(cmd, "Name", cadSubcategory.Name ?? string.Empty);
+                AddDmParam(cmd, "DisplayName", cadSubcategory.DisplayName ?? (object)DBNull.Value);
+                AddDmParam(cmd, "newSubcategoryIds", cadSubcategory.SubcategoryIds ?? (object)DBNull.Value);
+                AddDmParam(cmd, "SortOrder", cadSubcategory.SortOrder);
+                AddDmParam(cmd, "Id", cadSubcategory.Id);
+                return cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"UpdateCadSubcategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 添加更新父级子分类列表的方法
@@ -1204,7 +1704,22 @@ ON UPDATE CASCADE;");
                     selectSql = "SELECT subcategory_ids FROM cad_categories WHERE id = @parentId";   // 父级是主分类
                     parameters = new { parentId };
                 }
-                string currentSubcategoryIds = await connection.QuerySingleOrDefaultAsync<string>(selectSql, parameters);
+                string currentSubcategoryIds;
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var mconn = _adapter.CreateConnection();
+                    mconn.Open();
+                    currentSubcategoryIds = await mconn.QuerySingleOrDefaultAsync<string>(selectSql, parameters).ConfigureAwait(false);
+                }
+                else
+                {
+                    connection.Open();
+                    using var selcmd = connection.CreateCommand();
+                    selcmd.CommandText = _adapter.NormalizeSql(selectSql);
+                    AddDmParam(selcmd, "parentId", parentId);
+                    var cres = selcmd.ExecuteScalar();
+                    currentSubcategoryIds = cres == null || cres == DBNull.Value ? null : Convert.ToString(cres);
+                }
                 string newSubcategoryIds;// 更新子分类列表
                 if (string.IsNullOrEmpty(currentSubcategoryIds))
                 {
@@ -1233,7 +1748,20 @@ ON UPDATE CASCADE;");
                     updateSql = "UPDATE cad_categories SET subcategory_ids = @newSubcategoryIds, updated_at = NOW() WHERE id = @parentId"; // 更新主分类表
                 }
 
-                return await connection.ExecuteAsync(updateSql, new { newSubcategoryIds, parentId });
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var mconn2 = _adapter.CreateConnection();
+                    mconn2.Open();
+                    return await mconn2.ExecuteAsync(updateSql, new { newSubcategoryIds, parentId }).ConfigureAwait(false);
+                }
+
+                using var updConn = GetConnection();
+                updConn.Open();
+                using var updCmd = updConn.CreateCommand();
+                updCmd.CommandText = _adapter.NormalizeSql(updateSql);
+                AddDmParam(updCmd, "newSubcategoryIds", newSubcategoryIds);
+                AddDmParam(updCmd, "parentId", parentId);
+                return updCmd.ExecuteNonQuery();
             }
             catch (Exception ex)
             {
@@ -1252,7 +1780,6 @@ ON UPDATE CASCADE;");
         {
             try
             {
-                using var connection = GetConnection();// 创建数据库连接
                 string updateSql; // 更新数据库
                 if (parentId >= 10000)
                 {
@@ -1263,7 +1790,19 @@ ON UPDATE CASCADE;");
                     updateSql = "UPDATE cad_categories SET subcategory_ids = @newSubcategoryIds, updated_at = NOW() WHERE id = @parentId"; // 更新主分类表
                 }
 
-                return await connection.ExecuteAsync(updateSql, new { newSubcategoryIds, parentId });
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var mconn = new MySqlConnection(_connectionString);
+                    return await mconn.ExecuteAsync(updateSql, new { newSubcategoryIds, parentId }).ConfigureAwait(false);
+                }
+
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(updateSql);
+                AddDmParam(cmd, "newSubcategoryIds", newSubcategoryIds ?? (object)DBNull.Value);
+                AddDmParam(cmd, "parentId", parentId);
+                return cmd.ExecuteNonQuery();
             }
             catch (Exception ex)
             {
@@ -1280,9 +1819,28 @@ ON UPDATE CASCADE;");
         public async Task<int> DeleteCadSubcategoryAsync(int id)
         {
             //这个方法还有不完善的地方，比如子分类下还有子分类或图元，如果不删除子分类下的图元，则无法删除子分类，需要前删除子分类下的图元，不然这个分类下的图元与子分类就是在数据库中的垃圾数据；
-            using var connection = GetConnection();
             var sql = "DELETE FROM cad_subcategories WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, new { Id = id });
+
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var mconn = new MySqlConnection(_connectionString);
+                return await mconn.ExecuteAsync(sql, new { Id = id }).ConfigureAwait(false);
+            }
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "Id", id);
+                return cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DeleteCadSubcategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         #endregion
 
@@ -1303,9 +1861,41 @@ ON UPDATE CASCADE;");
             FROM sw_categories 
             ORDER BY sort_order";
 
-            using var connection = new MySqlConnection(_connectionString);
-            var categories = await connection.QueryAsync<SwCategory>(sql);
-            return categories.AsList();
+            // 兼容 MySQL 与达梦：若为 MySQL 使用 Dapper 快速映射；否则使用适配器手工读取
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = new MySqlConnection(_connectionString);
+                var categories = await conn.QueryAsync<SwCategory>(sql).ConfigureAwait(false);
+                return categories.AsList();
+            }
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                var list = new List<SwCategory>();
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var s = new SwCategory();
+                    int ord;
+                    ord = reader.GetOrdinal("id"); s.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("name"); s.Name = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("display_name"); s.DisplayName = reader.IsDBNull(ord) ? s.Name : reader.GetString(ord);
+                    ord = reader.GetOrdinal("sort_order"); s.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("created_at"); s.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("updated_at"); s.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    list.Add(s);
+                }
+                return list;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAllSwCategoriesAsync 出错: {ex.Message}");
+                return new List<SwCategory>();
+            }
         }
 
         /// <summary>
@@ -1315,10 +1905,31 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> AddSwCategoryAsync(SwCategory category)
         {
-            using var connection = GetConnection();
             var sql = @"INSERT INTO sw_categories (name, display_name, sort_order) 
                 VALUES (@Name, @DisplayName, @SortOrder)";
-            return await connection.ExecuteAsync(sql, category);
+
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = new MySqlConnection(_connectionString);
+                return await conn.ExecuteAsync(sql, category).ConfigureAwait(false);
+            }
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "Name", category.Name ?? string.Empty);
+                AddDmParam(cmd, "DisplayName", category.DisplayName ?? (object)DBNull.Value);
+                AddDmParam(cmd, "SortOrder", category.SortOrder);
+                return cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"AddSwCategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 修改SW分类
@@ -1327,11 +1938,33 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> UpdateSwCategoryAsync(SwCategory category)
         {
-            using var connection = GetConnection();
             var sql = @"UPDATE sw_categories 
                 SET name = @Name, display_name = @DisplayName, sort_order = @SortOrder, updated_at = NOW() 
                 WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, category);
+
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = GetConnection();
+                return await conn.ExecuteAsync(sql, category).ConfigureAwait(false);
+            }
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "Name", category.Name ?? string.Empty);
+                AddDmParam(cmd, "DisplayName", category.DisplayName ?? (object)DBNull.Value);
+                AddDmParam(cmd, "SortOrder", category.SortOrder);
+                AddDmParam(cmd, "Id", category.Id);
+                return cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"UpdateSwCategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 删除SW分类
@@ -1340,9 +1973,28 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> DeleteSwCategoryAsync(int id)
         {
-            using var connection = GetConnection();
             var sql = "DELETE FROM sw_categories WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, new { Id = id });
+
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                using var conn = GetConnection();
+                return await conn.ExecuteAsync(sql, new { Id = id }).ConfigureAwait(false);
+            }
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "Id", id);
+                return cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DeleteSwCategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 根据父ID获取SW子分类
@@ -1365,11 +2017,43 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<List<SwSubcategory>> GetSwSubcategoriesByCategoryIdAsync(int categoryId)
         {
-            using var connection = GetConnection();
-            var sql = @"SELECT * FROM sw_subcategories 
-                WHERE category_id = @CategoryId 
+            const string sql = @"SELECT id AS Id, category_id AS CategoryId, name AS Name, display_name AS DisplayName, parent_id AS ParentId, sort_order AS SortOrder
+                FROM sw_subcategories
+                WHERE category_id = :CategoryId
                 ORDER BY parent_id, sort_order, name";
-            return (await connection.QueryAsync<SwSubcategory>(sql, new { CategoryId = categoryId })).AsList();
+
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    var p = cmd.CreateParameter(); p.ParameterName = "CategoryId"; p.Value = categoryId; cmd.Parameters.Add(p);
+
+                    var list = new List<SwSubcategory>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var s = new SwSubcategory();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); s.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryId"); s.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Name"); s.Name = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); s.DisplayName = reader.IsDBNull(ord) ? s.Name : reader.GetString(ord);
+                        ord = reader.GetOrdinal("ParentId"); s.ParentId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("SortOrder"); s.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        list.Add(s);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetSwSubcategoriesByCategoryIdAsync 出错: {ex.Message}");
+                return new List<SwSubcategory>();
+            }
         }
         /// <summary>
         /// 获取所有SW子分类
@@ -1377,9 +2061,38 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<List<SwSubcategory>> GetAllSwSubcategoriesAsync()
         {
-            using var connection = GetConnection();
-            var sql = "SELECT * FROM sw_subcategories ORDER BY category_id, parent_id, sort_order, name";
-            return (await connection.QueryAsync<SwSubcategory>(sql)).AsList();
+            const string sql = @"SELECT id AS Id, category_id AS CategoryId, name AS Name, display_name AS DisplayName, parent_id AS ParentId, sort_order AS SortOrder
+                FROM sw_subcategories ORDER BY category_id, parent_id, sort_order, name";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    var list = new List<SwSubcategory>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var s = new SwSubcategory();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); s.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryId"); s.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Name"); s.Name = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); s.DisplayName = reader.IsDBNull(ord) ? s.Name : reader.GetString(ord);
+                        ord = reader.GetOrdinal("ParentId"); s.ParentId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("SortOrder"); s.SortOrder = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        list.Add(s);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAllSwSubcategoriesAsync 出错: {ex.Message}");
+                return new List<SwSubcategory>();
+            }
         }
         /// <summary>
         /// 添加SW子分类
@@ -1388,10 +2101,29 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> AddSwSubcategoryAsync(SwSubcategory subcategory)
         {
-            using var connection = GetConnection();
-            var sql = @"INSERT INTO sw_subcategories (category_id, name, display_name, parent_id, sort_order) 
-                VALUES (@CategoryId, @Name, @DisplayName, @ParentId, @SortOrder)";
-            return await connection.ExecuteAsync(sql, subcategory);
+            const string sql = @"INSERT INTO sw_subcategories (category_id, name, display_name, parent_id, sort_order)
+                VALUES (:CategoryId, :Name, :DisplayName, :ParentId, :SortOrder)";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    AddDmParam(cmd, "CategoryId", subcategory.CategoryId);
+                    AddDmParam(cmd, "Name", subcategory.Name ?? "");
+                    AddDmParam(cmd, "DisplayName", subcategory.DisplayName ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "ParentId", subcategory.ParentId);
+                    AddDmParam(cmd, "SortOrder", subcategory.SortOrder);
+                    return cmd.ExecuteNonQuery();
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"AddSwSubcategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 修改SW子分类
@@ -1400,11 +2132,30 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> UpdateSwSubcategoryAsync(SwSubcategory subcategory)
         {
-            using var connection = GetConnection();
-            var sql = @"UPDATE sw_subcategories 
-                SET name = @Name, display_name = @DisplayName, parent_id = @ParentId, sort_order = @SortOrder, updated_at = NOW() 
-                WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, subcategory);
+            const string sql = @"UPDATE sw_subcategories
+                SET name = :Name, display_name = :DisplayName, parent_id = :ParentId, sort_order = :SortOrder, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :Id";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    AddDmParam(cmd, "Name", subcategory.Name ?? "");
+                    AddDmParam(cmd, "DisplayName", subcategory.DisplayName ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "ParentId", subcategory.ParentId);
+                    AddDmParam(cmd, "SortOrder", subcategory.SortOrder);
+                    AddDmParam(cmd, "Id", subcategory.Id);
+                    return cmd.ExecuteNonQuery();
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"UpdateSwSubcategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 删除SW子分类
@@ -1413,9 +2164,24 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> DeleteSwSubcategoryAsync(int id)
         {
-            using var connection = GetConnection();
-            var sql = "DELETE FROM sw_subcategories WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, new { Id = id });
+            const string sql = "DELETE FROM sw_subcategories WHERE id = :Id";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    AddDmParam(cmd, "Id", id);
+                    return cmd.ExecuteNonQuery();
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DeleteSwSubcategoryAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         #endregion
 
@@ -1425,24 +2191,55 @@ ON UPDATE CASCADE;");
         /// </summary>
         public async Task<List<SwGraphic>> GetSwGraphicsBySubcategoryIdAsync(int subcategoryId)
         {
-            const string sql = @"
-                               SELECT 
-                                   id,
-                                   subcategory_id,
-                                   file_name,
-                                   display_name,
-                                   file_path,
-                                   preview_image_path,
-                                   file_size,
-                                   created_at,
-                                   updated_at
-                               FROM sw_graphics 
-                               WHERE subcategory_id = @subcategoryId 
-                               ORDER BY file_name";
+            const string q = @"
+                                SELECT
+                                    id AS Id,
+                                    subcategory_id AS SubcategoryId,
+                                    file_name AS FileName,
+                                    display_name AS DisplayName,
+                                    file_path AS FilePath,
+                                    preview_image_path AS PreviewImagePath,
+                                    file_size AS FileSize,
+                                    created_at AS CreatedAt,
+                                    updated_at AS UpdatedAt
+                                FROM sw_graphics
+                                WHERE subcategory_id = :SubcategoryId
+                                ORDER BY file_name";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = q;
+                    AddDmParam(cmd, "SubcategoryId", subcategoryId);
 
-            using var connection = new MySqlConnection(_connectionString);
-            var graphics = await connection.QueryAsync<SwGraphic>(sql, new { subcategoryId });
-            return graphics.AsList();
+                    var list = new List<SwGraphic>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var g = new SwGraphic();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); g.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("SubcategoryId"); g.SubcategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("FileName"); g.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); g.DisplayName = reader.IsDBNull(ord) ? g.FileName : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FilePath"); g.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("PreviewImagePath"); g.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileSize"); g.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                        ord = reader.GetOrdinal("CreatedAt"); g.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        ord = reader.GetOrdinal("UpdatedAt"); g.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        list.Add(g);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetSwGraphicsBySubcategoryIdAsync 出错: {ex.Message}");
+                return new List<SwGraphic>();
+            }
         }
 
         /// <summary>
@@ -1452,10 +2249,30 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> AddSwGraphicAsync(SwGraphic graphic)
         {
-            using var connection = GetConnection();
-            var sql = @"INSERT INTO sw_graphics (subcategory_id, file_name, display_name, file_path, preview_image_path, file_size) 
-                VALUES (@SubcategoryId, @FileName, @DisplayName, @FilePath, @PreviewImagePath, @FileSize)";
-            return await connection.ExecuteAsync(sql, graphic);
+            const string sql = @"INSERT INTO sw_graphics (subcategory_id, file_name, display_name, file_path, preview_image_path, file_size)
+                VALUES (:SubcategoryId, :FileName, :DisplayName, :FilePath, :PreviewImagePath, :FileSize)";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    AddDmParam(cmd, "SubcategoryId", graphic.SubcategoryId);
+                    AddDmParam(cmd, "FileName", graphic.FileName ?? "");
+                    AddDmParam(cmd, "DisplayName", graphic.DisplayName ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "FilePath", graphic.FilePath ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "PreviewImagePath", graphic.PreviewImagePath ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "FileSize", graphic.FileSize);
+                    return cmd.ExecuteNonQuery();
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"AddSwGraphicAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 修改SW图元
@@ -1464,12 +2281,32 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> UpdateSwGraphicAsync(SwGraphic graphic)
         {
-            using var connection = GetConnection();
-            var sql = @"UPDATE sw_graphics 
-                SET file_name = @FileName, display_name = @DisplayName, file_path = @FilePath, 
-                    preview_image_path = @PreviewImagePath, file_size = @FileSize, updated_at = NOW() 
-                WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, graphic);
+            const string sql = @"UPDATE sw_graphics
+                SET file_name = :FileName, display_name = :DisplayName, file_path = :FilePath,
+                    preview_image_path = :PreviewImagePath, file_size = :FileSize, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :Id";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    AddDmParam(cmd, "FileName", graphic.FileName ?? "");
+                    AddDmParam(cmd, "DisplayName", graphic.DisplayName ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "FilePath", graphic.FilePath ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "PreviewImagePath", graphic.PreviewImagePath ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "FileSize", graphic.FileSize);
+                    AddDmParam(cmd, "Id", graphic.Id);
+                    return cmd.ExecuteNonQuery();
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"UpdateSwGraphicAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 删除SW图元
@@ -1478,15 +2315,60 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> DeleteSwGraphicAsync(int id)
         {
-            using var connection = GetConnection();
-            var sql = "DELETE FROM sw_graphics WHERE id = @Id";
-            return await connection.ExecuteAsync(sql, new { Id = id });
+            const string sql = "DELETE FROM sw_graphics WHERE id = :Id";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    AddDmParam(cmd, "Id", id);
+                    return cmd.ExecuteNonQuery();
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"DeleteSwGraphicAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         public async Task<SwGraphic> GetSwGraphicByIdAsync(int id)
         {
-            using var connection = GetConnection();
-            var sql = "SELECT * FROM sw_graphics WHERE id = @Id";
-            return await connection.QueryFirstOrDefaultAsync<SwGraphic>(sql, new { Id = id });
+            const string sql = @"SELECT id AS Id, subcategory_id AS SubcategoryId, file_name AS FileName, display_name AS DisplayName,
+                file_path AS FilePath, preview_image_path AS PreviewImagePath, file_size AS FileSize, created_at AS CreatedAt, updated_at AS UpdatedAt
+                FROM sw_graphics WHERE id = :Id";
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    AddDmParam(cmd, "Id", id);
+                    using var reader = cmd.ExecuteReader();
+                    if (!reader.Read()) return null;
+                    var g = new SwGraphic();
+                    int ord;
+                    ord = reader.GetOrdinal("Id"); g.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("SubcategoryId"); g.SubcategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("FileName"); g.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                    ord = reader.GetOrdinal("DisplayName"); g.DisplayName = reader.IsDBNull(ord) ? g.FileName : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FilePath"); g.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                    ord = reader.GetOrdinal("PreviewImagePath"); g.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileSize"); g.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                    ord = reader.GetOrdinal("CreatedAt"); g.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("UpdatedAt"); g.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    return g;
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetSwGraphicByIdAsync 出错: {ex.Message}");
+                return null;
+            }
         }
         #endregion
 
@@ -1520,9 +2402,49 @@ ON UPDATE CASCADE;");
             FROM device_info 
             ORDER BY device_name";
 
-            using var connection = new MySqlConnection(_connectionString);
-            var deviceList = await connection.QueryAsync<DeviceInfo>(sql);
-            return deviceList.AsList();
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+
+                    var list = new List<DeviceInfo>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var d = new DeviceInfo();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); d.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Name"); d.Name = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Type"); d.Type = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("MediumName"); d.MediumName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Specifications"); d.Specifications = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Material"); d.Material = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Quantity"); d.Quantity = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("DrawingNumber"); d.DrawingNumber = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Power"); d.Power = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Volume"); d.Volume = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Pressure"); d.Pressure = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Temperature"); d.Temperature = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Diameter"); d.Diameter = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Length"); d.Length = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Thickness"); d.Thickness = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Weight"); d.Weight = reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+                        ord = reader.GetOrdinal("Model"); d.Model = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Remarks"); d.Remarks = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                        list.Add(d);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAllDeviceInfoAsync 出错: {ex.Message}");
+                return new List<DeviceInfo>();
+            }
         }
 
         /// <summary>
@@ -1556,24 +2478,36 @@ ON UPDATE CASCADE;");
         {
             const string updateSql = @"
             UPDATE cad_file_storage 
-            SET display_name = @DisplayName,
-                file_path = @FilePath,
-                preview_image_path = @PreviewImagePath,
-                updated_at = NOW()
-            WHERE id = @Id";
+            SET display_name = :DisplayName,
+                file_path = :FilePath,
+                preview_image_path = :PreviewImagePath,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :Id";
 
-            using var connection = new MySqlConnection(_connectionString);
-            using var transaction = await connection.BeginTransactionAsync();
+            using var connection = GetConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
 
             try
             {
-                await connection.ExecuteAsync(updateSql, file, transaction);
-                await transaction.CommitAsync();
+                foreach (var f in file)
+                {
+                    using var cmd = connection.CreateCommand();
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = updateSql;
+                    AddDmParam(cmd, "DisplayName", f.DisplayName ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "FilePath", f.FilePath ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "PreviewImagePath", f.PreviewImagePath ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "Id", f.Id);
+                    cmd.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
                 return true;
             }
             catch
             {
-                await transaction.RollbackAsync();
+                try { transaction.Rollback(); } catch { }
                 return false;
             }
         }
@@ -1588,9 +2522,21 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<string> GetConfigValueAsync(string configKey)
         {
-            using var connection = GetConnection();
-            var sql = "SELECT config_value FROM system_config WHERE config_key = @ConfigKey";
-            return await connection.QueryFirstOrDefaultAsync<string>(sql, new { ConfigKey = configKey });
+            using var conn = GetConnection();
+            try
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT config_value FROM system_config WHERE config_key = :ConfigKey";
+                AddDmParam(cmd, "ConfigKey", configKey);
+                var res = cmd.ExecuteScalar();
+                return res == null || res == DBNull.Value ? null : Convert.ToString(res);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetConfigValueAsync 出错: {ex.Message}");
+                return null;
+            }
         }
         /// <summary>
         /// 设置系统配置
@@ -1600,11 +2546,30 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<int> SetConfigValueAsync(string configKey, string configValue)
         {
-            using var connection = GetConnection();
-            var sql = @"INSERT INTO system_config (config_key, config_value) 
-                VALUES (@ConfigKey, @ConfigValue) 
-                ON DUPLICATE KEY UPDATE config_value = @ConfigValue";
-            return await connection.ExecuteAsync(sql, new { ConfigKey = configKey, ConfigValue = configValue });
+            using var conn = GetConnection();
+            try
+            {
+                conn.Open();
+                // 先尝试更新
+                using var upd = conn.CreateCommand();
+                upd.CommandText = "UPDATE system_config SET config_value = :ConfigValue WHERE config_key = :ConfigKey";
+                AddDmParam(upd, "ConfigValue", configValue);
+                AddDmParam(upd, "ConfigKey", configKey);
+                var affected = upd.ExecuteNonQuery();
+                if (affected > 0) return affected;
+
+                // 若未命中，则插入
+                using var ins = conn.CreateCommand();
+                ins.CommandText = "INSERT INTO system_config (config_key, config_value) VALUES (:ConfigKey, :ConfigValue)";
+                AddDmParam(ins, "ConfigKey", configKey);
+                AddDmParam(ins, "ConfigValue", configValue);
+                return ins.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"SetConfigValueAsync 出错: {ex.Message}");
+                return 0;
+            }
         }
         /// <summary>
         /// 获取所有系统配置
@@ -1612,10 +2577,27 @@ ON UPDATE CASCADE;");
         /// <returns></returns>
         public async Task<Dictionary<string, string>> GetAllConfigAsync()
         {
-            using var connection = GetConnection();
-            var sql = "SELECT config_key, config_value FROM system_config";
-            var result = await connection.QueryAsync<(string, string)>(sql);
-            return result.ToDictionary(x => x.Item1, x => x.Item2);
+            using var conn = GetConnection();
+            try
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT config_key, config_value FROM system_config";
+                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var key = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+                    var val = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                    if (!string.IsNullOrEmpty(key)) dict[key] = val;
+                }
+                return dict;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAllConfigAsync 出错: {ex.Message}");
+                return new Dictionary<string, string>();
+            }
         }
 
         /// <summary>
@@ -1708,16 +2690,51 @@ ON UPDATE CASCADE;");
                 }
                 sql += " LIMIT @offset, @pageSize";
 
-                var parameters = new
+                var offset = (page - 1) * pageSize;
+                return await Task.Run(() =>
                 {
-                    CategoryId = categoryId,
-                    CategoryType = categoryType,
-                    offset = (page - 1) * pageSize,
-                    pageSize
-                };
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql.Replace("@CategoryId", ":CategoryId").Replace("@CategoryType", ":CategoryType").Replace("@offset", ":offset").Replace("@pageSize", ":pageSize");
+                    AddDmParam(cmd, "CategoryId", categoryId);
+                    AddDmParam(cmd, "CategoryType", categoryType ?? (object)DBNull.Value);
+                    AddDmParam(cmd, "offset", offset);
+                    AddDmParam(cmd, "pageSize", pageSize);
 
-                using var connection = new MySqlConnection(_connectionString);
-                return (await connection.QueryAsync<FileStorage>(sql, parameters)).AsList();
+                    var list = new List<FileStorage>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var f = new FileStorage();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); f.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryId"); f.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryType"); f.CategoryType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileName"); f.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileStoredName"); f.FileStoredName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FilePath"); f.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileType"); f.FileType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileHash"); f.FileHash = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); f.DisplayName = reader.IsDBNull(ord) ? f.FileName : reader.GetString(ord);
+                        ord = reader.GetOrdinal("BlockName"); f.BlockName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("LayerName"); f.LayerName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("ColorIndex"); f.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Scale"); f.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                        ord = reader.GetOrdinal("PreviewImageName"); f.PreviewImageName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("PreviewImagePath"); f.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileSize"); f.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                        ord = reader.GetOrdinal("IsPreview"); f.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                        ord = reader.GetOrdinal("Version"); f.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Description"); f.Description = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("IsActive"); f.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                        ord = reader.GetOrdinal("CreatedBy"); f.CreatedBy = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("CreatedAt"); f.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        ord = reader.GetOrdinal("UpdatedAt"); f.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        list.Add(f);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1764,15 +2781,51 @@ ON UPDATE CASCADE;");
              WHERE category_id = @CategoryId 
                AND category_type = @CategoryType
              ORDER BY created_at DESC";
-
             try
             {
-                using var connection = new MySqlConnection(_connectionString);
-                var parameters = new Dictionary<string, object>();
-                parameters.Add("CategoryId", categoryId);
-                parameters.Add("CategoryType", categoryType);
-                var result = await connection.QueryAsync<FileStorage>(sql, parameters);
-                return result.AsList();
+                return await Task.Run(() =>
+                {
+                    using var conn = GetConnection();
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql.Replace("@CategoryId", ":CategoryId").Replace("@CategoryType", ":CategoryType");
+                    AddDmParam(cmd, "CategoryId", categoryId);
+                    AddDmParam(cmd, "CategoryType", categoryType ?? (object)DBNull.Value);
+
+                    var list = new List<FileStorage>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var f = new FileStorage();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); f.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryId"); f.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryType"); f.CategoryType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileName"); f.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileStoredName"); f.FileStoredName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FilePath"); f.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileType"); f.FileType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("IsTianZheng"); f.IsTianZheng = reader.IsDBNull(ord) ? (int?)null : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("FileSize"); f.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                        ord = reader.GetOrdinal("FileHash"); f.FileHash = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); f.DisplayName = reader.IsDBNull(ord) ? f.FileName : reader.GetString(ord);
+                        ord = reader.GetOrdinal("BlockName"); f.BlockName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("LayerName"); f.LayerName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("ColorIndex"); f.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Scale"); f.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                        ord = reader.GetOrdinal("PreviewImageName"); f.PreviewImageName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("PreviewImagePath"); f.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Description"); f.Description = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Version"); f.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("IsPreview"); f.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                        ord = reader.GetOrdinal("IsActive"); f.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                        ord = reader.GetOrdinal("CreatedBy"); f.CreatedBy = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("CreatedAt"); f.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        ord = reader.GetOrdinal("UpdatedAt"); f.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        list.Add(f);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
             }
             catch (Exception e)
             {
@@ -1792,55 +2845,171 @@ ON UPDATE CASCADE;");
         /// <summary>
         /// 兼容旧调用：按文件主键读取单条文件记录。
         /// </summary>
+        // 在 FunctionalMethod\DatabaseManager.cs 中修改 GetFileByIdAsync 方法
+
         public async Task<FileStorage?> GetFileByIdAsync(int fileId)
         {
-            const string sql = @"
-                SELECT 
-                    id AS Id,
-                    category_id AS CategoryId,
-                    file_attribute_id AS FileAttributeId,
-                    file_name AS FileName,
-                    file_stored_name AS FileStoredName,
-                    display_name AS DisplayName,
-                    file_type AS FileType,
-                    is_tianzheng AS IsTianZheng,
-                    file_hash AS FileHash,
-                    block_name AS BlockName,
-                    layer_name AS LayerName,
-                    color_index AS ColorIndex,
-                    scale AS Scale,
-                    file_path AS FilePath,
-                    preview_image_name AS PreviewImageName,
-                    preview_image_path AS PreviewImagePath,
-                    file_size AS FileSize,
-                    is_preview AS IsPreview,
-                    version AS Version,
-                    description AS Description,
-                    is_active AS IsActive,
-                    created_by AS CreatedBy,
-                    category_type AS CategoryType,
-                    title AS Title,
-                    keywords AS Keywords,
-                    is_public AS IsPublic,
-                    updated_by AS UpdatedBy,
-                    last_accessed_at AS LastAccessedAt,
-                    created_at AS CreatedAt,
-                    updated_at AS UpdatedAt
-                FROM cad_file_storage
-                WHERE id = @Id
-                LIMIT 1";
+            // 定义基础 SQL
+            string sql = @"
+        SELECT 
+            id AS Id, category_id AS CategoryId, file_attribute_id AS FileAttributeId,
+            file_name AS FileName, file_stored_name AS FileStoredName, display_name AS DisplayName,
+            file_type AS FileType, is_tianzheng AS IsTianZheng, file_hash AS FileHash,
+            block_name AS BlockName, layer_name AS LayerName, color_index AS ColorIndex,
+            scale AS Scale, file_path AS FilePath, preview_image_name AS PreviewImageName,
+            preview_image_path AS PreviewImagePath, file_size AS FileSize, is_preview AS IsPreview,
+            version AS Version, description AS Description, is_active AS IsActive,
+            created_by AS CreatedBy, category_type AS CategoryType, title AS Title,
+            keywords AS Keywords, is_public AS IsPublic, updated_by AS UpdatedBy,
+            last_accessed_at AS LastAccessedAt, created_at AS CreatedAt, updated_at AS UpdatedAt
+        FROM cad_file_storage
+        WHERE id = @Id";
+
+            // 自适应分页/限制语法：MySQL 使用 LIMIT，达梦使用 FETCH FIRST
+            if (_adapter.DatabaseType == "MySQL")
+            {
+                sql += " LIMIT 1";
+            }
+            else
+            {
+                sql += " FETCH FIRST 1 ROWS ONLY";
+            }
 
             try
             {
-                using var connection = new MySqlConnection(_connectionString);
-                return await connection.QueryFirstOrDefaultAsync<FileStorage>(sql, new { Id = fileId }).ConfigureAwait(false);
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                // 使用适配器的 NormalizeSql 转换参数占位符（@Id -> :Id）以及大小写
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                // 使用适配器的 AddParameter 自动处理参数绑定
+                _adapter.AddParameter(cmd, "Id", fileId);
+
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read()) return null;
+
+                var f = new FileStorage();
+                int ord;
+                // 逐字段填充，保持兼容性
+                ord = reader.GetOrdinal("Id"); f.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("CategoryId"); f.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("FileAttributeId"); f.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileName"); f.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileStoredName"); f.FileStoredName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileType"); f.FileType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileHash"); f.FileHash = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("BlockName"); f.BlockName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("LayerName"); f.LayerName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("ColorIndex"); f.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Scale"); f.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                ord = reader.GetOrdinal("FilePath"); f.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImageName"); f.PreviewImageName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImagePath"); f.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileSize"); f.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                ord = reader.GetOrdinal("IsPreview"); f.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("Version"); f.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Description"); f.Description = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("IsActive"); f.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("CategoryType"); f.CategoryType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("Title"); f.Title = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("Keywords"); f.Keywords = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("IsPublic"); f.IsPublic = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("UpdatedBy"); f.UpdatedBy = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("LastAccessedAt"); f.LastAccessedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("CreatedAt"); f.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("UpdatedAt"); f.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                return f;
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogInfo($"GetFileByIdAsync 出错: {ex.Message}");
+                LogManager.Instance.LogError($"GetFileByIdAsync 适配查询失败: {ex.Message}");
                 return null;
             }
         }
+        //public async Task<FileStorage?> GetFileByIdAsync(int fileId)
+        //{
+        //    const string sql = @"
+        //        SELECT 
+        //            id AS Id,
+        //            category_id AS CategoryId,
+        //            file_attribute_id AS FileAttributeId,
+        //            file_name AS FileName,
+        //            file_stored_name AS FileStoredName,
+        //            display_name AS DisplayName,
+        //            file_type AS FileType,
+        //            is_tianzheng AS IsTianZheng,
+        //            file_hash AS FileHash,
+        //            block_name AS BlockName,
+        //            layer_name AS LayerName,
+        //            color_index AS ColorIndex,
+        //            scale AS Scale,
+        //            file_path AS FilePath,
+        //            preview_image_name AS PreviewImageName,
+        //            preview_image_path AS PreviewImagePath,
+        //            file_size AS FileSize,
+        //            is_preview AS IsPreview,
+        //            version AS Version,
+        //            description AS Description,
+        //            is_active AS IsActive,
+        //            created_by AS CreatedBy,
+        //            category_type AS CategoryType,
+        //            title AS Title,
+        //            keywords AS Keywords,
+        //            is_public AS IsPublic,
+        //            updated_by AS UpdatedBy,
+        //            last_accessed_at AS LastAccessedAt,
+        //            created_at AS CreatedAt,
+        //            updated_at AS UpdatedAt
+        //        FROM cad_file_storage
+        //        WHERE id = @Id
+        //        LIMIT 1";
+
+        //    try
+        //    {
+        //        using var conn = GetConnection();
+        //        conn.Open();
+        //        using var cmd = conn.CreateCommand();
+        //        cmd.CommandText = sql.Replace("@Id", ":Id");
+        //        AddDmParam(cmd, "Id", fileId);
+        //        using var reader = cmd.ExecuteReader();
+        //        if (!reader.Read()) return null;
+        //        var f = new FileStorage();
+        //        int ord;
+        //        ord = reader.GetOrdinal("Id"); f.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+        //        ord = reader.GetOrdinal("CategoryId"); f.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+        //        ord = reader.GetOrdinal("FileAttributeId"); f.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("FileName"); f.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("FileStoredName"); f.FileStoredName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("FileType"); f.FileType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("FileHash"); f.FileHash = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("BlockName"); f.BlockName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("LayerName"); f.LayerName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("ColorIndex"); f.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+        //        ord = reader.GetOrdinal("Scale"); f.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+        //        ord = reader.GetOrdinal("FilePath"); f.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("PreviewImageName"); f.PreviewImageName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("PreviewImagePath"); f.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("FileSize"); f.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+        //        ord = reader.GetOrdinal("IsPreview"); f.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+        //        ord = reader.GetOrdinal("Version"); f.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+        //        ord = reader.GetOrdinal("Description"); f.Description = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("IsActive"); f.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+        //        ord = reader.GetOrdinal("CategoryType"); f.CategoryType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("Title"); f.Title = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("Keywords"); f.Keywords = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("IsPublic"); f.IsPublic = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+        //        ord = reader.GetOrdinal("UpdatedBy"); f.UpdatedBy = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+        //        ord = reader.GetOrdinal("LastAccessedAt"); f.LastAccessedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+        //        ord = reader.GetOrdinal("CreatedAt"); f.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+        //        ord = reader.GetOrdinal("UpdatedAt"); f.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+        //        return f;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"GetFileByIdAsync 出错: {ex.Message}");
+        //        return null;
+        //    }
+        //}
 
         /// <summary>
         /// 按图元主键读取属性记录（JSON方案）
@@ -1880,12 +3049,15 @@ ON UPDATE CASCADE;");
             try
             {
                 using var connection = GetConnection();
-                await connection.OpenAsync().ConfigureAwait(false);
+                connection.Open();
                 using var transaction = connection.BeginTransaction();
 
-                // 先取主记录，便于后续删除物理文件
-                var storage = await connection.QueryFirstOrDefaultAsync<FileStorage>(@"
-SELECT 
+                // 先取主记录，便于后续删除物理文件（手动使用达梦参数）
+                FileStorage storage = null;
+                using (var getCmd = connection.CreateCommand())
+                {
+                    getCmd.Transaction = transaction;
+                    getCmd.CommandText = @"SELECT 
     id AS Id,
     category_id AS CategoryId,
     category_type AS CategoryType,
@@ -1897,8 +3069,26 @@ SELECT
     preview_image_path AS PreviewImagePath,
     is_active AS IsActive
 FROM cad_file_storage
-WHERE id = @Id
-LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
+WHERE id = :Id
+FETCH FIRST 1 ROWS ONLY";
+                    AddDmParam(getCmd, "Id", fileId);
+                    using var reader = getCmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        storage = new FileStorage();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); storage.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryId"); storage.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryType"); storage.CategoryType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileAttributeId"); storage.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileName"); storage.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileStoredName"); storage.FileStoredName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); storage.DisplayName = reader.IsDBNull(ord) ? storage.FileName : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FilePath"); storage.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("PreviewImagePath"); storage.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                        ord = reader.GetOrdinal("IsActive"); storage.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                    }
+                }
 
                 if (storage == null)
                 {
@@ -1906,22 +3096,49 @@ LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
                     return false;
                 }
 
-                // 先删附属日志/标签等
-                await connection.ExecuteAsync("DELETE FROM file_tags WHERE file_id = @Id", new { Id = fileId }, transaction).ConfigureAwait(false);
-                await connection.ExecuteAsync("DELETE FROM file_access_logs WHERE file_id = @Id", new { Id = fileId }, transaction).ConfigureAwait(false);
-                await connection.ExecuteAsync("DELETE FROM file_version_history WHERE file_id = @Id", new { Id = fileId }, transaction).ConfigureAwait(false);
+                // 先删附属日志/标签等（使用手动命令以避免 @ 参数）
+                using (var delTags = connection.CreateCommand())
+                {
+                    delTags.Transaction = transaction;
+                    delTags.CommandText = "DELETE FROM file_tags WHERE file_id = :Id";
+                    AddDmParam(delTags, "Id", fileId);
+                    delTags.ExecuteNonQuery();
+                }
+
+                using (var delAccess = connection.CreateCommand())
+                {
+                    delAccess.Transaction = transaction;
+                    delAccess.CommandText = "DELETE FROM file_access_logs WHERE file_id = :Id";
+                    AddDmParam(delAccess, "Id", fileId);
+                    delAccess.ExecuteNonQuery();
+                }
+
+                using (var delVersion = connection.CreateCommand())
+                {
+                    delVersion.Transaction = transaction;
+                    delVersion.CommandText = "DELETE FROM file_version_history WHERE file_id = :Id";
+                    AddDmParam(delVersion, "Id", fileId);
+                    delVersion.ExecuteNonQuery();
+                }
 
                 // 删除新属性表记录（核心）
-                await connection.ExecuteAsync(
-                    "DELETE FROM cad_block_attributes_json WHERE file_id = @Id",
-                    new { Id = fileId },
-                    transaction).ConfigureAwait(false);
+                using (var delAttrs = connection.CreateCommand())
+                {
+                    delAttrs.Transaction = transaction;
+                    delAttrs.CommandText = "DELETE FROM cad_block_attributes_json WHERE file_id = :Id";
+                    AddDmParam(delAttrs, "Id", fileId);
+                    delAttrs.ExecuteNonQuery();
+                }
 
                 // 最后删主表
-                int affected = await connection.ExecuteAsync(
-                    "DELETE FROM cad_file_storage WHERE id = @Id",
-                    new { Id = fileId },
-                    transaction).ConfigureAwait(false);
+                int affected;
+                using (var delMain = connection.CreateCommand())
+                {
+                    delMain.Transaction = transaction;
+                    delMain.CommandText = "DELETE FROM cad_file_storage WHERE id = :Id";
+                    AddDmParam(delMain, "Id", fileId);
+                    affected = delMain.ExecuteNonQuery();
+                }
 
                 // 提交数据库事务
                 transaction.Commit();
@@ -1967,11 +3184,18 @@ LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
             try
             {
                 using var connection = GetConnection();
-                int count = await connection.QuerySingleOrDefaultAsync<int>(@"
-                    SELECT COUNT(*)
-                    FROM cad_file_storage
-                    WHERE category_id = @CategoryId AND category_type = @CategoryType AND is_active = 1",
-                    new { CategoryId = categoryId, CategoryType = categoryType }).ConfigureAwait(false);
+                const string sql = @"SELECT COUNT(*) FROM cad_file_storage WHERE category_id = :CategoryId AND category_type = :CategoryType AND is_active = 1";
+                // 诊断日志（临时）
+                LogManager.Instance.LogDebug($"[DM-SQL] UpdateCategoryStatisticsAsync SQL: {sql}, Params: CategoryId={categoryId}, CategoryType={categoryType}");
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = sql;
+                AddDmParam(cmd, "CategoryId", categoryId);
+                AddDmParam(cmd, "CategoryType", categoryType);
+                var result = cmd.ExecuteScalar();
+                int count = 0;
+                if (result != null && int.TryParse(result.ToString(), out int parsed))
+                    count = parsed;
 
                 LogManager.Instance.LogInfo($"分类统计已刷新: categoryId={categoryId}, categoryType={categoryType}, count={count}");
             }
@@ -1981,131 +3205,6 @@ LIMIT 1", new { Id = fileId }, transaction).ConfigureAwait(false);
             }
         }
 
-
-
-        /// <summary>
-        /// 根据文件扩展名获取分类下的文件
-        /// </summary>
-        public async Task<List<FileStorage>> GetFilesByCategoryAndExtensionAsync(int categoryId, string fileType)
-        {
-            const string sql = @"
-        SELECT 
-            id AS Id,
-            category_id AS CategoryId,
-            file_attribute_id AS FileAttributeId,
-            file_name AS FileName,
-            file_stored_name AS FileStoredName,
-            file_type AS FileType,
-            file_hash AS FileHash,
-            display_name AS DisplayName,
-            block_name AS BlockName,
-            layer_name AS LayerName,
-            color_index AS ColorIndex,
-            scale AS Scale,
-            file_path AS FilePath,
-            preview_image_name AS PreviewImageName,
-            preview_image_path AS PreviewImagePath,
-            file_size AS FileSize,
-            is_preview AS IsPreview,
-            version AS Version,
-            description AS Description,
-            is_active AS IsActive,
-            created_by AS CreatedBy,
-            category_type AS CategoryType,
-            title AS Title,
-            keywords AS Keywords,
-            is_public AS IsPublic,
-            updated_by AS UpdatedBy,
-            last_accessed_at AS LastAccessedAt,
-            created_at AS CreatedAt,
-            updated_at AS UpdatedAt
-        FROM cad_file_storage 
-        WHERE category_id = @categoryId 
-          AND file_type = @fileType
-          AND is_active = 1
-        ORDER BY created_at DESC";
-            try
-            {
-                using var connection = new MySqlConnection(_connectionString);
-                return (await connection.QueryAsync<FileStorage>(sql, new { categoryId, fileType })).AsList();
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"根据文件扩展名获取分类下的文件时出错: {ex.Message}");
-                return new List<FileStorage>();
-            }
-        }
-
-        /// <summary>
-        /// 搜索文件（支持关键词搜索）
-        /// </summary>
-        public async Task<List<FileStorage>> SearchFilesAsync(string keyword, int? categoryId = null)
-        {
-            string sql = @"
-        SELECT 
-            id AS Id,
-            category_id AS CategoryId,
-            file_attribute_id AS FileAttributeId,
-            file_name AS FileName,
-            file_stored_name AS FileStoredName,
-            file_type AS FileType,
-            file_hash AS FileHash,
-            display_name AS DisplayName,
-            block_name AS BlockName,
-            layer_name AS LayerName,
-            color_index AS ColorIndex,
-            scale AS Scale,
-            file_path AS FilePath,
-            preview_image_name AS PreviewImageName,
-            preview_image_path AS PreviewImagePath,
-            file_size AS FileSize,
-            is_preview AS IsPreview,
-            version AS Version,
-            description AS Description,
-            is_active AS IsActive,
-            created_by AS CreatedBy,
-            category_type AS CategoryType,
-            title AS Title,
-            keywords AS Keywords,
-            is_public AS IsPublic,
-            updated_by AS UpdatedBy,
-            last_accessed_at AS LastAccessedAt,
-            created_at AS CreatedAt,
-            updated_at AS UpdatedAt
-        FROM cad_file_storage 
-        WHERE is_active = 1";
-            try
-            {
-                var parameters = new Dictionary<string, object>();
-
-                if (!string.IsNullOrEmpty(keyword))
-                {
-                    sql += @" AND (title LIKE @keyword 
-         OR file_name LIKE @keyword 
-         OR display_name LIKE @keyword 
-         OR description LIKE @keyword 
-         OR keywords LIKE @keyword)";
-                    parameters.Add("keyword", $"%{keyword}%");
-                }
-
-                if (categoryId.HasValue)
-                {
-                    sql += " AND category_id = @categoryId";
-                    parameters.Add("categoryId", categoryId.Value);
-                }
-
-                sql += " ORDER BY created_at DESC LIMIT 100";
-
-                using var connection = new MySqlConnection(_connectionString);
-                return (await connection.QueryAsync<FileStorage>(sql, parameters)).AsList();
-            }
-            catch (Exception ex)
-            {
-                Env.Editor.WriteMessage($"搜索文件时出错: {ex.Message}");
-                return new List<FileStorage>();
-            }
-
-        }
 
         /// <summary>
         /// 获取文件主记录（按文件哈希）
@@ -2163,31 +3262,88 @@ LIMIT 1;";
 
             try
             {
-                // 创建数据库连接
-                using var connection = new MySqlConnection(_connectionString);
+                // 创建数据库连接：MySQL 使用 Dapper 快速映射；达梦走适配器手工映射
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var connection = _adapter.CreateConnection();
+                    connection.Open();
+                    // 先查主表
+                    var fileStorageInfo = await connection.QueryFirstOrDefaultAsync<FileStorage>(
+                        fileSql, new { FileHash = filehash }).ConfigureAwait(false);
 
-                // 先查主表
-                var fileStorageInfo = await connection.QueryFirstOrDefaultAsync<FileStorage>(
-                    fileSql, new { FileHash = filehash }).ConfigureAwait(false);
+                    // 未查到主表记录，直接返回
+                    if (fileStorageInfo == null)
+                        return null;
 
-                // 未查到主表记录，直接返回
-                if (fileStorageInfo == null)
-                    return null;
+                    // 若兼容字段为空，则尝试从 JSON 表回填配置名
+                    if (string.IsNullOrWhiteSpace(fileStorageInfo.FileAttributeId))
+                    {
+                        var latestConfigName = await connection.QueryFirstOrDefaultAsync<string>(
+                            latestConfigSql, new { FileId = fileStorageInfo.Id }).ConfigureAwait(false);
+
+                        if (!string.IsNullOrWhiteSpace(latestConfigName))
+                        {
+                            fileStorageInfo.FileAttributeId = latestConfigName;
+                        }
+                    }
+
+                    // 返回主记录
+                    return fileStorageInfo;
+                }
+
+                // 达梦路径：手动映射
+                using var dconn = GetConnection();
+                dconn.Open();
+                using var dcmd = dconn.CreateCommand();
+                dcmd.CommandText = _adapter.NormalizeSql(fileSql);
+                AddDmParam(dcmd, "FileHash", filehash);
+                using var reader = dcmd.ExecuteReader();
+                if (!reader.Read()) return null;
+                var fileStorageInfoDm = new FileStorage();
+                int ord;
+                ord = reader.GetOrdinal("Id"); fileStorageInfoDm.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("CategoryId"); fileStorageInfoDm.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("FileAttributeId"); fileStorageInfoDm.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileName"); fileStorageInfoDm.FileName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileStoredName"); fileStorageInfoDm.FileStoredName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileType"); fileStorageInfoDm.FileType = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileHash"); fileStorageInfoDm.FileHash = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("BlockName"); fileStorageInfoDm.BlockName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("LayerName"); fileStorageInfoDm.LayerName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("ColorIndex"); fileStorageInfoDm.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Scale"); fileStorageInfoDm.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                ord = reader.GetOrdinal("FilePath"); fileStorageInfoDm.FilePath = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImageName"); fileStorageInfoDm.PreviewImageName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImagePath"); fileStorageInfoDm.PreviewImagePath = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileSize"); fileStorageInfoDm.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                ord = reader.GetOrdinal("IsPreview"); fileStorageInfoDm.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("Version"); fileStorageInfoDm.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Description"); fileStorageInfoDm.Description = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("IsActive"); fileStorageInfoDm.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("CategoryType"); fileStorageInfoDm.CategoryType = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("Title"); fileStorageInfoDm.Title = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("Keywords"); fileStorageInfoDm.Keywords = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("IsPublic"); fileStorageInfoDm.IsPublic = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("UpdatedBy"); fileStorageInfoDm.UpdatedBy = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("LastAccessedAt"); fileStorageInfoDm.LastAccessedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("CreatedAt"); fileStorageInfoDm.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("UpdatedAt"); fileStorageInfoDm.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
 
                 // 若兼容字段为空，则尝试从 JSON 表回填配置名
-                if (string.IsNullOrWhiteSpace(fileStorageInfo.FileAttributeId))
+                if (string.IsNullOrWhiteSpace(fileStorageInfoDm.FileAttributeId))
                 {
-                    var latestConfigName = await connection.QueryFirstOrDefaultAsync<string>(
-                        latestConfigSql, new { FileId = fileStorageInfo.Id }).ConfigureAwait(false);
-
-                    if (!string.IsNullOrWhiteSpace(latestConfigName))
+                    using var cmd2 = dconn.CreateCommand();
+                    cmd2.CommandText = _adapter.NormalizeSql(latestConfigSql);
+                    AddDmParam(cmd2, "FileId", fileStorageInfoDm.Id);
+                    var got = cmd2.ExecuteScalar();
+                    if (got != null && got != DBNull.Value)
                     {
-                        fileStorageInfo.FileAttributeId = latestConfigName;
+                        var latest = Convert.ToString(got);
+                        if (!string.IsNullOrWhiteSpace(latest)) fileStorageInfoDm.FileAttributeId = latest;
                     }
                 }
 
-                // 返回主记录
-                return fileStorageInfo;
+                return fileStorageInfoDm;
             }
             catch (Exception ex)
             {
@@ -2230,42 +3386,90 @@ LIMIT 1;";
 
             try
             {
-                // 创建数据库连接
-                using var connection = new MySqlConnection(_connectionString);
-
-                // 确定优先配置名（参数优先，其次主表 file_attribute_id）
-                var configName = string.IsNullOrWhiteSpace(preferredConfigName)
-                    ? (file.FileAttributeId ?? string.Empty)
-                    : preferredConfigName.Trim();
-
-                (string ConfigName, string AttributesJson)? row = null;
-
-                // 优先按配置名查
-                if (!string.IsNullOrWhiteSpace(configName))
+                // MySQL 快捷路径
+                if (_adapter.DatabaseType == "MySQL")
                 {
-                    row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
-                        attrByConfigSql, new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
+                    using var connection = new MySqlConnection(_connectionString);
+
+                    // 确定优先配置名（参数优先，其次主表 file_attribute_id）
+                    var configName = string.IsNullOrWhiteSpace(preferredConfigName)
+                        ? (file.FileAttributeId ?? string.Empty)
+                        : preferredConfigName.Trim();
+
+                    (string ConfigName, string AttributesJson)? row = null;
+
+                    // 优先按配置名查
+                    if (!string.IsNullOrWhiteSpace(configName))
+                    {
+                        row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
+                            attrByConfigSql.Replace(":", "@"), new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
+                    }
+
+                    // 兜底查最新
+                    if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+                    {
+                        row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
+                            attrLatestSql.Replace(":", "@"), new { FileId = file.Id }).ConfigureAwait(false);
+                    }
+
+                    // 没有属性记录时返回空字典
+                    if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+                    {
+                        return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+                    }
+
+                    // 反序列化 JSON -> 字典
+                    var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(row.Value.AttributesJson)
+                               ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                    // 返回聚合结果
+                    return (file, dict, row.Value.ConfigName ?? string.Empty);
                 }
 
-                // 兜底查最新
-                if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+                // 达梦路径：手动查询并映射
+                using var dconn = GetConnection();
+                dconn.Open();
+
+                var config = string.IsNullOrWhiteSpace(preferredConfigName) ? (file.FileAttributeId ?? string.Empty) : preferredConfigName.Trim();
+                string? attributesJson = null;
+                string foundConfigName = string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(config))
                 {
-                    row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
-                        attrLatestSql, new { FileId = file.Id }).ConfigureAwait(false);
+                    using var cmd = dconn.CreateCommand();
+                    cmd.CommandText = _adapter.NormalizeSql(attrByConfigSql);
+                    AddDmParam(cmd, "FileId", file.Id);
+                    AddDmParam(cmd, "ConfigName", config);
+                    using var rdr = cmd.ExecuteReader();
+                    if (rdr.Read())
+                    {
+                        attributesJson = rdr.IsDBNull(1) ? null : rdr.GetString(1);
+                        foundConfigName = rdr.IsDBNull(0) ? string.Empty : rdr.GetString(0);
+                    }
                 }
 
-                // 没有属性记录时返回空字典
-                if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+                if (string.IsNullOrWhiteSpace(attributesJson))
+                {
+                    using var cmd2 = dconn.CreateCommand();
+                    cmd2.CommandText = _adapter.NormalizeSql(attrLatestSql);
+                    AddDmParam(cmd2, "FileId", file.Id);
+                    using var rdr2 = cmd2.ExecuteReader();
+                    if (rdr2.Read())
+                    {
+                        attributesJson = rdr2.IsDBNull(1) ? null : rdr2.GetString(1);
+                        foundConfigName = rdr2.IsDBNull(0) ? string.Empty : rdr2.GetString(0);
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(attributesJson))
                 {
                     return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
                 }
 
-                // 反序列化 JSON -> 字典
-                var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(row.Value.AttributesJson)
-                           ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var dictDm = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attributesJson)
+                             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 返回聚合结果
-                return (file, dict, row.Value.ConfigName ?? string.Empty);
+                return (file, dictDm, foundConfigName ?? string.Empty);
             }
             catch (Exception ex)
             {
@@ -2280,6 +3484,7 @@ LIMIT 1;";
         /// 说明：保持旧返回类型 FileAttribute，不改调用方；
         /// 实现流程：先按文件名在 cad_file_storage 找 file -> 再到 cad_block_attributes_json 取 JSON -> 反序列化回填 FileAttribute。
         /// </summary>
+        /// 
         public async Task<FileAttribute> GetFileAttributeAsync(string fileName)
         {
             // 防御式处理，防止空输入
@@ -2366,133 +3571,378 @@ LIMIT 1;";
 
             try
             {
-                using var connection = new MySqlConnection(_connectionString);
-
-                // 查询主表文件记录
-                var file = await connection.QueryFirstOrDefaultAsync<FileStorage>(
-                    fileSql,
-                    new { Name1 = noExtName, Name2 = rawName }).ConfigureAwait(false);
-
-                // 没有匹配到文件，直接返回 null
-                if (file == null)
-                    return null;
-
-                // 查询 JSON 属性记录
-                BlockAttributesJson jsonRow = null;
-                var configName = Convert.ToString(file.FileAttributeId)?.Trim();
-
-                if (!string.IsNullOrWhiteSpace(configName))
+                // 支持 MySQL 与达梦两套路径
+                if (_adapter.DatabaseType == "MySQL")
                 {
-                    jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
-                        attrSqlByConfig,
-                        new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
-                }
+                    using var connection = new MySqlConnection(_connectionString);
 
-                if (jsonRow == null)
-                {
-                    jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
-                        attrSqlByLatest,
-                        new { FileId = file.Id }).ConfigureAwait(false);
-                }
+                    // 查询主表文件记录
+                    var file = await connection.QueryFirstOrDefaultAsync<FileStorage>(
+                        fileSql,
+                        new { Name1 = noExtName, Name2 = rawName }).ConfigureAwait(false);
 
-                // 没有属性记录时，返回一个基础对象（兼容旧逻辑）
-                if (jsonRow == null || string.IsNullOrWhiteSpace(jsonRow.AttributesJson))
-                {
-                    return new FileAttribute
+                    // 没有匹配到文件，直接返回 null
+                    if (file == null)
+                        return null;
+
+                    // 查询 JSON 属性记录
+                    BlockAttributesJson jsonRow = null;
+                    var configName = Convert.ToString(file.FileAttributeId)?.Trim();
+
+                    if (!string.IsNullOrWhiteSpace(configName))
+                    {
+                        jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
+                            attrSqlByConfig, new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
+                    }
+
+                    if (jsonRow == null)
+                    {
+                        jsonRow = await connection.QueryFirstOrDefaultAsync<BlockAttributesJson>(
+                            attrSqlByLatest, new { FileId = file.Id }).ConfigureAwait(false);
+                    }
+
+                    // 没有属性记录时，返回一个基础对象（兼容旧逻辑）
+                    if (jsonRow == null || string.IsNullOrWhiteSpace(jsonRow.AttributesJson))
+                    {
+                        return new FileAttribute
+                        {
+                            FileStorageId = file.Id,
+                            FileName = file.FileName,
+                            FileAttributeId = file.FileAttributeId,
+                            CreatedAt = file.CreatedAt,
+                            UpdatedAt = file.UpdatedAt
+                        };
+                    }
+
+                    // 反序列化 JSON 到字典
+                    var dict =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(
+                            jsonRow.AttributesJson)
+                        ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                    // 创建返回对象，先回填基础字段
+                    var attr = new FileAttribute
                     {
                         FileStorageId = file.Id,
                         FileName = file.FileName,
-                        FileAttributeId = file.FileAttributeId,
-                        CreatedAt = file.CreatedAt,
-                        UpdatedAt = file.UpdatedAt
+                        FileAttributeId = string.IsNullOrWhiteSpace(jsonRow.ConfigName)
+                            ? file.FileAttributeId
+                            : jsonRow.ConfigName,
+                        CreatedAt = jsonRow.CreatedAt,
+                        UpdatedAt = jsonRow.UpdatedAt
                     };
-                }
 
-                // 反序列化 JSON 到字典
-                var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonRow.AttributesJson)
-                           ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                // 创建返回对象，先回填基础字段
-                var attr = new FileAttribute
-                {
-                    FileStorageId = file.Id,
-                    FileName = file.FileName,
-                    FileAttributeId = string.IsNullOrWhiteSpace(jsonRow.ConfigName) ? file.FileAttributeId : jsonRow.ConfigName,
-                    CreatedAt = jsonRow.CreatedAt,
-                    UpdatedAt = jsonRow.UpdatedAt
-                };
-
-                // 通过反射把字典按“属性名”回填到 FileAttribute 模型
-                foreach (var p in typeof(FileAttribute).GetProperties())
-                {
-                    if (!p.CanWrite) continue;
-                    if (!dict.TryGetValue(p.Name, out var raw)) continue;
-                    if (string.IsNullOrWhiteSpace(raw)) continue;
-
-                    try
+                    // 通过反射把字典按“属性名”回填到 FileAttribute 模型
+                    foreach (var p in typeof(FileAttribute).GetProperties())
                     {
-                        var targetType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                        if (!p.CanWrite) continue;
+                        if (!dict.TryGetValue(p.Name, out var raw)) continue;
+                        if (string.IsNullOrWhiteSpace(raw)) continue;
 
-                        if (targetType == typeof(string))
+                        try
                         {
-                            p.SetValue(attr, raw);
-                            continue;
+                            var targetType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+
+                            if (targetType == typeof(string))
+                            {
+                                p.SetValue(attr, raw);
+                                continue;
+                            }
+
+                            if (targetType == typeof(int))
+                            {
+                                if (int.TryParse(raw, out var v)) p.SetValue(attr, v);
+                                continue;
+                            }
+
+                            if (targetType == typeof(long))
+                            {
+                                if (long.TryParse(raw, out var v)) p.SetValue(attr, v);
+                                continue;
+                            }
+
+                            if (targetType == typeof(decimal))
+                            {
+                                if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var v))
+                                    p.SetValue(attr, v);
+                                else if (decimal.TryParse(raw, out var v2))
+                                    p.SetValue(attr, v2);
+                                continue;
+                            }
+
+                            if (targetType == typeof(double))
+                            {
+                                if (double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var v))
+                                    p.SetValue(attr, v);
+                                else if (double.TryParse(raw, out var v2))
+                                    p.SetValue(attr, v2);
+                                continue;
+                            }
+
+                            if (targetType == typeof(DateTime))
+                            {
+                                if (DateTime.TryParse(raw, out var v)) p.SetValue(attr, v);
+                                continue;
+                            }
+
+                            if (targetType == typeof(bool))
+                            {
+                                if (bool.TryParse(raw, out var b))
+                                    p.SetValue(attr, b);
+                                else if (raw == "1")
+                                    p.SetValue(attr, true);
+                                else if (raw == "0")
+                                    p.SetValue(attr, false);
+                            }
                         }
-
-                        if (targetType == typeof(int))
+                        catch
                         {
-                            if (int.TryParse(raw, out var v)) p.SetValue(attr, v);
-                            continue;
-                        }
-
-                        if (targetType == typeof(long))
-                        {
-                            if (long.TryParse(raw, out var v)) p.SetValue(attr, v);
-                            continue;
-                        }
-
-                        if (targetType == typeof(decimal))
-                        {
-                            if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
-                                p.SetValue(attr, v);
-                            else if (decimal.TryParse(raw, out var v2))
-                                p.SetValue(attr, v2);
-                            continue;
-                        }
-
-                        if (targetType == typeof(double))
-                        {
-                            if (double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v))
-                                p.SetValue(attr, v);
-                            else if (double.TryParse(raw, out var v2))
-                                p.SetValue(attr, v2);
-                            continue;
-                        }
-
-                        if (targetType == typeof(DateTime))
-                        {
-                            if (DateTime.TryParse(raw, out var v)) p.SetValue(attr, v);
-                            continue;
-                        }
-
-                        if (targetType == typeof(bool))
-                        {
-                            if (bool.TryParse(raw, out var b))
-                                p.SetValue(attr, b);
-                            else if (raw == "1")
-                                p.SetValue(attr, true);
-                            else if (raw == "0")
-                                p.SetValue(attr, false);
+                            // 单个字段解析失败不影响整体返回
                         }
                     }
-                    catch
-                    {
-                        // 单个字段解析失败不影响整体返回
-                    }
+
+                    return attr;
                 }
 
-                return attr;
+                // 达梦路径：手工查询并映射
+                using var dconn = GetConnection();
+                dconn.Open();
+
+                using (var cmd = dconn.CreateCommand())
+                {
+                    cmd.CommandText = _adapter.NormalizeSql(fileSql.Replace("CONCAT('%', @Name1, '%')", ":Name1")
+                        .Replace("CONCAT('%', @Name2, '%')", ":Name2"));
+                    AddDmParam(cmd, "Name1", "%" + noExtName + "%");
+                    AddDmParam(cmd, "Name2", "%" + rawName + "%");
+
+                    using var reader = cmd.ExecuteReader();
+                    if (!reader.Read()) return null;
+                    var file = new FileStorage();
+                    int ord;
+                    ord = reader.GetOrdinal("Id");
+                    file.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("CategoryId");
+                    file.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("FileAttributeId");
+                    file.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileName");
+                    file.FileName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileStoredName");
+                    file.FileStoredName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("DisplayName");
+                    file.DisplayName = reader.IsDBNull(ord) ? file.FileName : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileType");
+                    file.FileType = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileHash");
+                    file.FileHash = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("BlockName");
+                    file.BlockName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("LayerName");
+                    file.LayerName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("ColorIndex");
+                    file.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Scale");
+                    file.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                    ord = reader.GetOrdinal("FilePath");
+                    file.FilePath = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("PreviewImageName");
+                    file.PreviewImageName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("PreviewImagePath");
+                    file.PreviewImagePath = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileSize");
+                    file.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                    ord = reader.GetOrdinal("IsPreview");
+                    file.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                    ord = reader.GetOrdinal("Version");
+                    file.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Description");
+                    file.Description = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("IsActive");
+                    file.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                    ord = reader.GetOrdinal("CategoryType");
+                    file.CategoryType = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("Title");
+                    file.Title = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("Keywords");
+                    file.Keywords = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("IsPublic");
+                    file.IsPublic = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                    ord = reader.GetOrdinal("UpdatedBy");
+                    file.UpdatedBy = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                    ord = reader.GetOrdinal("LastAccessedAt");
+                    file.LastAccessedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("CreatedAt");
+                    file.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("UpdatedAt");
+                    file.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+
+                    // 查询 JSON 属性
+                    BlockAttributesJson jsonRow = null;
+                    var configName = Convert.ToString(file.FileAttributeId)?.Trim();
+
+                    if (!string.IsNullOrWhiteSpace(configName))
+                    {
+                        using var cmd2 = dconn.CreateCommand();
+                        cmd2.CommandText = _adapter.NormalizeSql(attrSqlByConfig);
+                        AddDmParam(cmd2, "FileId", file.Id);
+                        AddDmParam(cmd2, "ConfigName", configName);
+                        using var rdr2 = cmd2.ExecuteReader();
+                        if (rdr2.Read())
+                        {
+                            jsonRow = new BlockAttributesJson
+                            {
+                                AttrId = rdr2.IsDBNull(rdr2.GetOrdinal("AttrId"))
+                                    ? 0
+                                    : rdr2.GetInt32(rdr2.GetOrdinal("AttrId")),
+                                FileId = rdr2.IsDBNull(rdr2.GetOrdinal("FileId"))
+                                    ? 0
+                                    : rdr2.GetInt32(rdr2.GetOrdinal("FileId")),
+                                ConfigName = rdr2.IsDBNull(rdr2.GetOrdinal("ConfigName"))
+                                    ? null
+                                    : rdr2.GetString(rdr2.GetOrdinal("ConfigName")),
+                                AttributesJson = rdr2.IsDBNull(rdr2.GetOrdinal("AttributesJson"))
+                                    ? null
+                                    : rdr2.GetString(rdr2.GetOrdinal("AttributesJson")),
+                                CreatedAt = rdr2.IsDBNull(rdr2.GetOrdinal("CreatedAt"))
+                                    ? DateTime.MinValue
+                                    : rdr2.GetDateTime(rdr2.GetOrdinal("CreatedAt")),
+                                UpdatedAt = rdr2.IsDBNull(rdr2.GetOrdinal("UpdatedAt"))
+                                    ? DateTime.MinValue
+                                    : rdr2.GetDateTime(rdr2.GetOrdinal("UpdatedAt"))
+                            };
+                        }
+                    }
+
+                    if (jsonRow == null)
+                    {
+                        using var cmd3 = dconn.CreateCommand();
+                        cmd3.CommandText = _adapter.NormalizeSql(attrSqlByLatest);
+                        AddDmParam(cmd3, "FileId", file.Id);
+                        using var rdr3 = cmd3.ExecuteReader();
+                        if (rdr3.Read())
+                        {
+                            jsonRow = new BlockAttributesJson
+                            {
+                                AttrId = rdr3.IsDBNull(rdr3.GetOrdinal("AttrId"))
+                                    ? 0
+                                    : rdr3.GetInt32(rdr3.GetOrdinal("AttrId")),
+                                FileId = rdr3.IsDBNull(rdr3.GetOrdinal("FileId"))
+                                    ? 0
+                                    : rdr3.GetInt32(rdr3.GetOrdinal("FileId")),
+                                ConfigName = rdr3.IsDBNull(rdr3.GetOrdinal("ConfigName"))
+                                    ? null
+                                    : rdr3.GetString(rdr3.GetOrdinal("ConfigName")),
+                                AttributesJson = rdr3.IsDBNull(rdr3.GetOrdinal("AttributesJson"))
+                                    ? null
+                                    : rdr3.GetString(rdr3.GetOrdinal("AttributesJson")),
+                                CreatedAt = rdr3.IsDBNull(rdr3.GetOrdinal("CreatedAt"))
+                                    ? DateTime.MinValue
+                                    : rdr3.GetDateTime(rdr3.GetOrdinal("CreatedAt")),
+                                UpdatedAt = rdr3.IsDBNull(rdr3.GetOrdinal("UpdatedAt"))
+                                    ? DateTime.MinValue
+                                    : rdr3.GetDateTime(rdr3.GetOrdinal("UpdatedAt"))
+                            };
+                        }
+                    }
+
+                    if (jsonRow == null || string.IsNullOrWhiteSpace(jsonRow.AttributesJson))
+                    {
+                        return new FileAttribute
+                        {
+                            FileStorageId = file.Id,
+                            FileName = file.FileName,
+                            FileAttributeId = file.FileAttributeId,
+                            CreatedAt = file.CreatedAt,
+                            UpdatedAt = file.UpdatedAt
+                        };
+                    }
+
+                    // 反序列化并回填 FileAttribute
+                    var dict =
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(
+                            jsonRow.AttributesJson)
+                        ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                    var attr = new FileAttribute
+                    {
+                        FileStorageId = file.Id,
+                        FileName = file.FileName,
+                        FileAttributeId = string.IsNullOrWhiteSpace(jsonRow.ConfigName)
+                            ? file.FileAttributeId
+                            : jsonRow.ConfigName,
+                        CreatedAt = jsonRow.CreatedAt,
+                        UpdatedAt = jsonRow.UpdatedAt
+                    };
+
+                    foreach (var p in typeof(FileAttribute).GetProperties())
+                    {
+                        if (!p.CanWrite) continue;
+                        if (!dict.TryGetValue(p.Name, out var raw)) continue;
+                        if (string.IsNullOrWhiteSpace(raw)) continue;
+
+                        try
+                        {
+                            var targetType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                            if (targetType == typeof(string))
+                            {
+                                p.SetValue(attr, raw);
+                                continue;
+                            }
+
+                            if (targetType == typeof(int))
+                            {
+                                if (int.TryParse(raw, out var v)) p.SetValue(attr, v);
+                                continue;
+                            }
+
+                            if (targetType == typeof(long))
+                            {
+                                if (long.TryParse(raw, out var v)) p.SetValue(attr, v);
+                                continue;
+                            }
+
+                            if (targetType == typeof(decimal))
+                            {
+                                if (decimal.TryParse(raw, System.Globalization.NumberStyles.Any,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var v))
+                                    p.SetValue(attr, v);
+                                else if (decimal.TryParse(raw, out var v2)) p.SetValue(attr, v2);
+                                continue;
+                            }
+
+                            if (targetType == typeof(double))
+                            {
+                                if (double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var v))
+                                    p.SetValue(attr, v);
+                                else if (double.TryParse(raw, out var v2)) p.SetValue(attr, v2);
+                                continue;
+                            }
+
+                            if (targetType == typeof(DateTime))
+                            {
+                                if (DateTime.TryParse(raw, out var v)) p.SetValue(attr, v);
+                                continue;
+                            }
+
+                            if (targetType == typeof(bool))
+                            {
+                                if (bool.TryParse(raw, out var b)) p.SetValue(attr, b);
+                                else if (raw == "1") p.SetValue(attr, true);
+                                else if (raw == "0") p.SetValue(attr, false);
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    return attr;
+                }
             }
+
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"获取文件属性失败(JSON): {ex.Message}");
@@ -2539,10 +3989,11 @@ SELECT
     created_at AS CreatedAt,
     updated_at AS UpdatedAt
 FROM cad_file_storage
-WHERE id = @Id
+WHERE id = :Id
 LIMIT 1;";
 
             // 优先按 config_name = storage.file_attribute_id 查 JSON 属性
+            // 使用达梦兼容的参数占位符 (:FileId, :ConfigName)
             const string attrSqlByConfig = @"
 SELECT
     attr_id AS AttrId,
@@ -2552,10 +4003,10 @@ SELECT
     created_at AS CreatedAt,
     updated_at AS UpdatedAt
 FROM cad_block_attributes_json
-WHERE file_id = @FileId
-  AND config_name = @ConfigName
+WHERE file_id = :FileId
+  AND config_name = :ConfigName
 ORDER BY attr_id DESC
-LIMIT 1;";
+LIMIT 1";
 
             // 若按 config_name 查不到，则按 file_id 取最新一条兜底
             const string attrSqlByLatest = @"
@@ -2567,9 +4018,9 @@ SELECT
     created_at AS CreatedAt,
     updated_at AS UpdatedAt
 FROM cad_block_attributes_json
-WHERE file_id = @FileId
+WHERE file_id = :FileId
 ORDER BY attr_id DESC
-LIMIT 1;";
+LIMIT 1";
 
             try
             {
@@ -2857,159 +4308,160 @@ LIMIT 1;";
     created_at AS CreatedAt,
     updated_at AS UpdatedAt";
 
-        /// <summary>
-        /// ===== 新增：统一构造参数（插入/更新复用）=====
-        /// </summary>
-        /// <param name="a"></param>
-        /// <param name="includeId"></param>
-        /// <returns></returns>
-        private DynamicParameters BuildFileAttributeParameters(FileAttribute a, bool includeId)
-        {
-            // 防御式处理，避免空引用
-            a ??= new FileAttribute();
+/// <summary>
+/// ===== 新增：统一构造参数（插入/更新复用）=====
+/// </summary>
+/// <param name="a"></param>
+/// <param name="includeId"></param>
+/// <returns></returns>
+private DynamicParameters BuildFileAttributeParameters(FileAttribute a, bool includeId)
+{
+    // 防御式处理，避免空引用
+    a ??= new FileAttribute();
 
-            // 业务属性ID为空时自动生成，满足新表非空要求
-            if (string.IsNullOrWhiteSpace(a.FileAttributeId))
+    // 业务属性ID为空时自动生成，满足新表非空要求
+    if (string.IsNullOrWhiteSpace(a.FileAttributeId))
+    {
+        a.FileAttributeId = Guid.NewGuid().ToString("N");
+    }
+
+    // 时间兜底
+    if (a.CreatedAt == default) a.CreatedAt = DateTime.Now;
+    if (a.UpdatedAt == default) a.UpdatedAt = DateTime.Now;
+
+    var p = new DynamicParameters();
+    if (includeId) p.Add("Id", a.Id);
+
+    p.Add("CategoryId", a.CategoryId);
+    p.Add("FileStorageId", a.FileStorageId);
+    p.Add("FileName", a.FileName ?? string.Empty);
+    p.Add("FileAttributeId", a.FileAttributeId);
+
+    p.Add("Description", a.Description);
+    p.Add("AttributeGroup", a.AttributeGroup);
+    p.Add("Remarks", a.Remarks);
+    p.Add("Customize1", a.Customize1);
+    p.Add("Customize2", a.Customize2);
+    p.Add("Customize3", a.Customize3);
+
+    p.Add("Length", a.Length); p.Add("Width", a.Width); p.Add("Height", a.Height); p.Add("Angle", a.Angle);
+    p.Add("BasePointX", a.BasePointX); p.Add("BasePointY", a.BasePointY); p.Add("BasePointZ", a.BasePointZ);
+
+    p.Add("Model", a.Model); p.Add("Specifications", a.Specifications); p.Add("Material", a.Material);
+    p.Add("MediumName", a.MediumName); p.Add("StandardNumber", a.StandardNumber);
+
+    p.Add("Pressure", a.Pressure); p.Add("Temperature", a.Temperature); p.Add("PressureRating", a.PressureRating);
+    p.Add("OperatingPressure", a.OperatingPressure); p.Add("OperatingTemperature", a.OperatingTemperature);
+
+    p.Add("Diameter", a.Diameter); p.Add("OuterDiameter", a.OuterDiameter); p.Add("InnerDiameter", a.InnerDiameter);
+    p.Add("NominalDiameter", a.NominalDiameter); p.Add("Thickness", a.Thickness); p.Add("Weight", a.Weight); p.Add("Density", a.Density);
+
+    p.Add("Volume", a.Volume); p.Add("Flow", a.Flow); p.Add("Velocity", a.Velocity); p.Add("Lift", a.Lift);
+    p.Add("Power", a.Power); p.Add("Voltage", a.Voltage); p.Add("Current", a.Current); p.Add("Frequency", a.Frequency);
+    p.Add("Conductivity", a.Conductivity); p.Add("Moisture", a.Moisture); p.Add("Humidity", a.Humidity); p.Add("Vacuum", a.Vacuum); p.Add("Radiation", a.Radiation);
+
+    p.Add("PipeSpec", a.PipeSpec); p.Add("PipeNominalDiameter", a.PipeNominalDiameter); p.Add("PipeWallThickness", a.PipeWallThickness);
+    p.Add("PipePressureClass", a.PipePressureClass); p.Add("ConnectionType", a.ConnectionType); p.Add("PipeSlope", a.PipeSlope); p.Add("AnticorrosionTreatment", a.AnticorrosionTreatment);
+
+    p.Add("ValveModel", a.ValveModel); p.Add("ValveBodyMaterial", a.ValveBodyMaterial); p.Add("ValveDiscMaterial", a.ValveDiscMaterial);
+    p.Add("ValveBallMaterial", a.ValveBallMaterial); p.Add("SealMaterial", a.SealMaterial); p.Add("DriveType", a.DriveType);
+    p.Add("OpenMode", a.OpenMode); p.Add("ApplicableMedium", a.ApplicableMedium);
+
+    p.Add("FlangeModel", a.FlangeModel); p.Add("FlangeType", a.FlangeType); p.Add("FlangeFaceType", a.FlangeFaceType);
+    p.Add("FlangeStandard", a.FlangeStandard); p.Add("BoltSpec", a.BoltSpec);
+
+    p.Add("ReducerSpec", a.ReducerSpec); p.Add("ReducerLargeDn", a.ReducerLargeDn); p.Add("ReducerSmallDn", a.ReducerSmallDn);
+    p.Add("ReducerWallThicknessLarge", a.ReducerWallThicknessLarge); p.Add("ReducerWallThicknessSmall", a.ReducerWallThicknessSmall);
+    p.Add("ReducerConnectionType", a.ReducerConnectionType); p.Add("ReducerConicity", a.ReducerConicity);
+    p.Add("ReducerEccentricDirection", a.ReducerEccentricDirection); p.Add("ReducerApplicableMedium", a.ReducerApplicableMedium); p.Add("ReducerAnticorrosion", a.ReducerAnticorrosion);
+
+    p.Add("PumpModel", a.PumpModel); p.Add("PumpFlow", a.PumpFlow); p.Add("PumpHead", a.PumpHead); p.Add("PumpBodyMaterial", a.PumpBodyMaterial);
+    p.Add("MotorPower", a.MotorPower); p.Add("InletOutletDiameter", a.InletOutletDiameter); p.Add("RatedSpeed", a.RatedSpeed);
+    p.Add("PumpApplicableMedium", a.PumpApplicableMedium); p.Add("WorkingPressure", a.WorkingPressure); p.Add("ProtectionLevel", a.ProtectionLevel);
+
+    p.Add("ExpansionJointModel", a.ExpansionJointModel); p.Add("BellowsMaterial", a.BellowsMaterial); p.Add("FlangeOrNozzleMaterial", a.FlangeOrNozzleMaterial);
+    p.Add("CompensationAmount", a.CompensationAmount); p.Add("ExpansionJointConnectionType", a.ExpansionJointConnectionType);
+    p.Add("ExpansionJointMedium", a.ExpansionJointMedium); p.Add("ExpansionJointWorkingTemp", a.ExpansionJointWorkingTemp);
+
+    p.Add("FlueGasCapacity", a.FlueGasCapacity); p.Add("DesulfurizationEfficiency", a.DesulfurizationEfficiency); p.Add("DropletSize", a.DropletSize); p.Add("SprayLayerCount", a.SprayLayerCount);
+    p.Add("ChimneySpec", a.ChimneySpec); p.Add("ChimneyDiameter", a.ChimneyDiameter); p.Add("ChimneyHeight", a.ChimneyHeight); p.Add("ChimneyMaterial", a.ChimneyMaterial);
+    p.Add("ChimneyThickness", a.ChimneyThickness); p.Add("OutletWindSpeed", a.OutletWindSpeed); p.Add("InsulationThickness", a.InsulationThickness);
+    p.Add("SupportType", a.SupportType); p.Add("FlueGasTemperature", a.FlueGasTemperature);
+
+    p.Add("PressureGaugeModel", a.PressureGaugeModel); p.Add("ThermometerModel", a.ThermometerModel); p.Add("FilterModel", a.FilterModel);
+    p.Add("CheckValveModel", a.CheckValveModel); p.Add("SprinklerModel", a.SprinklerModel); p.Add("FlowMeterModel", a.FlowMeterModel);
+    p.Add("SafetyValveModel", a.SafetyValveModel); p.Add("FlexibleJointModel", a.FlexibleJointModel);
+
+    p.Add("CreatedAt", a.CreatedAt);
+    p.Add("UpdatedAt", a.UpdatedAt);
+    return p;
+}
+
+
+/// <summary>
+/// 事务插入：先插入文件存储，再插入 JSON 属性（新表 cad_block_attributes_json）
+/// 说明：保留旧方法签名，兼容现有调用方；旧 FileAttribute 会被转换为字典后存入 JSON。
+/// </summary>
+public async Task<(int StorageId, int AttributeId)> AddFileStorageAndAttributeAsync(FileStorage storage, FileAttribute attribute)
+{
+    // 参数保护，防止空引用
+    if (storage == null) throw new ArgumentNullException(nameof(storage));
+    if (attribute == null) throw new ArgumentNullException(nameof(attribute));
+
+    // 业务属性ID兜底（继续保留，写回 cad_file_storage.file_attribute_id 供兼容旧逻辑）
+    if (string.IsNullOrWhiteSpace(attribute.FileAttributeId))
+    {
+        attribute.FileAttributeId = Guid.NewGuid().ToString("N");
+    }
+
+    // 本地函数，把旧 FileAttribute 转成字典（只存有值字段，避免无意义空值）
+    Dictionary<string, string> BuildAttrDict(FileAttribute src)
+    {
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var props = typeof(FileAttribute).GetProperties();
+
+        foreach (var p in props)
+        {
+            // 跳过系统字段/主键字段，避免污染业务属性
+            if (string.Equals(p.Name, nameof(FileAttribute.Id), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.Name, nameof(FileAttribute.CategoryId), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.Name, nameof(FileAttribute.FileStorageId), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.Name, nameof(FileAttribute.CreatedAt), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.Name, nameof(FileAttribute.UpdatedAt), StringComparison.OrdinalIgnoreCase))
             {
-                a.FileAttributeId = Guid.NewGuid().ToString("N");
+                continue;
             }
 
-            // 时间兜底
-            if (a.CreatedAt == default) a.CreatedAt = DateTime.Now;
-            if (a.UpdatedAt == default) a.UpdatedAt = DateTime.Now;
+            var v = p.GetValue(src);
+            if (v == null) continue;
 
-            var p = new DynamicParameters();
-            if (includeId) p.Add("Id", a.Id);
+            var s = Convert.ToString(v);
+            if (string.IsNullOrWhiteSpace(s)) continue;
 
-            p.Add("CategoryId", a.CategoryId);
-            p.Add("FileStorageId", a.FileStorageId);
-            p.Add("FileName", a.FileName ?? string.Empty);
-            p.Add("FileAttributeId", a.FileAttributeId);
-
-            p.Add("Description", a.Description);
-            p.Add("AttributeGroup", a.AttributeGroup);
-            p.Add("Remarks", a.Remarks);
-            p.Add("Customize1", a.Customize1);
-            p.Add("Customize2", a.Customize2);
-            p.Add("Customize3", a.Customize3);
-
-            p.Add("Length", a.Length); p.Add("Width", a.Width); p.Add("Height", a.Height); p.Add("Angle", a.Angle);
-            p.Add("BasePointX", a.BasePointX); p.Add("BasePointY", a.BasePointY); p.Add("BasePointZ", a.BasePointZ);
-
-            p.Add("Model", a.Model); p.Add("Specifications", a.Specifications); p.Add("Material", a.Material);
-            p.Add("MediumName", a.MediumName); p.Add("StandardNumber", a.StandardNumber);
-
-            p.Add("Pressure", a.Pressure); p.Add("Temperature", a.Temperature); p.Add("PressureRating", a.PressureRating);
-            p.Add("OperatingPressure", a.OperatingPressure); p.Add("OperatingTemperature", a.OperatingTemperature);
-
-            p.Add("Diameter", a.Diameter); p.Add("OuterDiameter", a.OuterDiameter); p.Add("InnerDiameter", a.InnerDiameter);
-            p.Add("NominalDiameter", a.NominalDiameter); p.Add("Thickness", a.Thickness); p.Add("Weight", a.Weight); p.Add("Density", a.Density);
-
-            p.Add("Volume", a.Volume); p.Add("Flow", a.Flow); p.Add("Velocity", a.Velocity); p.Add("Lift", a.Lift);
-            p.Add("Power", a.Power); p.Add("Voltage", a.Voltage); p.Add("Current", a.Current); p.Add("Frequency", a.Frequency);
-            p.Add("Conductivity", a.Conductivity); p.Add("Moisture", a.Moisture); p.Add("Humidity", a.Humidity); p.Add("Vacuum", a.Vacuum); p.Add("Radiation", a.Radiation);
-
-            p.Add("PipeSpec", a.PipeSpec); p.Add("PipeNominalDiameter", a.PipeNominalDiameter); p.Add("PipeWallThickness", a.PipeWallThickness);
-            p.Add("PipePressureClass", a.PipePressureClass); p.Add("ConnectionType", a.ConnectionType); p.Add("PipeSlope", a.PipeSlope); p.Add("AnticorrosionTreatment", a.AnticorrosionTreatment);
-
-            p.Add("ValveModel", a.ValveModel); p.Add("ValveBodyMaterial", a.ValveBodyMaterial); p.Add("ValveDiscMaterial", a.ValveDiscMaterial);
-            p.Add("ValveBallMaterial", a.ValveBallMaterial); p.Add("SealMaterial", a.SealMaterial); p.Add("DriveType", a.DriveType);
-            p.Add("OpenMode", a.OpenMode); p.Add("ApplicableMedium", a.ApplicableMedium);
-
-            p.Add("FlangeModel", a.FlangeModel); p.Add("FlangeType", a.FlangeType); p.Add("FlangeFaceType", a.FlangeFaceType);
-            p.Add("FlangeStandard", a.FlangeStandard); p.Add("BoltSpec", a.BoltSpec);
-
-            p.Add("ReducerSpec", a.ReducerSpec); p.Add("ReducerLargeDn", a.ReducerLargeDn); p.Add("ReducerSmallDn", a.ReducerSmallDn);
-            p.Add("ReducerWallThicknessLarge", a.ReducerWallThicknessLarge); p.Add("ReducerWallThicknessSmall", a.ReducerWallThicknessSmall);
-            p.Add("ReducerConnectionType", a.ReducerConnectionType); p.Add("ReducerConicity", a.ReducerConicity);
-            p.Add("ReducerEccentricDirection", a.ReducerEccentricDirection); p.Add("ReducerApplicableMedium", a.ReducerApplicableMedium); p.Add("ReducerAnticorrosion", a.ReducerAnticorrosion);
-
-            p.Add("PumpModel", a.PumpModel); p.Add("PumpFlow", a.PumpFlow); p.Add("PumpHead", a.PumpHead); p.Add("PumpBodyMaterial", a.PumpBodyMaterial);
-            p.Add("MotorPower", a.MotorPower); p.Add("InletOutletDiameter", a.InletOutletDiameter); p.Add("RatedSpeed", a.RatedSpeed);
-            p.Add("PumpApplicableMedium", a.PumpApplicableMedium); p.Add("WorkingPressure", a.WorkingPressure); p.Add("ProtectionLevel", a.ProtectionLevel);
-
-            p.Add("ExpansionJointModel", a.ExpansionJointModel); p.Add("BellowsMaterial", a.BellowsMaterial); p.Add("FlangeOrNozzleMaterial", a.FlangeOrNozzleMaterial);
-            p.Add("CompensationAmount", a.CompensationAmount); p.Add("ExpansionJointConnectionType", a.ExpansionJointConnectionType);
-            p.Add("ExpansionJointMedium", a.ExpansionJointMedium); p.Add("ExpansionJointWorkingTemp", a.ExpansionJointWorkingTemp);
-
-            p.Add("FlueGasCapacity", a.FlueGasCapacity); p.Add("DesulfurizationEfficiency", a.DesulfurizationEfficiency); p.Add("DropletSize", a.DropletSize); p.Add("SprayLayerCount", a.SprayLayerCount);
-            p.Add("ChimneySpec", a.ChimneySpec); p.Add("ChimneyDiameter", a.ChimneyDiameter); p.Add("ChimneyHeight", a.ChimneyHeight); p.Add("ChimneyMaterial", a.ChimneyMaterial);
-            p.Add("ChimneyThickness", a.ChimneyThickness); p.Add("OutletWindSpeed", a.OutletWindSpeed); p.Add("InsulationThickness", a.InsulationThickness);
-            p.Add("SupportType", a.SupportType); p.Add("FlueGasTemperature", a.FlueGasTemperature);
-
-            p.Add("PressureGaugeModel", a.PressureGaugeModel); p.Add("ThermometerModel", a.ThermometerModel); p.Add("FilterModel", a.FilterModel);
-            p.Add("CheckValveModel", a.CheckValveModel); p.Add("SprinklerModel", a.SprinklerModel); p.Add("FlowMeterModel", a.FlowMeterModel);
-            p.Add("SafetyValveModel", a.SafetyValveModel); p.Add("FlexibleJointModel", a.FlexibleJointModel);
-
-            p.Add("CreatedAt", a.CreatedAt);
-            p.Add("UpdatedAt", a.UpdatedAt);
-            return p;
+            dict[p.Name] = s.Trim();
         }
 
+        return dict;
+    }
 
-        /// <summary>
-        /// 事务插入：先插入文件存储，再插入 JSON 属性（新表 cad_block_attributes_json）
-        /// 说明：保留旧方法签名，兼容现有调用方；旧 FileAttribute 会被转换为字典后存入 JSON。
-        /// </summary>
-        public async Task<(int StorageId, int AttributeId)> AddFileStorageAndAttributeAsync(FileStorage storage, FileAttribute attribute)
-        {
-            // 参数保护，防止空引用
-            if (storage == null) throw new ArgumentNullException(nameof(storage));
-            if (attribute == null) throw new ArgumentNullException(nameof(attribute));
+    // 把旧模型转换为 JSON 文本
+    var attrDict = BuildAttrDict(attribute);
+    var attrJson = Newtonsoft.Json.JsonConvert.SerializeObject(attrDict);
 
-            // 业务属性ID兜底（继续保留，写回 cad_file_storage.file_attribute_id 供兼容旧逻辑）
-            if (string.IsNullOrWhiteSpace(attribute.FileAttributeId))
-            {
-                attribute.FileAttributeId = Guid.NewGuid().ToString("N");
-            }
+    using var connection = GetConnection();
+    // 使用同步打开以兼容 IDbConnection 在 .NET Framework 中的实现
+    connection.Open();
 
-            // 本地函数，把旧 FileAttribute 转成字典（只存有值字段，避免无意义空值）
-            Dictionary<string, string> BuildAttrDict(FileAttribute src)
-            {
-                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                var props = typeof(FileAttribute).GetProperties();
+    IDbTransaction tx = null;
+    int storageId = 0;
 
-                foreach (var p in props)
-                {
-                    // 跳过系统字段/主键字段，避免污染业务属性
-                    if (string.Equals(p.Name, nameof(FileAttribute.Id), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.CategoryId), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.FileStorageId), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.CreatedAt), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p.Name, nameof(FileAttribute.UpdatedAt), StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
+    try
+    {
+        // 开启事务，确保“主表+属性表+回写”原子性
+        tx = connection.BeginTransaction();
 
-                    var v = p.GetValue(src);
-                    if (v == null) continue;
-
-                    var s = Convert.ToString(v);
-                    if (string.IsNullOrWhiteSpace(s)) continue;
-
-                    dict[p.Name] = s.Trim();
-                }
-
-                return dict;
-            }
-
-            // 把旧模型转换为 JSON 文本
-            var attrDict = BuildAttrDict(attribute);
-            var attrJson = Newtonsoft.Json.JsonConvert.SerializeObject(attrDict);
-
-            using var connection = GetConnection();
-            await connection.OpenAsync().ConfigureAwait(false);
-
-            MySqlTransaction tx = null;
-            int storageId = 0;
-
-            try
-            {
-                // 开启事务，确保“主表+属性表+回写”原子性
-                tx = connection.BeginTransaction();
-
-                // 先插入文件主表
-                const string insertStorageSql = @"
+        // 先插入文件主表
+        const string insertStorageSql = @"
 INSERT INTO cad_file_storage
 (category_id, file_attribute_id, file_name, file_stored_name, display_name, file_type, is_tianzheng, file_hash,
  block_name, layer_name, color_index, scale, file_path, preview_image_name, preview_image_path, file_size,
@@ -3021,220 +4473,221 @@ VALUES
  @IsPreview, @Version, @Description, @IsActive, @CreatedBy, @CategoryType, @Title, @Keywords, @IsPublic, @UpdatedBy,
  @LastAccessedAt, @CreatedAt, @UpdatedAt);";
 
-                await connection.ExecuteAsync(insertStorageSql, new
-                {
-                    storage.CategoryId,
-                    FileName = storage.FileName ?? string.Empty,
-                    FileStoredName = storage.FileStoredName ?? string.Empty,
-                    DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
-                    FileType = storage.FileType ?? string.Empty,
-                    storage.IsTianZheng,
-                    FileHash = storage.FileHash ?? string.Empty,
-                    BlockName = storage.BlockName ?? string.Empty,
-                    LayerName = storage.LayerName ?? string.Empty,
-                    ColorIndex = storage.ColorIndex ?? 0,
-                    Scale = storage.Scale ?? 1.0,
-                    FilePath = storage.FilePath ?? string.Empty,
-                    PreviewImageName = storage.PreviewImageName ?? string.Empty,
-                    PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
-                    FileSize = storage.FileSize ?? 0L,
-                    storage.IsPreview,
-                    storage.Version,
-                    Description = storage.Description ?? string.Empty,
-                    storage.IsActive,
-                    CreatedBy = storage.CreatedBy ?? Environment.UserName,
-                    CategoryType = storage.CategoryType ?? "sub",
-                    Title = storage.Title ?? string.Empty,
-                    Keywords = storage.Keywords ?? string.Empty,
-                    storage.IsPublic,
-                    UpdatedBy = storage.UpdatedBy ?? string.Empty,
-                    storage.LastAccessedAt,
-                    CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
-                    UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
-                }, tx).ConfigureAwait(false);
+        await connection.ExecuteAsync(insertStorageSql, new
+        {
+            storage.CategoryId,
+            FileName = storage.FileName ?? string.Empty,
+            FileStoredName = storage.FileStoredName ?? string.Empty,
+            DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
+            FileType = storage.FileType ?? string.Empty,
+            storage.IsTianZheng,
+            FileHash = storage.FileHash ?? string.Empty,
+            BlockName = storage.BlockName ?? string.Empty,
+            LayerName = storage.LayerName ?? string.Empty,
+            ColorIndex = storage.ColorIndex ?? 0,
+            Scale = storage.Scale ?? 1.0,
+            FilePath = storage.FilePath ?? string.Empty,
+            PreviewImageName = storage.PreviewImageName ?? string.Empty,
+            PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
+            FileSize = storage.FileSize ?? 0L,
+            storage.IsPreview,
+            storage.Version,
+            Description = storage.Description ?? string.Empty,
+            storage.IsActive,
+            CreatedBy = storage.CreatedBy ?? Environment.UserName,
+            CategoryType = storage.CategoryType ?? "sub",
+            Title = storage.Title ?? string.Empty,
+            Keywords = storage.Keywords ?? string.Empty,
+            storage.IsPublic,
+            UpdatedBy = storage.UpdatedBy ?? string.Empty,
+            storage.LastAccessedAt,
+            CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
+            UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
+        }, tx).ConfigureAwait(false);
 
-                // 获取主表自增ID
-                storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+        // 获取主表自增ID
+        storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 插入新属性表（JSON）
-                const string insertJsonAttrSql = @"
+        // 插入新属性表（JSON）
+        const string insertJsonAttrSql = @"
 INSERT INTO cad_block_attributes_json
 (file_id, config_name, attributes_json, created_at, updated_at)
 VALUES
 (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
 
-                await connection.ExecuteAsync(insertJsonAttrSql, new
-                {
-                    FileId = storageId,
-                    ConfigName = string.IsNullOrWhiteSpace(attribute.FileAttributeId) ? "default" : attribute.FileAttributeId,
-                    AttributesJson = attrJson
-                }, tx).ConfigureAwait(false);
+        await connection.ExecuteAsync(insertJsonAttrSql, new
+        {
+            FileId = storageId,
+            ConfigName = string.IsNullOrWhiteSpace(attribute.FileAttributeId) ? "default" : attribute.FileAttributeId,
+            AttributesJson = attrJson
+        }, tx).ConfigureAwait(false);
 
-                // 取 JSON 属性表主键（为了兼容原返回值 AttributeId）
-                int attrId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+        // 取 JSON 属性表主键（为了兼容原返回值 AttributeId）
+        int attrId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 回写 storage.file_attribute_id（保持兼容）
-                const string updateStorageSql = @"
+        // 回写 storage.file_attribute_id（保持兼容）
+        const string updateStorageSql = @"
 UPDATE cad_file_storage
 SET file_attribute_id = @FileAttributeId, updated_at = @UpdatedAt
 WHERE id = @Id;";
 
-                await connection.ExecuteAsync(updateStorageSql, new
-                {
-                    FileAttributeId = attribute.FileAttributeId,
-                    UpdatedAt = DateTime.Now,
-                    Id = storageId
-                }, tx).ConfigureAwait(false);
-
-                // 提交事务
-                tx.Commit();
-                return (storageId, attrId);
-            }
-            catch (Exception ex)
-            {
-                // 异常时回滚
-                try { tx?.Rollback(); } catch { }
-                LogManager.Instance.LogInfo($"AddFileStorageAndAttributeAsync 失败: {ex.Message}");
-                return (0, 0);
-            }
-            finally
-            {
-                // 释放事务对象
-                try { tx?.Dispose(); } catch { }
-            }
-        }
-
-        /// <summary>
-        /// 新方案——插入文件主记录 + JSON属性记录（事务）
-        /// </summary>
-        /// <param name="storage">中文注释：文件主表对象</param>
-        /// <param name="attributes">中文注释：动态属性字典</param>
-        /// <param name="configName">中文注释：属性配置名</param>
-        /// <returns>中文注释：返回主表ID与属性表ID</returns>
-        /// <exception cref="ArgumentNullException">中文注释：主表对象为空时抛出</exception>
-        public async Task<(int StorageId, long AttrId)> AddFileStorageAndAttributesJsonAsync(
-            FileStorage storage,
-            Dictionary<string, string> attributes,
-            string configName = "default")
+        await connection.ExecuteAsync(updateStorageSql, new
         {
-            if (storage == null) throw new ArgumentNullException(nameof(storage));
+            FileAttributeId = attribute.FileAttributeId,
+            UpdatedAt = DateTime.Now,
+            Id = storageId
+        }, tx).ConfigureAwait(false);
 
-            using var connection = GetConnection();
-            await connection.OpenAsync().ConfigureAwait(false);
-            using var tx = connection.BeginTransaction();
+        // 提交事务
+        tx.Commit();
+        return (storageId, attrId);
+    }
+    catch (Exception ex)
+    {
+        // 异常时回滚
+        try { tx?.Rollback(); } catch { }
+        LogManager.Instance.LogInfo($"AddFileStorageAndAttributeAsync 失败: {ex.Message}");
+        return (0, 0);
+    }
+    finally
+    {
+        // 释放事务对象
+        try { tx?.Dispose(); } catch { }
+    }
+}
 
-            try
-            {
-                // 先插入 cad_file_storage 主表
-                const string insertStorageSql = @"
+/// <summary>
+/// 新方案——插入文件主记录 + JSON属性记录（事务）
+/// </summary>
+/// <param name="storage">中文注释：文件主表对象</param>
+/// <param name="attributes">中文注释：动态属性字典</param>
+/// <param name="configName">中文注释：属性配置名</param>
+/// <returns>中文注释：返回主表ID与属性表ID</returns>
+/// <exception cref="ArgumentNullException">中文注释：主表对象为空时抛出</exception>
+public async Task<(int StorageId, long AttrId)> AddFileStorageAndAttributesJsonAsync(
+    FileStorage storage,
+    Dictionary<string, string> attributes,
+    string configName = "default")
+{
+    if (storage == null) throw new ArgumentNullException(nameof(storage));
+
+    using var connection = GetConnection();
+    // 使用同步打开以兼容 IDbConnection 在 .NET Framework 中的实现
+    connection.Open();
+    using var tx = connection.BeginTransaction();
+
+    try
+    {
+        // 先插入 cad_file_storage 主表
+        const string insertStorageSql = @"
 INSERT INTO cad_file_storage
 (category_id, file_name, file_stored_name, display_name, file_type, file_hash, block_name, layer_name, color_index, scale, file_path, preview_image_name, preview_image_path, file_size, is_preview, version, description, is_active, created_by, category_type, title, keywords, is_public, updated_by, last_accessed_at, created_at, updated_at)
 VALUES
 (@CategoryId, @FileName, @FileStoredName, @DisplayName, @FileType, @FileHash, @BlockName, @LayerName, @ColorIndex, @Scale, @FilePath, @PreviewImageName, @PreviewImagePath, @FileSize, @IsPreview, @Version, @Description, @IsActive, @CreatedBy, @CategoryType, @Title, @Keywords, @IsPublic, @UpdatedBy, @LastAccessedAt, @CreatedAt, @UpdatedAt);";
 
-                await connection.ExecuteAsync(insertStorageSql, new
-                {
-                    storage.CategoryId,
-                    FileName = storage.FileName ?? string.Empty,
-                    FileStoredName = storage.FileStoredName ?? string.Empty,
-                    DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
-                    FileType = storage.FileType ?? string.Empty,
-                    FileHash = storage.FileHash ?? string.Empty,
-                    BlockName = storage.BlockName ?? string.Empty,
-                    LayerName = storage.LayerName ?? string.Empty,
-                    ColorIndex = storage.ColorIndex ?? 0,
-                    Scale = storage.Scale ?? 1.0,
-                    FilePath = storage.FilePath ?? string.Empty,
-                    PreviewImageName = storage.PreviewImageName ?? string.Empty,
-                    PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
-                    FileSize = storage.FileSize ?? 0L,
-                    storage.IsPreview,
-                    storage.Version,
-                    Description = storage.Description ?? string.Empty,
-                    storage.IsActive,
-                    CreatedBy = storage.CreatedBy ?? Environment.UserName,
-                    CategoryType = storage.CategoryType ?? "sub",
-                    Title = storage.Title ?? string.Empty,
-                    Keywords = storage.Keywords ?? string.Empty,
-                    storage.IsPublic,
-                    UpdatedBy = storage.UpdatedBy ?? string.Empty,
-                    storage.LastAccessedAt,
-                    CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
-                    UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
-                }, tx).ConfigureAwait(false);
+        await connection.ExecuteAsync(insertStorageSql, new
+        {
+            storage.CategoryId,
+            FileName = storage.FileName ?? string.Empty,
+            FileStoredName = storage.FileStoredName ?? string.Empty,
+            DisplayName = storage.DisplayName ?? storage.FileName ?? string.Empty,
+            FileType = storage.FileType ?? string.Empty,
+            FileHash = storage.FileHash ?? string.Empty,
+            BlockName = storage.BlockName ?? string.Empty,
+            LayerName = storage.LayerName ?? string.Empty,
+            ColorIndex = storage.ColorIndex ?? 0,
+            Scale = storage.Scale ?? 1.0,
+            FilePath = storage.FilePath ?? string.Empty,
+            PreviewImageName = storage.PreviewImageName ?? string.Empty,
+            PreviewImagePath = storage.PreviewImagePath ?? string.Empty,
+            FileSize = storage.FileSize ?? 0L,
+            storage.IsPreview,
+            storage.Version,
+            Description = storage.Description ?? string.Empty,
+            storage.IsActive,
+            CreatedBy = storage.CreatedBy ?? Environment.UserName,
+            CategoryType = storage.CategoryType ?? "sub",
+            Title = storage.Title ?? string.Empty,
+            Keywords = storage.Keywords ?? string.Empty,
+            storage.IsPublic,
+            UpdatedBy = storage.UpdatedBy ?? string.Empty,
+            storage.LastAccessedAt,
+            CreatedAt = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt,
+            UpdatedAt = storage.UpdatedAt == default ? DateTime.Now : storage.UpdatedAt
+        }, tx).ConfigureAwait(false);
 
-                // 获取主表自增ID
-                int storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+        // 获取主表自增ID
+        int storageId = await connection.QuerySingleAsync<int>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 插入 JSON 属性表
-                const string insertAttrSql = @"
+        // 插入 JSON 属性表
+        const string insertAttrSql = @"
 INSERT INTO cad_block_attributes_json (file_id, config_name, attributes_json, created_at, updated_at)
 VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
 
-                await connection.ExecuteAsync(insertAttrSql, new
-                {
-                    FileId = storageId,
-                    ConfigName = string.IsNullOrWhiteSpace(configName) ? "default" : configName,
-                    AttributesJson = ToJson(attributes)
-                }, tx).ConfigureAwait(false);
+        await connection.ExecuteAsync(insertAttrSql, new
+        {
+            FileId = storageId,
+            ConfigName = string.IsNullOrWhiteSpace(configName) ? "default" : configName,
+            AttributesJson = JsonConvert.SerializeObject(attributes ?? new Dictionary<string, string>())
+        }, tx).ConfigureAwait(false);
 
-                // 获取属性表自增ID
-                long attrId = await connection.QuerySingleAsync<long>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
+        // 获取属性表自增ID
+        long attrId = await connection.QuerySingleAsync<long>("SELECT LAST_INSERT_ID()", transaction: tx).ConfigureAwait(false);
 
-                // 提交事务
-                tx.Commit();
-                return (storageId, attrId);
-            }
-            catch
-            {
-                // 异常回滚事务
-                tx.Rollback();
-                throw;
-            }
-        }
+        // 提交事务
+        tx.Commit();
+        return (storageId, attrId);
+    }
+    catch
+    {
+        // 异常回滚事务
+        tx.Rollback();
+        throw;
+    }
+}
 
         #endregion
 
-        #region 管道操作方法
+#region 管道操作方法
 
-        /// <summary>
-        /// 管道模板查询结果（主记录 + JSON属性）
-        /// </summary>
-        public sealed class PipeTemplateQueryResult
-        {
-            /// <summary>
-            /// 模板主表记录
-            /// </summary>
-            public FileStorage? Storage { get; set; }
+/// <summary>
+/// 管道模板查询结果（主记录 + JSON属性）
+/// </summary>
+public sealed class PipeTemplateQueryResult
+{
+    /// <summary>
+    /// 模板主表记录
+    /// </summary>
+    public FileStorage? Storage { get; set; }
 
-            /// <summary>
-            /// 模板属性字典（来自 cad_block_attributes_json）
-            /// </summary>
-            public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        }
+    /// <summary>
+    /// 模板属性字典（来自 cad_block_attributes_json）
+    /// </summary>
+    public Dictionary<string, string> Attributes { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+}
 
-        /// <summary>
-        /// 按入口/出口从数据库获取“最新可用管道模板”及其属性字典
-        /// 规则：优先匹配 display_name/file_name/block_name/title/keywords，按 updated_at/id 倒序取一条
-        /// </summary>
-        /// <param name="isOutlet">中文注释：true=出口模板，false=入口模板</param>
-        /// <returns>中文注释：命中时返回模板与属性，未命中返回 null</returns>
-        public async Task<PipeTemplateQueryResult?> GetLatestPipeTemplateWithAttributesAsync(bool isOutlet)
-        {
-            try
-            {
-                // 根据入口/出口准备关键词
-                string kwCnMain = isOutlet ? "出口管道" : "入口管道";
-                string kwCnSub = isOutlet ? "出口" : "入口";
-                string kwEn = isOutlet ? "outlet" : "inlet";
+/// <summary>
+/// 按入口/出口从数据库获取“最新可用管道模板”及其属性字典
+/// 规则：优先匹配 display_name/file_name/block_name/title/keywords，按 updated_at/id 倒序取一条
+/// </summary>
+/// <param name="isOutlet">中文注释：true=出口模板，false=入口模板</param>
+/// <returns>中文注释：命中时返回模板与属性，未命中返回 null</returns>
+public async Task<PipeTemplateQueryResult?> GetLatestPipeTemplateWithAttributesAsync(bool isOutlet)
+{
+    try
+    {
+        // 根据入口/出口准备关键词
+        string kwCnMain = isOutlet ? "出口管道" : "入口管道";
+        string kwCnSub = isOutlet ? "出口" : "入口";
+        string kwEn = isOutlet ? "outlet" : "inlet";
 
-                // 模糊匹配参数
-                string k1 = $"%{kwCnMain}%";
-                string k2 = $"%{kwCnSub}%";
-                string k3 = $"%{kwEn}%";
+        // 模糊匹配参数
+        string k1 = $"%{kwCnMain}%";
+        string k2 = $"%{kwCnSub}%";
+        string k3 = $"%{kwEn}%";
 
-                // 查询模板主记录（只取激活记录）
-                const string sqlTemplate = @"
+        // 查询模板主记录（只取激活记录）
+        const string sqlTemplate = @"
                               SELECT
                                   id AS Id,
                                   category_id AS CategoryId,
@@ -3277,368 +4730,157 @@ VALUES (@FileId, @ConfigName, @AttributesJson, NOW(), NOW());";
                               ORDER BY updated_at DESC, id DESC
                               LIMIT 1;";
 
-                // 建立连接并查询主记录
-                using var connection = GetConnection();
-                var storage = await connection.QueryFirstOrDefaultAsync<FileStorage>(
-                    sqlTemplate,
-                    new { K1 = k1, K2 = k2, K3 = k3 }).ConfigureAwait(false);
+        // 建立连接并查询主记录
+        using var connection = GetConnection();
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = sqlTemplate.Replace("@K1", ":K1").Replace("@K2", ":K2").Replace("@K3", ":K3");
+        AddDmParam(cmd, "K1", k1);
+        AddDmParam(cmd, "K2", k2);
+        AddDmParam(cmd, "K3", k3);
 
-                // 未命中模板直接返回 null
-                if (storage == null)
-                {
-                    return null;
-                }
+        FileStorage storage = null;
+        using (var reader = cmd.ExecuteReader())
+        {
+            if (reader.Read())
+            {
+                storage = new FileStorage();
+                int ord;
+                ord = reader.GetOrdinal("Id"); storage.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("CategoryId"); storage.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("CategoryType"); storage.CategoryType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileAttributeId"); storage.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileName"); storage.FileName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileStoredName"); storage.FileStoredName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("DisplayName"); storage.DisplayName = reader.IsDBNull(ord) ? storage.FileName : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileType"); storage.FileType = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileHash"); storage.FileHash = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("BlockName"); storage.BlockName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("LayerName"); storage.LayerName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("ColorIndex"); storage.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Scale"); storage.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                ord = reader.GetOrdinal("FilePath"); storage.FilePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImageName"); storage.PreviewImageName = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImagePath"); storage.PreviewImagePath = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileSize"); storage.FileSize = reader.IsDBNull(ord) ? 0 : reader.GetInt64(ord);
+                ord = reader.GetOrdinal("IsPreview"); storage.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("Version"); storage.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Description"); storage.Description = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("IsActive"); storage.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("CreatedBy"); storage.CreatedBy = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("Title"); storage.Title = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("Keywords"); storage.Keywords = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("IsPublic"); storage.IsPublic = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("UpdatedBy"); storage.UpdatedBy = reader.IsDBNull(ord) ? "" : reader.GetString(ord);
+                ord = reader.GetOrdinal("LastAccessedAt"); storage.LastAccessedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("CreatedAt"); storage.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("UpdatedAt"); storage.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+            }
+        }
 
-                // 查询该模板最新属性JSON
-                const string sqlAttr = @"
+        // 未命中模板直接返回 null
+        if (storage == null)
+        {
+            return null;
+        }
+
+        // 查询该模板最新属性JSON
+        const string sqlAttr = @"
                              SELECT attributes_json
                              FROM cad_block_attributes_json
-                             WHERE file_id = @FileId
+                             WHERE file_id = :FileId
                              ORDER BY updated_at DESC, attr_id DESC
                              LIMIT 1;";
 
-                string? attrJson = await connection.QueryFirstOrDefaultAsync<string>(
-                    sqlAttr,
-                    new { FileId = storage.Id }).ConfigureAwait(false);
-
-                // 反序列化属性字典（空则返回空字典）
-                var attrs = string.IsNullOrWhiteSpace(attrJson)
-                    ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                    : (Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attrJson)
-                       ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
-
-                // 返回统一结果对象
-                return new PipeTemplateQueryResult
-                {
-                    Storage = storage,
-                    Attributes = attrs
-                };
-            }
-            catch (Exception ex)
-            {
-                // 记录异常日志，返回 null 由上层兜底
-                LogManager.Instance.LogInfo($"GetLatestPipeTemplateWithAttributesAsync 出错: {ex.Message}");
-                return null;
-            }
+        string? attrJson = null;
+        using (var attrCmd = connection.CreateCommand())
+        {
+            attrCmd.CommandText = sqlAttr;
+            AddDmParam(attrCmd, "FileId", storage.Id);
+            attrJson = Convert.ToString(attrCmd.ExecuteScalar());
         }
 
-        #endregion
+        // 反序列化属性字典（空则返回空字典）
+        var attrs = string.IsNullOrWhiteSpace(attrJson)
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : (Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attrJson)
+               ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
-
-
-        /// <summary>
-        /// CAD分类
-        /// </summary>
-        public class CadCategory
+        // 返回统一结果对象
+        return new PipeTemplateQueryResult
         {
-            public int Id { get; set; } // 分类ID
-            public string Name { get; set; } = string.Empty; // 分类编码名
-            public string DisplayName { get; set; } = string.Empty; // 分类显示名
-            public string SubcategoryIds { get; set; } = string.Empty; // 子分类ID串
-            public int SortOrder { get; set; } // 排序
-            public DateTime CreatedAt { get; set; } // 创建时间
-            public DateTime UpdatedAt { get; set; } // 更新时间
-        }
+            Storage = storage,
+            Attributes = attrs
+        };
+    }
+    catch (Exception ex)
+    {
+        // 记录异常日志，返回 null 由上层兜底
+        LogManager.Instance.LogInfo($"GetLatestPipeTemplateWithAttributesAsync 出错: {ex.Message}");
+        return null;
+    }
+}
 
-        /// <summary>
-        /// CAD子分类
-        /// </summary>
-        public class CadSubcategory
-        {
-            public int Id { get; set; } // 子分类ID
-            public int ParentId { get; set; } // 父分类ID
-            public string Name { get; set; } = string.Empty; // 子分类编码名
-            public string DisplayName { get; set; } = string.Empty; // 子分类显示名
-            public string SubcategoryIds { get; set; } = string.Empty; // 下级子分类ID串
-            public int SortOrder { get; set; } // 排序
-            public int Level { get; set; } // 层级
-            public DateTime CreatedAt { get; set; } // 创建时间
-            public DateTime UpdatedAt { get; set; } // 更新时间
-        }
+#endregion
 
-        /// <summary>
-        /// SW分类
-        /// </summary>
-        public class SwCategory
-        {
-            public int Id { get; set; } // 分类ID
-            public string Name { get; set; } = string.Empty; // 分类名
-            public string DisplayName { get; set; } = string.Empty; // 显示名
-            public int SortOrder { get; set; } // 排序
-            public DateTime CreatedAt { get; set; } // 创建时间
-            public DateTime UpdatedAt { get; set; } // 更新时间
-        }
 
-        /// <summary>
-        /// SW子分类
-        /// </summary>
-        public class SwSubcategory
-        {
-            public int Id { get; set; } // 子分类ID
-            public int ParentId { get; set; } // 父ID
-            public int CategoryId { get; set; } // 分类ID
-            public string Name { get; set; } = string.Empty; // 名称
-            public string DisplayName { get; set; } = string.Empty; // 显示名
-            public int SortOrder { get; set; } // 排序
-            public DateTime CreatedAt { get; set; } // 创建时间
-            public DateTime UpdatedAt { get; set; } // 更新时间
-        }
 
-        /// <summary>
-        /// SW图元
-        /// </summary>
-        public class SwGraphic
-        {
-            public int Id { get; set; } // 图元ID
-            public int SubcategoryId { get; set; } // 子分类ID
-            public string FileName { get; set; } = string.Empty; // 文件名
-            public string DisplayName { get; set; } = string.Empty; // 显示名
-            public string FilePath { get; set; } = string.Empty; // 文件路径
-            public string PreviewImagePath { get; set; } = string.Empty; // 预览图路径
-            public long FileSize { get; set; } // 文件大小
-            public DateTime CreatedAt { get; set; } // 创建时间
-            public DateTime UpdatedAt { get; set; } // 更新时间
-        }           
+// Models are in FunctionalMethod/DatabaseModels.cs
 
-        /// <summary>
-        /// 文件存储（cad_file_storage）
-        /// </summary>
-        public class FileStorage
-        {
-            public int Id { get; set; } // 主键ID
-            public int CategoryId { get; set; } // 分类ID
-            public string? CategoryType { get; set; } // 分类类型
-            public string? FileAttributeId { get; set; } // 属性业务ID（修复为string）
-            public string? FileName { get; set; } // 文件名
-            public string? FileStoredName { get; set; } // 存储文件名
-            public string? DisplayName { get; set; } // 显示名
-            public string? FileType { get; set; } // 文件类型
-            public int? IsTianZheng { get; set; } // 是否天正
-            public string? FileHash { get; set; } // 文件哈希
-            public string? BlockName { get; set; } // 块名
-            public string? LayerName { get; set; } // 图层名
-            public int? ColorIndex { get; set; } // 颜色索引
-            public double? Scale { get; set; } // 比例
-            public string? FilePath { get; set; } // 文件路径
-            public string? PreviewImageName { get; set; } // 预览图名
-            public string? PreviewImagePath { get; set; } // 预览图路径
-            public long? FileSize { get; set; } // 文件大小
-            public int IsPreview { get; set; } // 是否预览
-            public int Version { get; set; } // 版本
-            public string? Description { get; set; } // 描述
-            public int IsActive { get; set; } // 是否启用
-            public string? CreatedBy { get; set; } // 创建人
-            public string? Title { get; set; } // 标题
-            public string? Keywords { get; set; } // 关键字
-            public int IsPublic { get; set; } // 是否公开
-            public string? UpdatedBy { get; set; } // 更新人
-            public DateTime? LastAccessedAt { get; set; } // 最后访问时间
-            public DateTime CreatedAt { get; set; } // 创建时间
-            public DateTime UpdatedAt { get; set; } // 更新时间
-        }
+/// <summary>
+/// JSON属性表模型（对应 cad_block_attributes_json）
+/// </summary>
+public class BlockAttributesJson
+{
+    public long AttrId { get; set; } // 属性记录主键
+    public int FileId { get; set; } // 关联 cad_file_storage.id
+    public string? ConfigName { get; set; } // 配置名
+    public string? AttributesJson { get; set; } // JSON文本
+    public DateTime CreatedAt { get; set; } // 创建时间
+    public DateTime UpdatedAt { get; set; } // 更新时间
+}
 
-        /// <summary>
-        /// 文件属性（cad_file_attributes）
-        /// 说明：表中 id/category_id/file_storage_id 是 BIGINT UNSIGNED，模型改为 long 兼容大数据量
-        /// </summary>
-        public class FileAttribute
-        {
-            // 主键ID（BIGINT）
-            public long Id { get; set; }
+/// <summary>
+/// 将字典转成JSON字符串
+/// </summary>
+/// <param name="dict"></param>
+/// <returns></returns>
+private static string ToJson(Dictionary<string, string>? dict)
+{
+    return JsonConvert.SerializeObject(dict ?? new Dictionary<string, string>());
+}
 
-            // 分类ID（BIGINT，可空）
-            public long? CategoryId { get; set; }
+/// <summary>
+/// 将JSON字符串转成字典
+/// </summary>
+/// <param name="json"></param>
+/// <returns></returns>
+private static Dictionary<string, string> FromJson(string? json)
+{
+    if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, string>();
+    return JsonConvert.DeserializeObject<Dictionary<string, string>>(json)
+           ?? new Dictionary<string, string>();
+}
 
-            // 文件存储ID（BIGINT）
-            public long FileStorageId { get; set; }
-
-            // 文件名
-            public string? FileName { get; set; }
-
-            // 业务属性ID（VARCHAR(64)）
-            public string? FileAttributeId { get; set; }
-
-            public string? Description { get; set; } // 描述
-            public string? AttributeGroup { get; set; } // 属性分组
-            public string? Remarks { get; set; } // 备注
-            public string? Customize1 { get; set; } // 自定义1
-            public string? Customize2 { get; set; } // 自定义2
-            public string? Customize3 { get; set; } // 自定义3
-
-            public decimal? Length { get; set; }
-            public decimal? Width { get; set; }
-            public decimal? Height { get; set; }
-            public decimal? Angle { get; set; }
-            public decimal? BasePointX { get; set; }
-            public decimal? BasePointY { get; set; }
-            public decimal? BasePointZ { get; set; }
-
-            public string? Model { get; set; }
-            public string? Specifications { get; set; }
-            public string? Material { get; set; }
-            public string? MediumName { get; set; }
-            public string? StandardNumber { get; set; }
-            public decimal? Pressure { get; set; }
-            public decimal? Temperature { get; set; }
-            public string? PressureRating { get; set; }
-            public decimal? OperatingPressure { get; set; }
-            public decimal? OperatingTemperature { get; set; }
-            public decimal? Diameter { get; set; }
-            public decimal? OuterDiameter { get; set; }
-            public decimal? InnerDiameter { get; set; }
-            public string? NominalDiameter { get; set; }
-            public decimal? Thickness { get; set; }
-            public decimal? Weight { get; set; }
-            public decimal? Density { get; set; }
-            public decimal? Volume { get; set; }
-            public decimal? Flow { get; set; }
-            public decimal? Velocity { get; set; }
-            public decimal? Lift { get; set; }
-            public decimal? Power { get; set; }
-            public decimal? Voltage { get; set; }
-            public decimal? Current { get; set; }
-            public decimal? Frequency { get; set; }
-            public decimal? Conductivity { get; set; }
-            public decimal? Moisture { get; set; }
-            public decimal? Humidity { get; set; }
-            public decimal? Vacuum { get; set; }
-            public decimal? Radiation { get; set; }
-
-            public string? PipeSpec { get; set; }
-            public string? PipeNominalDiameter { get; set; }
-            public decimal? PipeWallThickness { get; set; }
-            public string? PipePressureClass { get; set; }
-            public string? ConnectionType { get; set; }
-            public string? PipeSlope { get; set; }
-            public string? AnticorrosionTreatment { get; set; }
-
-            public string? ValveModel { get; set; }
-            public string? ValveBodyMaterial { get; set; }
-            public string? ValveDiscMaterial { get; set; }
-            public string? ValveBallMaterial { get; set; }
-            public string? SealMaterial { get; set; }
-            public string? DriveType { get; set; }
-            public string? OpenMode { get; set; }
-            public string? ApplicableMedium { get; set; }
-
-            public string? FlangeModel { get; set; }
-            public string? FlangeType { get; set; }
-            public string? FlangeFaceType { get; set; }
-            public string? FlangeStandard { get; set; }
-            public string? BoltSpec { get; set; }
-
-            public string? ReducerSpec { get; set; }
-            public string? ReducerLargeDn { get; set; }
-            public string? ReducerSmallDn { get; set; }
-            public decimal? ReducerWallThicknessLarge { get; set; }
-            public decimal? ReducerWallThicknessSmall { get; set; }
-            public string? ReducerConnectionType { get; set; }
-            public string? ReducerConicity { get; set; }
-            public string? ReducerEccentricDirection { get; set; }
-            public string? ReducerApplicableMedium { get; set; }
-            public string? ReducerAnticorrosion { get; set; }
-
-            public string? PumpModel { get; set; }
-            public decimal? PumpFlow { get; set; }
-            public decimal? PumpHead { get; set; }
-            public string? PumpBodyMaterial { get; set; }
-            public decimal? MotorPower { get; set; }
-            public string? InletOutletDiameter { get; set; }
-            public decimal? RatedSpeed { get; set; }
-            public string? PumpApplicableMedium { get; set; }
-            public decimal? WorkingPressure { get; set; }
-            public string? ProtectionLevel { get; set; }
-
-            public string? ExpansionJointModel { get; set; }
-            public string? BellowsMaterial { get; set; }
-            public string? FlangeOrNozzleMaterial { get; set; }
-            public decimal? CompensationAmount { get; set; }
-            public string? ExpansionJointConnectionType { get; set; }
-            public string? ExpansionJointMedium { get; set; }
-            public decimal? ExpansionJointWorkingTemp { get; set; }
-
-            public decimal? FlueGasCapacity { get; set; }
-            public decimal? DesulfurizationEfficiency { get; set; }
-            public decimal? DropletSize { get; set; }
-            public int? SprayLayerCount { get; set; }
-
-            public string? ChimneySpec { get; set; }
-            public decimal? ChimneyDiameter { get; set; }
-            public decimal? ChimneyHeight { get; set; }
-            public string? ChimneyMaterial { get; set; }
-            public decimal? ChimneyThickness { get; set; }
-            public decimal? OutletWindSpeed { get; set; }
-            public decimal? InsulationThickness { get; set; }
-            public string? SupportType { get; set; }
-            public decimal? FlueGasTemperature { get; set; }
-
-            public string? PressureGaugeModel { get; set; }
-            public string? ThermometerModel { get; set; }
-            public string? FilterModel { get; set; }
-            public string? CheckValveModel { get; set; }
-            public string? SprinklerModel { get; set; }
-            public string? FlowMeterModel { get; set; }
-            public string? SafetyValveModel { get; set; }
-            public string? FlexibleJointModel { get; set; }
-
-            public DateTime CreatedAt { get; set; }
-            public DateTime UpdatedAt { get; set; }
-        }
-
-        /// <summary>
-        /// JSON属性表模型（对应 cad_block_attributes_json）
-        /// </summary>
-        public class BlockAttributesJson
-        {
-            public long AttrId { get; set; } // 属性记录主键
-            public int FileId { get; set; } // 关联 cad_file_storage.id
-            public string? ConfigName { get; set; } // 配置名
-            public string? AttributesJson { get; set; } // JSON文本
-            public DateTime CreatedAt { get; set; } // 创建时间
-            public DateTime UpdatedAt { get; set; } // 更新时间
-        }
-
-        /// <summary>
-        /// 将字典转成JSON字符串
-        /// </summary>
-        /// <param name="dict"></param>
-        /// <returns></returns>
-        private static string ToJson(Dictionary<string, string>? dict)
-        {
-            return JsonConvert.SerializeObject(dict ?? new Dictionary<string, string>());
-        }
-
-        /// <summary>
-        /// 将JSON字符串转成字典
-        /// </summary>
-        /// <param name="json"></param>
-        /// <returns></returns>
-        private static Dictionary<string, string> FromJson(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, string>();
-            return JsonConvert.DeserializeObject<Dictionary<string, string>>(json)
-                   ?? new Dictionary<string, string>();
-        }
-
-        /// <summary>
-        /// 按 file_id 获取JSON属性（返回字典）
-        /// </summary>
-        /// <param name="fileId"></param>
-        /// <param name="configName"></param>
-        /// <returns></returns>
-        public async Task<Dictionary<string, string>> GetAttributesJsonByFileIdAsync(int fileId, string configName = "default")
-        {
-            const string sql = @"
+/// <summary>
+/// 按 file_id 获取JSON属性（返回字典）
+/// </summary>
+/// <param name="fileId"></param>
+/// <param name="configName"></param>
+/// <returns></returns>
+public async Task<Dictionary<string, string>> GetAttributesJsonByFileIdAsync(int fileId, string configName = "default")
+{
+    const string sql = @"
 SELECT attributes_json
 FROM cad_block_attributes_json
 WHERE file_id = @FileId AND config_name = @ConfigName
 ORDER BY attr_id DESC
 LIMIT 1;";
 
-            using var connection = GetConnection();
-            var json = await connection.QueryFirstOrDefaultAsync<string>(sql, new { FileId = fileId, ConfigName = configName }).ConfigureAwait(false);
-            return FromJson(json);
-        }
+    using var connection = GetConnection();
+    var json = await connection.QueryFirstOrDefaultAsync<string>(sql, new { FileId = fileId, ConfigName = configName }).ConfigureAwait(false);
+    return FromJson(json);
+}
 
     }
 }

@@ -26,8 +26,7 @@ using Button = System.Windows.Controls.Button;
 using ComboBox = System.Windows.Controls.ComboBox;
 using DataGrid = System.Windows.Controls.DataGrid;
 using DataTable = System.Data.DataTable;
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
-using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
+// Use types from GB_NewCadPlus_IV.FunctionalMethod via namespace import to avoid alias conflicts
 using FontFamily = System.Windows.Media.FontFamily;
 using Image = System.Windows.Controls.Image;
 using MessageBox = System.Windows.MessageBox;
@@ -179,7 +178,7 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 从登录窗口中读取服务器配置
-                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_III", "login_config.json");
+                var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 if (!File.Exists(configPath))// 如果文件不存在，则返回
                     return;
 
@@ -334,26 +333,37 @@ namespace GB_NewCadPlus_IV
                 // 加载绘图配置
                 LoadDrawingConfig();
                 // 尝试连接数据库（若失败会弹出登录窗口让用户修正）
-                bool connected = await EnsureDatabaseConnectedOrShowLoginAsync();
-                if (!connected)
+                //bool connected = await EnsureDatabaseConnectedOrShowLoginAsync();
+                //if (!connected)
+                //{
+                //    _useDatabaseMode = false;
+                //    MessageBox.Show("未能连接到数据库，已进入离线模式。部分功能将不可用。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                //}
+                //else
+                //{
+                //    _useDatabaseMode = true;
+                //    // 初始化管理器（如果尚未初始化）
+                //    if (_databaseManager != null)
+                //    {
+                //        _fileManager = new FileManager(_databaseManager);
+                //        _categoryManager = new CategoryManager(_databaseManager);
+                //    }
+                //    // 后续数据库相关初始化（例如加载分类树）
+                //    ReinitializeDatabase();
+                //    // 根据当前登录用户决定是否显示管理员/部门模块
+                //    UpdateAdminTabsVisibility();
+                //}
+                //_useDatabaseMode = true;
+                // 初始化管理器（如果尚未初始化）
+                if (_databaseManager != null)
                 {
-                    _useDatabaseMode = false;
-                    MessageBox.Show("未能连接到数据库，已进入离线模式。部分功能将不可用。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _fileManager = new FileManager(_databaseManager);
+                    _categoryManager = new CategoryManager(_databaseManager);
                 }
-                else
-                {
-                    _useDatabaseMode = true;
-                    // 初始化管理器（如果尚未初始化）
-                    if (_databaseManager != null)
-                    {
-                        _fileManager = new FileManager(_databaseManager);
-                        _categoryManager = new CategoryManager(_databaseManager);
-                    }
-                    // 后续数据库相关初始化（例如加载分类树）
-                    ReinitializeDatabase();
-                    // 根据当前登录用户决定是否显示管理员/部门模块
-                    UpdateAdminTabsVisibility();
-                }
+                // 后续数据库相关初始化（例如加载分类树）
+                ReinitializeDatabase();
+                // 根据当前登录用户决定是否显示管理员/部门模块
+                UpdateAdminTabsVisibility();
                 // 继续其它 UI 初始化（保持原有逻辑）
                 AddContextMenuToTreeView(CategoryTreeView);
                 PropertiesDataGrid = FindVisualChild<DataGrid>(this, "PropertiesDataGrid");
@@ -377,15 +387,55 @@ namespace GB_NewCadPlus_IV
 
         /// <summary>
         /// 根据当前用户（VariableDictionary._userName 或界面用户名）显示/隐藏“管理员模块”与“部门\\人员模块”
-        /// 仅当用户名为 "sa" 或 "admin"（不区分大小写）时才显示；否则折叠（Collapsed）
+        /// 仅当用户名为 "sa"、"admin"、"root" 或 达梦管理员 "SYSDBA"（不区分大小写）时才显示；否则折叠（Collapsed）
         ///</summary>
         private void UpdateAdminTabsVisibility()
         {
             try
             {
                 // 获取当前用户名（优先使用全局变量，再退回到设置界面输入）
-                var userName = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim().ToLowerInvariant();
-                bool isAdmin = userName == "sa" || userName == "admin" || userName == "root";
+                // 优先获取原始用户名（保留大小写以便后续数据库查询），再构造小写用于简单白名单判断
+                var userNameRaw = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
+                var userName = userNameRaw.ToLowerInvariant();
+                // 先做保守的白名单匹配（避免在数据库不可用时放宽权限）
+                bool isAdmin = userName == "sa" || userName == "admin" || userName == "root" || userName == "sysdba";
+
+                // 若白名单未命中且数据库可用，则以 USERS 表中的 ROLE 字段为准进行角色判定（更灵活且可由管理员在 DB 中维护）
+                if (!isAdmin && _databaseManager != null && _databaseManager.IsDatabaseAvailable && !string.IsNullOrWhiteSpace(userNameRaw))
+                {
+                    try
+                    {
+                        using (var conn = _databaseManager.GetConnection())
+                        {
+                            // 打开连接并确保 Schema 已设置（Connection_StateChange 会在打开时调用 ApplySchema）
+                            conn.Open();
+                            using (var cmd = conn.CreateCommand())
+                            {
+                                cmd.CommandText = "SELECT ROLE FROM USERS WHERE UPPER(USERNAME) = :u AND IS_ACTIVE = 1";
+                                var p = cmd.CreateParameter();
+                                p.ParameterName = "u";
+                                p.Value = userNameRaw.ToUpperInvariant();
+                                cmd.Parameters.Add(p);
+                                var obj = cmd.ExecuteScalar();
+                                if (obj != null && obj != DBNull.Value)
+                                {
+                                    var role = Convert.ToString(obj) ?? string.Empty;
+                                    var rl = role.ToLowerInvariant();
+                                    // 常见的管理员角色标识：包含 admin、sysdba、或中文“管理员”关键词
+                                    if (rl.Contains("admin") || rl.Contains("sysdba") || rl.Contains("管理员"))
+                                    {
+                                        isAdmin = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Instance.LogInfo($"UpdateAdminTabsVisibility: 查询用户角色失败: {ex.Message}");
+                        // 在出现数据库错误时保留白名单判断结果（即不提升权限）
+                    }
+                }
 
                 if (MainTabControl == null)
                 {
@@ -444,7 +494,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private string DrawingConfigPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "GB_NewCadPlus_III",
+            "GB_NewCadPlus_IV",
             "drawing_config.json"
         );
 
@@ -758,6 +808,12 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                if (_databaseManager != null && _databaseManager.IsDatabaseAvailable)
+                {
+                    LogManager.Instance.LogInfo("EnsureDatabaseConnectedOrShowLoginAsync: 当前 DatabaseManager 已可用，直接复用现有连接。");
+                    return true;
+                }
+
                 // 读取当前界面配置（优先）
                 VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim();
                 if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
@@ -766,16 +822,21 @@ namespace GB_NewCadPlus_IV
                     VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim() ?? "127.0.0.1";
 
                 }
-                /// 端口
-                VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var p) ? p : 3306;
+                // 端口：达梦默认 5236，而不是 MySQL 的 3306
+                VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var p) ? p : 5236;
+
+                // 用户名与密码优先沿用登录成功后的全局值，避免退回到旧的 root/root MySQL 默认值
+                var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._userName) ? "SYSDBA" : VariableDictionary._userName.Trim();
+                var dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? "SYSDBA" : VariableDictionary._passWord;
+                var schemaName = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? "CAD_SW_LIBRARY" : VariableDictionary._dataBaseName.Trim();
 
 
                 // 快速 TCP 检测
                 bool tcpOk = await Task.Run(() => LoginWindow.TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._serverPort));
                 if (tcpOk)
                 {
-                    // 尝试创建 DatabaseManager（使用项目约定的默认参数）
-                    string conn = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Database=cad_sw_library;Uid=root;Pwd=root;";
+                    // 尝试创建 DatabaseManager（使用当前登录成功后的达梦参数）
+                    string conn = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Schema={schemaName};User Id={dbUser};Password={dbPassword};";
                     try
                     {
                         var db = new DatabaseManager(conn);
@@ -783,9 +844,11 @@ namespace GB_NewCadPlus_IV
                         {
                             _databaseManager = db;
                             _useDatabaseMode = true;
-                            LogManager.Instance.LogInfo($"直接连接数据库成功：{VariableDictionary._serverIP}:{VariableDictionary._serverPort}");
+                            LogManager.Instance.LogInfo($"直接连接数据库成功：{VariableDictionary._serverIP}:{VariableDictionary._serverPort}，schema={schemaName}，user={dbUser}");
                             return true;
                         }
+
+                        LogManager.Instance.LogInfo($"直接创建 DatabaseManager 失败：server={VariableDictionary._serverIP}, port={VariableDictionary._serverPort}, schema={schemaName}, user={dbUser}");
                     }
                     catch (Exception ex)
                     {
@@ -822,7 +885,10 @@ namespace GB_NewCadPlus_IV
                     LoadServerConfigFromLogin();
                     VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim() ?? VariableDictionary._serverIP;
                     VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var pp) ? pp : VariableDictionary._serverPort;
-                    string conn2 = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Database=cad_sw_library;Uid=root;Pwd=root;SslMode=None;";
+                    dbUser = string.IsNullOrWhiteSpace(VariableDictionary._userName) ? dbUser : VariableDictionary._userName.Trim();
+                    dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? dbPassword : VariableDictionary._passWord;
+                    schemaName = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? schemaName : VariableDictionary._dataBaseName.Trim();
+                    string conn2 = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Schema={schemaName};User Id={dbUser};Password={dbPassword};";
                     try
                     {
                         var db2 = new DatabaseManager(conn2);
@@ -830,7 +896,7 @@ namespace GB_NewCadPlus_IV
                         {
                             _databaseManager = db2;
                             _useDatabaseMode = true;
-                            LogManager.Instance.LogInfo("使用登录后配置创建 DatabaseManager 成功。");
+                            LogManager.Instance.LogInfo($"使用登录后配置创建 DatabaseManager 成功：server={VariableDictionary._serverIP}, port={VariableDictionary._serverPort}, schema={schemaName}, user={dbUser}");
                             return true;
                         }
                     }
@@ -997,7 +1063,7 @@ namespace GB_NewCadPlus_IV
                 // 首先尝试从资源加载默认图片
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
-                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_III;component/Resources/default_preview.png");
+                bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/default_preview.png");
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -1012,7 +1078,7 @@ namespace GB_NewCadPlus_IV
                 {
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
-                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_III;component/Resources/no_preview.png");
+                    bitmap.UriSource = new Uri("pack://application:,,,/GB_NewCadPlus_IV;component/Resources/no_preview.png");
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.EndInit();
                     bitmap.Freeze();
@@ -1301,23 +1367,23 @@ namespace GB_NewCadPlus_IV
         /// 在窗口关闭时清理缓存
         /// </summary>
         /// <param name="e"></param>
-        //protected void OnClosing(CancelEventArgs e)
-        //{
-        //    try
-        //    {
-        //        // 停止同步
-        //        //_serverSyncManager?.StopSync();
+        protected void OnClosing(CancelEventArgs e)
+        {
+            try
+            {
+                // 停止同步
+                //_serverSyncManager?.StopSync();
 
-        //        // 清理图片缓存
-        //        CleanupInvalidImageCache();
+                // 清理图片缓存
+                CleanupInvalidImageCache();
 
-        //        OnClosing(e);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"关闭窗口时清理缓存失败: {ex.Message}");
-        //    }
-        //}
+                OnClosing(e);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"关闭窗口时清理缓存失败: {ex.Message}");
+            }
+        }
 
         // 替换原来的 OnClosing 方法，避免无限递归。
         // 在宿主 Window 的 Closing/Unloaded 事件中调用 CleanupOnClosing(new CancelEventArgs())
@@ -1375,7 +1441,7 @@ namespace GB_NewCadPlus_IV
                 _lastSavedPipeTablePath = string.Empty;
 
                 // 管道表临时目录
-                var pipeTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", "生成管道表");
+                var pipeTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", "生成管道表");
                 if (Directory.Exists(pipeTempDir))
                 {
                     foreach (var f in Directory.GetFiles(pipeTempDir, "*.dwg", SearchOption.TopDirectoryOnly))
@@ -1385,7 +1451,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 计算表临时目录
-                var calcTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", "CalcTables");
+                var calcTempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", "CalcTables");
                 if (Directory.Exists(calcTempDir))
                 {
                     foreach (var f in Directory.GetFiles(calcTempDir, "*.dwg", SearchOption.TopDirectoryOnly))
@@ -1506,104 +1572,92 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 修改 DynamicButton_Click：在数据库模式下将文件缓存到本地并确保使用真实文件名
+        /// 处理动态按钮点击/选择的逻辑：高亮当前点击的动态按钮并恢复上一次被选中按钮的背景。
         /// </summary>
         private async void DynamicButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (sender is Button btn)
+                if (!(sender is Button btn)) return;
+
+                // 1. 处理按键选中高亮状态
+                if (sender is System.Windows.Controls.Button clickedBtn)
                 {
-                    if (sender is System.Windows.Controls.Button clickedBtn)
+                    // 恢复上一次选中按键的背景
+                    if (_lastSelectedDynamicButton != null && _lastSelectedDynamicButton != clickedBtn)
                     {
-                        if (_lastSelectedDynamicButton != null && _lastSelectedDynamicButton != clickedBtn)
-                        {
-                            if (_originalButtonBackgrounds.TryGetValue(_lastSelectedDynamicButton, out var prevBrush))
-                                _lastSelectedDynamicButton.Background = prevBrush;
-                            else
-                                _lastSelectedDynamicButton.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
-                        }
-
-                        if (!_originalButtonBackgrounds.ContainsKey(clickedBtn))
-                        {
-                            var current = clickedBtn.Background;
-                            _originalButtonBackgrounds[clickedBtn] = current ?? System.Windows.SystemColors.ControlBrush;
-                        }
-
-                        clickedBtn.Background = System.Windows.Media.Brushes.LightGoldenrodYellow;
-                        _lastSelectedDynamicButton = clickedBtn;
+                        if (_originalButtonBackgrounds.TryGetValue(_lastSelectedDynamicButton, out var prevBrush))
+                            _lastSelectedDynamicButton.Background = prevBrush;
+                        else
+                            _lastSelectedDynamicButton.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
                     }
 
-                    FileStorage fileStorage = null;
-                    LogManager.Instance.LogInfo($"单次点击了按钮: {btn.Content}");
-
-                    if (_useDatabaseMode && btn.Tag is ButtonTagCommandInfo tagInfo)
+                    // 保存当前按键的原始背景并在字典中备案
+                    if (!_originalButtonBackgrounds.ContainsKey(clickedBtn))
                     {
-                        fileStorage = tagInfo.fileStorage;
-                        LogManager.Instance.LogInfo($"点击了数据库图元按钮: {tagInfo.ButtonName}");
-
-                        // 关键修复：确保当前图元有可用本地缓存文件（会自动回源恢复）
-                        if (fileStorage != null)
-                        {
-                            var cachedPath = await EnsureLocalCachedFilePathAsync(fileStorage);
-                            if (string.IsNullOrWhiteSpace(cachedPath))
-                            {
-                                LogManager.Instance.LogWarning($"图元缓存失败，无法获得可用文件: {fileStorage.DisplayName ?? fileStorage.FileName}");
-                            }
-                        }
-
-                        _currentFileStorage = fileStorage;
-                        _selectedFileStorage = fileStorage;
-
-                        ShowFilePreview(fileStorage);
-                        DisplayFilePropertiesInDataGridAsync(fileStorage);
+                        var current = clickedBtn.Background;
+                        _originalButtonBackgrounds[clickedBtn] = current ?? System.Windows.SystemColors.ControlBrush;
                     }
-                    else if (!_useDatabaseMode && btn.Tag is string filePath)
+
+                    // 设置当前点击按键为高亮色（金黄色）
+                    clickedBtn.Background = System.Windows.Media.Brushes.LightGoldenrodYellow;
+                    _lastSelectedDynamicButton = clickedBtn;
+                }
+
+                // 2. 核心：解析 Tag 并获取图元对象副本（防止原始数据被意外修改）
+                FileStorage? fileStorage = ResolveFileStorageFromTag(btn.Tag);
+                if (fileStorage == null)
+                {
+                    LogManager.Instance.LogWarning("无法解析图元信息，操作中止");
+                    return;
+                }
+
+                LogManager.Instance.LogInfo($"[点击] 处理图元: {fileStorage.DisplayName}, 原始路径: {fileStorage.FilePath}");
+
+                // 3. 核心修复：预览必须基于原始服务器/数据库路径。
+                // 如果 fileStorage.FilePath 已经被改成了本地路径，我们需要通过 ID 重新获取一份干净的原始对象。
+                if (_useDatabaseMode)
+                {
+                    // 步骤 A: 解析出纯净的预览对象（不带本地缓存副作用）
+                    var previewTarget = fileStorage;
+                    if (fileStorage.Id > 0 && fileStorage.FilePath != null && fileStorage.FilePath.Contains("CadFiles"))
                     {
-                        LogManager.Instance.LogInfo($"点击了Resources图元按钮: {filePath}");
-
-                        string fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
-                        string buttonName = fileNameWithoutExt;
-                        if (fileNameWithoutExt.Contains("_"))
-                            buttonName = fileNameWithoutExt.Substring(fileNameWithoutExt.IndexOf("_") + 1);
-
-                        fileStorage = new FileStorage
-                        {
-                            FilePath = filePath,
-                            FileName = Path.GetFileNameWithoutExtension(filePath),
-                            DisplayName = Path.GetFileName(filePath)
-                        };
-                        _currentFileStorage = fileStorage;
-                        _selectedFileStorage = fileStorage;
-
-                        ShowPreviewImage(filePath, buttonName);
-                        ClearFilePropertiesInDataGrid();
-                        ExecuteDynamicButtonActionFromResources(buttonName, filePath);
+                        // 如果传入的路径已经是本地缓存路径，则从数据库重新获取原始路径以确保预览图能匹配
+                        previewTarget = await _databaseManager.GetFileByIdAsync(fileStorage.Id);
+                        if (previewTarget == null) previewTarget = fileStorage; // 回退方案
                     }
-                    else if (btn.Tag is FileStorage directFileStorage)
-                    {
-                        fileStorage = directFileStorage;
-                        LogManager.Instance.LogInfo($"点击了文件按钮: {fileStorage.DisplayName}");
 
+                    // 步骤 B: 显示预览。此时 previewTarget 持有的是数据库原始路径，GetPreviewImageAsync 会查找同目录下的 PNG。
+                    ShowFilePreview(previewTarget);
+
+                    // 步骤 C: 执行属性展示
+                    await DisplayFilePropertiesInDataGridAsync(previewTarget).ConfigureAwait(true);
+
+                    // 步骤 D: 在后台恢复/缓存本地文件。这一步会修改 fileStorage.FilePath，但不会影响已经完成的预览显示。
+                    string? cachedLocalPath = await EnsureLocalCachedFilePathAsync(fileStorage);
+
+                    if (!string.IsNullOrEmpty(cachedLocalPath))
+                    {
+                        // 将已缓存的对象同步到全局选中引用，供双击/拖拽使用
                         _currentFileStorage = fileStorage;
                         _selectedFileStorage = fileStorage;
-
-                        // 关键修复：直接对象也走统一缓存恢复逻辑
-                        await EnsureLocalCachedFilePathAsync(fileStorage);
-
-                        ShowFilePreview(fileStorage);
-                        _ = DisplayFilePropertiesInDataGridAsync(fileStorage);
                     }
                     else
                     {
-                        LogManager.Instance.LogWarning("按钮点击事件处理失败：无法识别的数据类型");
+                        LogManager.Instance.LogWarning($"图元本地缓存失败: {fileStorage.DisplayName}");
                     }
+                }
+                else
+                {
+                    // 资源模式：直接显示预览和属性
+                    ShowFilePreview(fileStorage);
+                    _currentFileStorage = fileStorage;
+                    _selectedFileStorage = fileStorage;
                 }
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogError($"处理按钮点击事件时出错: {ex.Message}");
-                System.Windows.MessageBox.Show($"处理按钮点击事件时出错: {ex.Message}");
+                LogManager.Instance.LogError($"DynamicButton_Click 异常: {ex.Message}");
             }
         }
 
@@ -1641,212 +1695,285 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 统一处理动态生成按钮的双击（使用 PreviewMouseLeftButtonDown 判断双击）
         /// 双击时仅显示详情（预览 + 属性），不直接执行插入命令
+        /// 建议：在双击/拖拽相关处理里也用 ResolveFileStorageFromTag 以保证行为一致。
+        /// 以下为示例替换实现（请用以替换原来的对应方法体）：
+        /// 双击：尝试获取 FileStorage，再进行插入或资源操作
         /// </summary>
         private async void DynamicButton_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             try
             {
-                if (sender is Button btn)
+                FileStorage? fileStorage = ResolveFileStorageFromTag((sender as Button)?.Tag);
+                if (fileStorage == null) return;
+
+                // 关键修正：重新同步一次绘图相关的全局变量，确保操作的文件是确保存在的本地缓存
+                string? validPath = await EnsureLocalCachedFilePathAsync(fileStorage);
+                if (string.IsNullOrEmpty(validPath))
                 {
-                    // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
-                    VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
-
-                    // 记录双击日志
-                    LogManager.Instance.LogInfo($"双击了按钮: {btn.Content}");
-
-                    // 数据库模式：ButtonTagCommandInfo 中带 fileStorage
-                    if (_useDatabaseMode && btn.Tag is ButtonTagCommandInfo tagInfo && tagInfo.fileStorage != null)
-                    {
-                        // 获取文件存储对象
-                        var fileStorage = tagInfo.fileStorage;
-                        LogManager.Instance.LogInfo($"双击了数据库图元按钮: {tagInfo.ButtonName}");
-                        // 在双击处理数据库图元时，准备参数并调用统一插入方法
-                        // 假设 fileStorage 包含 LocalPath、BlockName、LayerName、Scale 等属性
-                        VariableDictionary.entityRotateAngle = 0;
-                        //string localDwg = fileStorage.FilePath; // 确保存在，或先把数据库的 bytes 写入到此路径
-                        string? localDwg = await EnsureLocalCachedFilePathAsync(fileStorage);///关键修复：双击时也确保本地缓存可用，避免直接使用可能不存在的路径
-                        if (string.IsNullOrWhiteSpace(localDwg) || !File.Exists(localDwg))
-                        {
-                            LogManager.Instance.LogWarning("双击插入失败：未找到可用图元文件。");
-                            MessageBox.Show("未找到可用图元文件，请先检查图元存储路径或重新替换。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
-
-                        VariableDictionary.btnFileName = fileStorage.FileName ?? fileStorage.DisplayName ?? System.IO.Path.GetFileNameWithoutExtension(localDwg);
-                        VariableDictionary.btnFileName_blockName = fileStorage.BlockName; // 可选
-                        VariableDictionary.btnBlockLayer = fileStorage.LayerName;
-                        VariableDictionary.layerColorIndex = Convert.ToInt32(fileStorage.ColorIndex);
-                        VariableDictionary.layerName = fileStorage.LayerName;
-                        var isTianzheng = fileStorage.IsTianZheng; // 可选，视具体需求而定
-                        // 优先使用用户在TextBox_绘图比例中设置的比例值
-                        //VariableDictionary.wpfTextBoxScale = 0;
-                        if (VariableDictionary.wpfTextBoxScale <= 0) // 如果获取失败，使用原有逻辑
-                        {
-                            AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
-                            VariableDictionary.wpfTextBoxScale = VariableDictionary.blockScale;
-                        }
-                        // 新增：Drag期间禁止再次触发，避免重入崩溃
-                        if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
-                            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
-                        {
-                            LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次双击触发。");
-                            return;
-                        }
-
-
-                        // 调用统一插入方法（交互放置）
-                        var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-                        if (doc != null)
-                        {
-                            // 在 document lock 内调用 CAD API，保证线程安全和锁定语义
-                            using (doc.LockDocument())
-                            {
-                                // 统一走可重复命令入口，不再直接调用 CopyDwgAllFast
-                                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwg);
-                                //GB_NewCadPlus_III.FunctionalMethod.Command.CopyDwgAllFast(localDwg);
-                            }
-                        }
-                        else
-                        {
-                            LogManager.Instance.LogWarning("未找到活动文档，无法插入图块。");
-                        }
-                        var (ok, err) = await ExecuteInsertAndWaitResultAsync(localDwg);
-                        if (ok)
-                        {
-                            await CleanupLocalCadCacheAfterInsertAsync(localDwg);
-                        }
-                        else
-                        {
-                            LogManager.Instance.LogWarning($"双击插入失败，不清理缓存: {err}");
-                        }
-
-                    }
-                    // 资源模式或文件路径存储在 ButtonTagCommandInfo.FilePath
-                    else if (btn.Tag is ButtonTagCommandInfo tagWithPath && !string.IsNullOrEmpty(tagWithPath.FilePath))
-                    {
-                        string filePath = tagWithPath.FilePath;
-                        string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
-                        string buttonName = fileNameWithoutExt.Contains("_")
-                            ? fileNameWithoutExt.Substring(fileNameWithoutExt.IndexOf("_") + 1)
-                            : fileNameWithoutExt;
-
-                        LogManager.Instance.LogInfo($"双击了Resources图元按钮: {filePath}");
-                        ShowPreviewImage(filePath, buttonName);
-                        DisplayFileInfo(filePath);
-                        ClearFilePropertiesInDataGrid();// 资源模式下双击也显示属性，但属性来源于文件路径（如果需要更复杂的属性，可以考虑在 Tag 中存储一个专门的属性对象）
-                    }
-                    // 资源模式直接把路径存在 Tag 为 string
-                    else if (btn.Tag is string filePathString)
-                    {
-                        string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePathString);
-                        string buttonName = fileNameWithoutExt.Contains("_")
-                            ? fileNameWithoutExt.Substring(fileNameWithoutExt.IndexOf("_") + 1)
-                            : fileNameWithoutExt;
-
-                        LogManager.Instance.LogInfo($"双击了Resources图元按钮 (string tag): {filePathString}");
-                        ShowPreviewImage(filePathString, buttonName);
-                        DisplayFileInfo(filePathString);
-                        ClearFilePropertiesInDataGrid();
-                    }
-                    else
-                    {
-                        LogManager.Instance.LogWarning("双击事件：无法识别按钮的 Tag 类型");
-                    }
+                    LogManager.Instance.LogWarning("无法获取有效的本地图元文件路径，中止操作");
+                    return;
                 }
+
+                // 设置全局变量供后续 CAD 插入命令使用 (兼容旧逻辑)
+                VariableDictionary.btnFileName = fileStorage.FileName;
+                VariableDictionary._storagePath = validPath; // 确保使用缓存后的确切路径
+
+                // 执行插入 (考虑双数据库下的 ID 引用)
+                var (ok, err) = await ExecuteInsertAndWaitResultAsync(validPath);
+                if (!ok) LogManager.Instance.LogWarning($"插入失败: {err}");
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogError($"处理按钮双击时出错: {ex.Message}");
+                LogManager.Instance.LogError($"双击处理出错: {ex.Message}");
             }
         }
 
+        //private async void DynamicButton_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        //{
+        //    try
+        //    {
+        //        if (sender is Button btn)
+        //        {
+        //            // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
+        //            VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
+
+        //            // 记录双击日志
+        //            LogManager.Instance.LogInfo($"双击了按钮: {btn.Content}");
+
+        //            // 数据库模式：ButtonTagCommandInfo 中带 fileStorage
+        //            if (_useDatabaseMode && btn.Tag is ButtonTagCommandInfo tagInfo && tagInfo.fileStorage != null)
+        //            {
+        //                // 获取文件存储对象
+        //                var fileStorage = tagInfo.fileStorage;
+        //                LogManager.Instance.LogInfo($"双击了数据库图元按钮: {tagInfo.ButtonName}");
+        //                // 在双击处理数据库图元时，准备参数并调用统一插入方法
+        //                // 假设 fileStorage 包含 LocalPath、BlockName、LayerName、Scale 等属性
+        //                VariableDictionary.entityRotateAngle = 0;
+        //                //string localDwg = fileStorage.FilePath; // 确保存在，或先把数据库的 bytes 写入到此路径
+        //                string? localDwg = await EnsureLocalCachedFilePathAsync(fileStorage);///关键修复：双击时也确保本地缓存可用，避免直接使用可能不存在的路径
+        //                if (string.IsNullOrWhiteSpace(localDwg) || !File.Exists(localDwg))
+        //                {
+        //                    LogManager.Instance.LogWarning("双击插入失败：未找到可用图元文件。");
+        //                    MessageBox.Show("未找到可用图元文件，请先检查图元存储路径或重新替换。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+        //                    return;
+        //                }
+
+        //                VariableDictionary.btnFileName = fileStorage.FileName ?? fileStorage.DisplayName ?? System.IO.Path.GetFileNameWithoutExtension(localDwg);
+        //                VariableDictionary.btnFileName_blockName = fileStorage.BlockName; // 可选
+        //                VariableDictionary.btnBlockLayer = fileStorage.LayerName;
+        //                VariableDictionary.layerColorIndex = Convert.ToInt32(fileStorage.ColorIndex);
+        //                VariableDictionary.layerName = fileStorage.LayerName;
+        //                var isTianzheng = fileStorage.IsTianZheng; // 可选，视具体需求而定
+        //                // 优先使用用户在TextBox_绘图比例中设置的比例值
+        //                //VariableDictionary.wpfTextBoxScale = 0;
+        //                if (VariableDictionary.wpfTextBoxScale <= 0) // 如果获取失败，使用原有逻辑
+        //                {
+        //                    AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
+        //                    VariableDictionary.wpfTextBoxScale = VariableDictionary.blockScale;
+        //                }
+        //                // 新增：Drag期间禁止再次触发，避免重入崩溃
+        //                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+        //                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+        //                {
+        //                    LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次双击触发。");
+        //                    return;
+        //                }
+
+
+        //                // 调用统一插入方法（交互放置）
+        //                var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+        //                if (doc != null)
+        //                {
+        //                    // 在 document lock 内调用 CAD API，保证线程安全和锁定语义
+        //                    using (doc.LockDocument())
+        //                    {
+        //                        // 统一走可重复命令入口，不再直接调用 CopyDwgAllFast
+        //                        GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwg);
+        //                        //GB_NewCadPlus_IV.FunctionalMethod.Command.CopyDwgAllFast(localDwg);
+        //                    }
+        //                }
+        //                else
+        //                {
+        //                    LogManager.Instance.LogWarning("未找到活动文档，无法插入图块。");
+        //                }
+        //                var (ok, err) = await ExecuteInsertAndWaitResultAsync(localDwg);
+        //                if (ok)
+        //                {
+        //                    await CleanupLocalCadCacheAfterInsertAsync(localDwg);
+        //                }
+        //                else
+        //                {
+        //                    LogManager.Instance.LogWarning($"双击插入失败，不清理缓存: {err}");
+        //                }
+
+        //            }
+        //            // 资源模式或文件路径存储在 ButtonTagCommandInfo.FilePath
+        //            else if (btn.Tag is ButtonTagCommandInfo tagWithPath && !string.IsNullOrEmpty(tagWithPath.FilePath))
+        //            {
+        //                string filePath = tagWithPath.FilePath;
+        //                string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
+        //                string buttonName = fileNameWithoutExt.Contains("_")
+        //                    ? fileNameWithoutExt.Substring(fileNameWithoutExt.IndexOf("_") + 1)
+        //                    : fileNameWithoutExt;
+
+        //                LogManager.Instance.LogInfo($"双击了Resources图元按钮: {filePath}");
+        //                ShowPreviewImage(filePath, buttonName);
+        //                DisplayFileInfo(filePath);
+        //                ClearFilePropertiesInDataGrid();// 资源模式下双击也显示属性，但属性来源于文件路径（如果需要更复杂的属性，可以考虑在 Tag 中存储一个专门的属性对象）
+        //            }
+        //            // 资源模式直接把路径存在 Tag 为 string
+        //            else if (btn.Tag is string filePathString)
+        //            {
+        //                string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePathString);
+        //                string buttonName = fileNameWithoutExt.Contains("_")
+        //                    ? fileNameWithoutExt.Substring(fileNameWithoutExt.IndexOf("_") + 1)
+        //                    : fileNameWithoutExt;
+
+        //                LogManager.Instance.LogInfo($"双击了Resources图元按钮 (string tag): {filePathString}");
+        //                ShowPreviewImage(filePathString, buttonName);
+        //                DisplayFileInfo(filePathString);
+        //                ClearFilePropertiesInDataGrid();
+        //            }
+        //            else
+        //            {
+        //                LogManager.Instance.LogWarning("双击事件：无法识别按钮的 Tag 类型");
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogError($"处理按钮双击时出错: {ex.Message}");
+        //    }
+        //}
+
         /// <summary>
-        /// 鼠标移动：判定为拖拽并触发插入操作（交互式）
+        /// 拖拽：在开始拖拽/释放时统一使用 ResolveFileStorageFromTag，确保使用同一个本地缓存文件
         /// </summary>
         private async void DynamicButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            var btn = sender as Button;
-            if (btn == null) return;
-
-            // 未按下鼠标，或不是当前拖拽源，直接退出（悬停不触发）
-            if (!_isButtonMouseDown || _dragSourceButton != btn) return;
-
-            // 必须保持左键按住，避免普通移动误触发
-            if (e.LeftButton != MouseButtonState.Pressed)
-            {
-                _isButtonMouseDown = false;
-                _isButtonDragging = false;
-                _dragSourceButton = null;
-                return;
-            }
-
-            var currentPos = e.GetPosition(null); // 与按下时同坐标系
-            if (!_isButtonDragging)
-            {
-                if (Math.Abs(currentPos.X - _buttonDragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
-                    Math.Abs(currentPos.Y - _buttonDragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
-                {
-                    return; // 未超过拖拽阈值，不触发命令
-                }
-
-                _isButtonDragging = true;
-            }
-
             try
             {
-                // 新增：Drag期间禁止再次触发，避免命令重入导致崩溃
-                if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
-                    GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+                // 保留原有拖拽触发逻辑，仅在实际使用文件时解析 Tag
+                // 例如当拖拽启动并需要提供文件路径给下游时：
+                if (_isButtonMouseDown && !_isButtonDragging)
                 {
-                    LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次拖拽触发。");
-                    return;
-                }
-                // 以下保持你原有插入逻辑
-                var tagInfo = btn.Tag as ButtonTagCommandInfo;
-                string? tempPath = null;
-
-                if (tagInfo != null)
-                {
-                    if (!string.IsNullOrEmpty(tagInfo.FilePath) && File.Exists(tagInfo.FilePath))
+                    Vector diff = e.GetPosition(null) - _buttonDragStartPoint;
+                    if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                        Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
                     {
-                        tempPath = tagInfo.FilePath;
+                        _isButtonDragging = true;
+                        if (sender is Button btn)
+                        {
+                            FileStorage? fileStorage = ResolveFileStorageFromTag(btn.Tag);
+                            if (fileStorage != null)
+                            {
+                                var localPath = await EnsureLocalCachedFilePathAsync(fileStorage);
+                                if (!string.IsNullOrWhiteSpace(localPath))
+                                {
+                                    // 开始拖拽并附带本地文件路径（示例）
+                                    //DataObject data = new DataObject(DataFormats.FileDrop, new string[] { localPath });
+                                    //System.Windows.DragDrop.DoDragDrop(btn, data, DragDropEffects.Copy);
+                                    // 使用完全限定名以消除歧义，localPath 为本地文件路径
+                                    var data = new System.Windows.DataObject(System.Windows.DataFormats.FileDrop, new string[] { localPath }); // DataObject 使用 WPF 类型
+                                    System.Windows.DragDrop.DoDragDrop(btn, data, System.Windows.DragDropEffects.Copy); // DragDropEffects 使用 WPF 类型
+                                }
+                            }
+                        }
                     }
-                    else if (tagInfo.fileStorage != null && !string.IsNullOrEmpty(tagInfo.fileStorage.FilePath) && File.Exists(tagInfo.fileStorage.FilePath))
-                    {
-                        tempPath = tagInfo.fileStorage.FilePath;
-                    }
-                }
-
-                if (string.IsNullOrEmpty(tempPath))
-                    return;
-                // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
-                VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
-
-                // 快速重复执行所有图纸复制操作
-                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
-
-                var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);
-                if (ok)
-                {
-                    await CleanupLocalCadCacheAfterInsertAsync(tempPath);
-                }
-                else
-                {
-                    LogManager.Instance.LogWarning($"拖拽插入失败，不清理缓存: {err}");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"插入图元失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                // 一次拖拽只触发一次命令，避免移动过程中重复触发
-                _isButtonMouseDown = false;
-                _isButtonDragging = false;
-                _dragSourceButton = null;
+                LogManager.Instance.LogError($"拖拽处理出错: {ex.Message}");
             }
         }
+
+
+        //private async void DynamicButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        //{
+        //    var btn = sender as Button;
+        //    if (btn == null) return;
+
+        //    // 未按下鼠标，或不是当前拖拽源，直接退出（悬停不触发）
+        //    if (!_isButtonMouseDown || _dragSourceButton != btn) return;
+
+        //    // 必须保持左键按住，避免普通移动误触发
+        //    if (e.LeftButton != MouseButtonState.Pressed)
+        //    {
+        //        _isButtonMouseDown = false;
+        //        _isButtonDragging = false;
+        //        _dragSourceButton = null;
+        //        return;
+        //    }
+
+        //    var currentPos = e.GetPosition(null); // 与按下时同坐标系
+        //    if (!_isButtonDragging)
+        //    {
+        //        if (Math.Abs(currentPos.X - _buttonDragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+        //            Math.Abs(currentPos.Y - _buttonDragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+        //        {
+        //            return; // 未超过拖拽阈值，不触发命令
+        //        }
+
+        //        _isButtonDragging = true;
+        //    }
+
+        //    try
+        //    {
+        //        // 新增：Drag期间禁止再次触发，避免命令重入导致崩溃
+        //        if (GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastDragging ||
+        //            GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.IsCopyDwgAllFastBusy)
+        //        {
+        //            LogManager.Instance.LogWarning("当前图元正在跟随插入，忽略本次拖拽触发。");
+        //            return;
+        //        }
+        //        // 以下保持你原有插入逻辑
+        //        var tagInfo = btn.Tag as ButtonTagCommandInfo;
+        //        string? tempPath = null;
+
+        //        if (tagInfo != null)
+        //        {
+        //            if (!string.IsNullOrEmpty(tagInfo.FilePath) && File.Exists(tagInfo.FilePath))
+        //            {
+        //                tempPath = tagInfo.FilePath;
+        //            }
+        //            else if (tagInfo.fileStorage != null && !string.IsNullOrEmpty(tagInfo.fileStorage.FilePath) && File.Exists(tagInfo.fileStorage.FilePath))
+        //            {
+        //                tempPath = tagInfo.fileStorage.FilePath;
+        //            }
+        //        }
+
+        //        if (string.IsNullOrEmpty(tempPath))
+        //            return;
+        //        // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
+        //        VariableDictionary.wpfTextBoxScale = GetDrawingScaleFromTextBox();
+
+        //        // 快速重复执行所有图纸复制操作
+        //        GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+
+        //        var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);
+        //        if (ok)
+        //        {
+        //            await CleanupLocalCadCacheAfterInsertAsync(tempPath);
+        //        }
+        //        else
+        //        {
+        //            LogManager.Instance.LogWarning($"拖拽插入失败，不清理缓存: {err}");
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        MessageBox.Show($"插入图元失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        //    }
+        //    finally
+        //    {
+        //        // 一次拖拽只触发一次命令，避免移动过程中重复触发
+        //        _isButtonMouseDown = false;
+        //        _isButtonDragging = false;
+        //        _dragSourceButton = null;
+        //    }
+        //}
+
         /// <summary>
         /// 鼠标抬起：清理拖拽状态
         /// </summary>
@@ -3632,6 +3759,55 @@ namespace GB_NewCadPlus_IV
             catch (System.Exception)
             {
             }
+        }
+
+        #endregion
+
+        #region 统一解析按键Tag
+
+        // 新增：统一从按钮 Tag 解析出可用的 FileStorage（支持 FileStorage / string 路径 / ButtonTagCommandInfo）
+        // 使用中文注释以便理解
+        private FileStorage? ResolveFileStorageFromTag(object? tag)
+        {
+            // 1) 如果 Tag 直接就是 FileStorage，直接返回
+            if (tag is FileStorage fs) return fs;
+
+            // 2) 如果 Tag 是字符串，视为本地资源路径（Resources 场景）
+            if (tag is string path)
+            {
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    return new FileStorage
+                    {
+                        FilePath = path,
+                        FileName = System.IO.Path.GetFileNameWithoutExtension(path),
+                        DisplayName = System.IO.Path.GetFileName(path)
+                    };
+                }
+                return null;
+            }
+
+            // 3) 如果 Tag 是 ButtonTagCommandInfo，优先取其 fileStorage，否则用 FilePath 构造临时 FileStorage
+            if (tag is ButtonTagCommandInfo info)
+            {
+                // 如果是数据库模式，优先使用 fileStorage 实体
+                if (info.fileStorage != null) return info.fileStorage;
+
+                // 如果是资源模式或缺失实体但有路径，构造一个临时对象以保证预览能找到图
+                if (!string.IsNullOrWhiteSpace(info.FilePath))
+                {
+                    return new FileStorage
+                    {
+                        FilePath = info.FilePath,
+                        // 关键：如果预览图和 DWG 同名且在同目录，预览逻辑需要原始 FileName
+                        FileName = Path.GetFileNameWithoutExtension(info.FilePath),
+                        DisplayName = info.ButtonName ?? Path.GetFileName(info.FilePath)
+                    };
+                }
+            }
+
+            // 其它情况返回 null
+            return null;
         }
 
         #endregion
@@ -7062,10 +7238,17 @@ namespace GB_NewCadPlus_IV
                         _currentFileStorage.LayerName = propertyValue;
                         break;
                     case "颜色索引":
-                        _currentFileStorage.ColorIndex = Convert.ToInt32(propertyValue);
+                        if (int.TryParse(propertyValue, out int colorIdx))
+                            _currentFileStorage.ColorIndex = colorIdx;
                         break;
                     case "是否公开":
-                        _currentFileStorage.IsPublic = Convert.ToInt32(propertyValue);
+                        // IsPublic 在模型中为 int（0/1），接受中文表示或数值
+                        if (propertyValue == "是")
+                            _currentFileStorage.IsPublic = 1;
+                        else if (propertyValue == "否")
+                            _currentFileStorage.IsPublic = 0;
+                        else if (int.TryParse(propertyValue, out int isPub))
+                            _currentFileStorage.IsPublic = isPub;
                         break;
                     case "描述":
                         _currentFileStorage.Description = propertyValue;
@@ -7262,19 +7445,13 @@ namespace GB_NewCadPlus_IV
                     // 注意：Category 前缀与 AddObjectProperties 保持一致，便于 GetPropertyDisplayName 做映射
                     string eb = fileStorage.BlockName ?? string.Empty;
                     string ln = fileStorage.LayerName ?? string.Empty;
-                    string ci = fileStorage.ColorIndex.HasValue ? fileStorage.ColorIndex.Value.ToString() : (fileStorage.ColorIndex != null ? fileStorage.ColorIndex.ToString() : string.Empty);
 
-                    // 使用兼容读取器获取比例（兼容 Scale/scale 字段以及多种数值类型）
-                    string sc = string.Empty;
-                    try
-                    {
-                        double scaleVal = GetScaleFromFileStorage(fileStorage);
-                        sc = double.IsNaN(scaleVal) ? string.Empty : scaleVal.ToString("G");
-                    }
-                    catch
-                    {
-                        sc = string.Empty;
-                    }
+                    // 颜色索引：FileStorage.ColorIndex 定义为 int?，直接安全取值并转换为字符串
+                    string ci = fileStorage.ColorIndex.HasValue ? fileStorage.ColorIndex.Value.ToString() : string.Empty;
+
+                    // 比例：优先使用模型中的 Scale（double?），避免隐式从 decimal/double 的转换
+                    // 若模型无值，显示为空字符串
+                    string sc = fileStorage.Scale.HasValue ? fileStorage.Scale.Value.ToString("G") : string.Empty;
 
                     // 按顺序添加属性：文件名称、显示名称、块名、层名、颜色索引、比例
                     allProperties.Add(new KeyValuePair<string, string>("文件信息.FileName", fileName));
@@ -9147,7 +9324,7 @@ namespace GB_NewCadPlus_IV
             {
                 _layerInfo = new List<LayerInfo>();
                 _workingDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                                               "GB_NewCadPlus_III");
+                                               "GB_NewCadPlus_IV");
                 if (!Directory.Exists(_workingDirectory))
                     Directory.CreateDirectory(_workingDirectory);
             }
@@ -9806,7 +9983,7 @@ namespace GB_NewCadPlus_IV
 
         /// <summary>
         /// 将管道汇总表生成到一个临时 DWG 文件（ModelSpace，表放在原点）。
-        /// 文件名格式：{layerPart}_{yyyyMMdd_HHmmss}.dwg，保存在 %TEMP%\GB_NewCadPlus_III 下。ParseLengthValueFromAttribute
+        /// 文件名格式：{layerPart}_{yyyyMMdd_HHmmss}.dwg，保存在 %TEMP%\GB_NewCadPlus_IV 下。ParseLengthValueFromAttribute
         /// 生成后会把路径写入字段 `_lastSavedPipeTablePath` 并提示用户下一步操作。
         /// 列宽会根据表头与单元格内容自动计算（近似字符宽度）。
         /// </summary>
@@ -9830,7 +10007,7 @@ namespace GB_NewCadPlus_IV
                 catch { }
 
                 string buttonFolderName = "生成管道表";
-                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", buttonFolderName);
+                string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", buttonFolderName);
                 if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
                 string firstLayer = summaries.FirstOrDefault()?.Name ?? "PipeTable";
@@ -11506,18 +11683,7 @@ namespace GB_NewCadPlus_IV
         }
         #endregion
 
-
-        /// <summary>
-        /// 分类属性数据网格选择项改变时触发
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-
-        private void CategoryPropertiesDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-
-        }
-
+        
         #region 部门与人员管理相关代码
         /// <summary>
         /// 加载完成
@@ -11530,9 +11696,9 @@ namespace GB_NewCadPlus_IV
             try
             {
                 /// 从 login 配置优先读取服务器/端口（与之前主界面约定一致）
-                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_III", "login_config.json");
+                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
-                string port = "3306";
+                string port = "5236";
                 if (System.IO.File.Exists(cfgPath))
                 {
                     var json = System.IO.File.ReadAllText(cfgPath);//读取配置文件读取配置文件
@@ -11545,7 +11711,7 @@ namespace GB_NewCadPlus_IV
                     }
                 }
 
-                _svc = new MySqlAuthService(host, port);
+                _svc = new DMAuthService(host, port);
                 RefreshDepartmentsAsync();
             }
             catch (Exception ex)
@@ -11556,7 +11722,7 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 数据库服务
         /// </summary>
-        private MySqlAuthService _svc;
+        private DMAuthService _svc;
 
         /// <summary>
         /// 刷新部门
@@ -11901,9 +12067,9 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 读取 login_config.json 或使用默认值初始化 _svc
-                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_III", "login_config.json");
+                var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
-                string port = "3306";
+                string port = "5236";
 
                 if (File.Exists(cfgPath))
                 {
@@ -11924,8 +12090,8 @@ namespace GB_NewCadPlus_IV
                     }
                 }
 
-                _svc = new MySqlAuthService(host, port);
-                LogManager.Instance.LogInfo($"MySqlAuthService 已初始化: {host}:{port}");
+                _svc = new DMAuthService(host, port);
+                LogManager.Instance.LogInfo($"DMAuthService 已初始化: {host}:{port}");
                 return true;
             }
             catch (Exception ex)
@@ -13679,7 +13845,7 @@ namespace GB_NewCadPlus_IV
 
             // 3) 开发目录 Resources 作为种子（调试兜底）
             string devResourcePath = System.IO.Path.Combine(
-                @"C:\Users\ShiGu\source\repos\GB_NewCadPlus_III\Resources",
+                @"C:\Users\ShiGu\source\repos\GB_NewCadPlus_IV\Resources",
                 fileName);
 
             if (TrySeedCalcCsvToExternal(devResourcePath, externalPath, out string resolvedFromDev))
@@ -14408,6 +14574,32 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+        private void 转换CSV按钮_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var ofd = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "选择总表Excel",
+                    Filter = "Excel 文件 (*.xlsx)|*.xlsx",
+                    FileName = "_00_脱硫系统计算_总表.xlsx",
+                    InitialDirectory = @"D:\03-客户文件\沈阳铝镁院\模板"
+                };
+
+                if (ofd.ShowDialog() != true)
+                    return;
+                // 加载Excel并生成页面
+                LoadFromMasterExcelAndBuildUi(ofd.FileName, exportCsv: true);
+
+                MessageBox.Show("已按Excel动态生成页面并导出总CSV。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"按Excel转换失败: {ex.Message}");
+                MessageBox.Show($"转换失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         /// <summary>
         /// 尝试解析数值
         /// </summary>
@@ -14525,31 +14717,7 @@ namespace GB_NewCadPlus_IV
 
         #endregion
 
-        private void 转换CSV按钮_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var ofd = new Microsoft.Win32.OpenFileDialog
-                {
-                    Title = "选择总表Excel",
-                    Filter = "Excel 文件 (*.xlsx)|*.xlsx",
-                    FileName = "_00_脱硫系统计算_总表.xlsx",
-                    InitialDirectory = @"D:\03-客户文件\沈阳铝镁院\模板"
-                };
-
-                if (ofd.ShowDialog() != true)
-                    return;
-                // 加载Excel并生成页面
-                LoadFromMasterExcelAndBuildUi(ofd.FileName, exportCsv: true);
-
-                MessageBox.Show("已按Excel动态生成页面并导出总CSV。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogError($"按Excel转换失败: {ex.Message}");
-                MessageBox.Show($"转换失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+      
         #region 计算表插入到图纸空间中的相关代码
 
 
@@ -14625,7 +14793,7 @@ namespace GB_NewCadPlus_IV
             // ================== 第二步：准备临时文件路径 ==================
 
             // 定义临时文件夹路径：系统临时目录 + 插件名称 + CalcTables
-            string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_III", "CalcTables");
+            string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV", "CalcTables");
             // 如果目录不存在，则创建
             if (!Directory.Exists(tempDir))
                 Directory.CreateDirectory(tempDir);

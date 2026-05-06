@@ -11,9 +11,9 @@ using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
-// 兼容 DatabaseManager 内部嵌套类型：给类型起别名，避免全文件逐个替换
-using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
+// 兼容旧代码：现在使用顶级模型类型而不是 DatabaseManager 内嵌类型
+using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.FileStorage;
+using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.FileAttribute;
 
 namespace GB_NewCadPlus_IV.Helpers
 {

@@ -8,12 +8,12 @@ using static GB_NewCadPlus_IV.WpfMainWindow;
 using DataTable = System.Data.DataTable;
 using MessageBox = System.Windows.MessageBox;
 using TextBox = System.Windows.Controls.TextBox;
-using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileStorage;
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAttribute;
-using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadCategory;
-using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.CadSubcategory;
-using FileTag = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileTag; // 文件标签别名
-using FileAccessLog = GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager.FileAccessLog; // 文件访问日志别名
+using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.FileStorage; // 文件存储别名
+using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.FileAttribute; // 文件属性别名
+using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.CadCategory; // 分类别名
+using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.CadSubcategory; // 子分类别名
+using FileTag = GB_NewCadPlus_IV.FunctionalMethod.FileTag; // 文件标签别名
+using FileAccessLog = GB_NewCadPlus_IV.FunctionalMethod.FileAccessLog; // 文件访问日志别名
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
 {
@@ -870,14 +870,14 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         var tag = new FileTag
                         {
                             FileId = fileId,
-                            TagName = property.PropertyValue1,
+                            Tag = property.PropertyValue1,
                             CreatedAt = DateTime.Now
                         };
-                        // 这里需要在DatabaseManager中添加添加标签的方法
+                        // 调用 DatabaseManager 的 AddFileTagAsync，传入顶级模型 FileTag
                         var addFileTagBool = await _databaseManager.AddFileTagAsync(tag);
                         if (addFileTagBool)
                         {
-                            LogManager.Instance.LogInfo($"添加标签 {tag.TagName} 成功");
+                            LogManager.Instance.LogInfo($"添加标签 {tag.Tag} 成功");
                         }
 
                     }
@@ -888,13 +888,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         var tag = new FileTag
                         {
                             FileId = fileId,
-                            TagName = property.PropertyValue2,
+                            Tag = property.PropertyValue2,
                             CreatedAt = DateTime.Now
                         };
                         var addFileTagBool = await _databaseManager.AddFileTagAsync(tag);
                         if (addFileTagBool)
                         {
-                            LogManager.Instance.LogInfo($"添加标签 {tag.TagName} 成功");
+                            LogManager.Instance.LogInfo($"添加标签 {tag.Tag} 成功");
                         }
                     }
                 }

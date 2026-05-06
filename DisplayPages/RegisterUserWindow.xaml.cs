@@ -1,5 +1,6 @@
 using Dapper;
 using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -54,8 +55,10 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 否则从服务读取部门
-                var svc = new MySqlAuthService(_host, _port.ToString());
-                svc.EnsureDepartmentsTableExists();
+                var svc = new DMAuthService(_host, _port.ToString(),
+                    string.IsNullOrWhiteSpace(VariableDictionary._userName) ? "SYSDBA" : VariableDictionary._userName,
+                    string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? "SYSDBA" : VariableDictionary._passWord);
+                svc.EnsureAllTablesExist();
                 // 先尝试同步分类到部门（幂等）
                 try { svc.SyncDepartmentsFromCadCategories(); } catch { /* 忽略同步异常 */ }
 
@@ -90,10 +93,6 @@ namespace GB_NewCadPlus_IV
             var username = TxtUsername.Text?.Trim();
             var pwd = PwdPassword.Password ?? "";
             var confirm = PwdConfirm.Password ?? "";
-            var displayName = TxtDisplayName.Text?.Trim();
-            var gender = (CmbGender.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "Other";
-            var phone = TxtPhone.Text?.Trim();
-            var email = TxtEmail.Text?.Trim();
 
             if (string.IsNullOrWhiteSpace(username))
             {
@@ -112,59 +111,32 @@ namespace GB_NewCadPlus_IV
             }
 
             int deptId = 0;
-            string deptName = "未分配";
             try
             {
-                if (CmbDept.SelectedItem != null)// 部门
+                if (CmbDept.SelectedItem != null)
                 {
-                    var propId = CmbDept.SelectedItem.GetType().GetProperty("Id");// 部门ID
-                    var propName = CmbDept.SelectedItem.GetType().GetProperty("Name");// 部门名称
-                    if (propId != null) deptId = Convert.ToInt32(propId.GetValue(CmbDept.SelectedItem));// 部门ID
-                    if (propName != null) deptName = Convert.ToString(propName.GetValue(CmbDept.SelectedItem));// 部门名称
+                    var propId = CmbDept.SelectedItem.GetType().GetProperty("Id");
+                    if (propId != null) deptId = Convert.ToInt32(propId.GetValue(CmbDept.SelectedItem));
                 }
             }
             catch { }
+
             // 注册
             BtnRegister.IsEnabled = false;
             TxtStatus.Text = "正在注册...";
 
-            var svc = new MySqlAuthService(_host, _port.ToString());
-            svc.EnsureUserTableExists();// 创建用户表
-            svc.EnsureDepartmentsTableExists();// 创建部门表
-            try { svc.SyncDepartmentsFromCadCategories(); } catch { /* 忽略 */ }
-
-            // 先检查用户名是否存在
-            if (svc.UserExists(username))
-            {
-                BtnRegister.IsEnabled = true;
-                TxtStatus.Text = "用户名已存在，请更换或直接登录。";
-                return;
-            }
-            /*string username, string password, int departmentId = 0, string departmentName = "",
-             string displayname = null, string gender = null, string email = null, string phone = null, string role = null, string createdBy = null*/
+            var svc = new DMAuthService(_host, _port.ToString(),
+                string.IsNullOrWhiteSpace(VariableDictionary._userName) ? "SYSDBA" : VariableDictionary._userName,
+                string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? "SYSDBA" : VariableDictionary._passWord);
+            svc.EnsureAllTablesExist();
+            try { svc.SyncDepartmentsFromCadCategories(); } catch { }
 
             await Task.Run(() =>
             {
                 try
                 {
-                    var created = svc.RegisterUser(username, pwd, departmentId: deptId, departmentName: deptName,
-                                                   displayname: displayName, gender: gender, email: email, phone: phone, role: null, createdBy: null);
-
-                    if (created)
-                    {
-                        // 分配部门（保证用户表 department_id 被设置）
-                        try
-                        {
-                            if (deptId > 0)
-                            {
-                                svc.AssignUserToDepartmentByUsername(username, deptId);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            LogManager.Instance.LogInfo($"AssignUserToDepartmentByUsername 失败: {ex.Message}");
-                        }
-                    }
+                    // DMAuthService 当前签名：RegisterUser(string username, string password, int departmentId = 0, string departmentName = "")
+                    var created = svc.RegisterUser(username, pwd, departmentId: deptId, departmentName: string.Empty);
 
                     Dispatcher.Invoke(() =>
                     {

@@ -24,6 +24,38 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             _server = string.IsNullOrEmpty(server) ? "127.0.0.1" : server;
             _port = string.IsNullOrEmpty(port) ? "3306" : port;
         }
+        /// <summary>
+        /// 确保所有需要的表存在（兼容 DMAuthService.EnsureAllTablesExist 调用习惯）
+        /// 依次保证分类、部门和用户相关表存在，以便初始化阶段复用同一入口。
+        /// </summary>
+        public void EnsureAllTablesExist()
+        {
+            // 依次创建或补充必要表和字段
+            EnsureCategoriesTableExists();
+            EnsureDepartmentsTableExists();
+            EnsureUserTableExists();
+            // 其他表如 department_users 已在 EnsureDepartmentsTableExists 内处理
+        }
+
+        /// <summary>
+        /// 可选：带用户名和密码的构造器，允许使用 UI 提供的凭据（例如 sa/sa）进行连接和表初始化
+        /// </summary>
+        public MySqlAuthService(string server, string port, string dbUser, string dbPassword)
+        {
+            _server = string.IsNullOrEmpty(server) ? "127.0.0.1" : server;
+            _port = string.IsNullOrEmpty(port) ? "3306" : port;
+            _dbUser = string.IsNullOrWhiteSpace(dbUser) ? _dbUser : dbUser;
+            _dbPassword = string.IsNullOrWhiteSpace(dbPassword) ? _dbPassword : dbPassword;
+        }
+
+        // 使用适配器创建 MySqlConnection 的工厂方法，避免在此文件直接 new MySqlConnection
+        private MySqlConnection CreateMySqlConnection()
+        {
+            var adapter = new MySqlAdapter(ConnString());
+            var conn = adapter.CreateConnection();
+            // adapter.CreateConnection 返回 IDbConnection，但实际为 MySqlConnection
+            return (MySqlConnection)conn;
+        }
 
         private string ConnString()
         {
@@ -36,7 +68,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public void EnsureCategoriesTableExists()
         {
-            using (var conn = new MySqlConnection(ConnString()))
+            using (var conn = CreateMySqlConnection())
             {
                 conn.Open();
                 var cmd = conn.CreateCommand();
@@ -57,7 +89,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public void EnsureDepartmentsTableExists()
         {
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
 
             // 创建 departments 表（若不存在）
@@ -339,7 +371,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
-                using var conn = new MySqlConnection(ConnString());
+                using var conn = CreateMySqlConnection();
                 conn.Open();
 
                 var create = conn.CreateCommand();
@@ -382,7 +414,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             if (string.IsNullOrWhiteSpace(username)) return false;
             try
             {
-                using var conn = new MySqlConnection(ConnString());
+                using var conn = CreateMySqlConnection();
                 conn.Open();
                 var q = conn.CreateCommand();
                 q.CommandText = "SELECT COUNT(1) FROM users WHERE username = @u";
@@ -523,7 +555,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             var salt = GenerateSalt();
             var hash = ComputeHash(password, salt);
 
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
             using var tx = conn.BeginTransaction();
             try
@@ -624,7 +656,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns></returns>
         public int AddDepartment(string name, string displayName = null, string description = null, int? cadCategoryId = null, int sortOrder = 0)
         {
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
             using var tx = conn.BeginTransaction();
             try
@@ -657,7 +689,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public bool AssignUserToDepartmentByUsername(string username, int departmentId)
         {
             var deptName = GetDepartmentNameByDeptTableId(departmentId);
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
             using var tx = conn.BeginTransaction();
             try
@@ -726,7 +758,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns></returns>
         public bool UpdateDepartment(int id, string name, string? displayName = null, string? description = null, int sortOrder = 0, int? managerUserId = null, bool? isActive = null)
         {
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
             using var tx = conn.BeginTransaction();
             try
@@ -831,7 +863,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns></returns>
         private string GetDepartmentNameByDeptTableId(int departmentTableId)
         {
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
             var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT name FROM departments WHERE id=@id LIMIT 1;";
@@ -850,7 +882,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public List<DepartmentModel> GetDepartmentsWithCounts()
         {
             var list = new List<DepartmentModel>();
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
             var cmd = conn.CreateCommand();
             cmd.CommandText = @"
@@ -884,7 +916,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public List<UserModel> GetUsersByDepartmentId(int departmentId)
         {
             var list = new List<UserModel>();
-            using var conn = new MySqlConnection(ConnString());
+            using var conn = CreateMySqlConnection();
             conn.Open();
             var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT id, username, gender, email, phone, role, is_active FROM users WHERE department_id=@d;";

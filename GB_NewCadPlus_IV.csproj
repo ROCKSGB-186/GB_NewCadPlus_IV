@@ -1,4 +1,3 @@
-﻿ 
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 
 	<PropertyGroup>
@@ -67,11 +66,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Costura.Fody" Version="6.0.0">
+		<PackageReference Include="Costura.Fody" Version="6.1.0">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Dapper.Database" Version="6.0.0.23" />
+		<PackageReference Include="DM.DmProvider" Version="8.3.1.47463" />
 		<PackageReference Include="IFox.CAD.ACAD" Version="0.9.9.1" />
 		<PackageReference Include="MySql.Data" Version="9.7.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
@@ -81,6 +81,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Reference Include="DM.DmProvider">
+		  <HintPath>D:\99-Win Soft\DmProvider\net45\DM.DmProvider.dll</HintPath>
+		  <Private></Private>
+		  <SpecificVersion></SpecificVersion>
+		</Reference>
 		<Reference Include="Microsoft.CSharp" />
 		<Reference Include="Microsoft.VisualBasic" />
 		<Reference Include="System.Web" />
