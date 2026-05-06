@@ -79,8 +79,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     {
                         _adapter.AddParameter(cmd, e.Key.ToString(), e.Value ?? DBNull.Value);
                     }
-                }
-                else
+                }else
                 {
                     var props = param.GetType().GetProperties();
                     foreach (var p in props)
@@ -90,7 +89,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     }
                 }
             }
-
             var res = cmd.ExecuteScalar();
             if (res == null || res == DBNull.Value) return default;
             return (T)Convert.ChangeType(res, typeof(T));
@@ -1607,6 +1605,229 @@ ON UPDATE CASCADE;");
             {
                 LogManager.Instance.LogInfo($"获取子分类时出错: {ex.Message}");
                 return new List<CadSubcategory>();
+            }
+        }
+
+        /// <summary>
+        /// 获取同步清单所需的全部文件记录。
+        /// </summary>
+        public async Task<List<FileStorage>> GetAllFileStorageAsync()
+        {
+            const string sql = @"
+                               SELECT 
+                                    id AS Id,
+                                    category_id AS CategoryId,
+                                    file_attribute_id AS FileAttributeId,
+                                    file_name AS FileName,
+                                    file_stored_name AS FileStoredName,
+                                    display_name AS DisplayName,
+                                    file_type AS FileType,
+                                    file_hash AS FileHash,
+                                    block_name AS BlockName,
+                                    layer_name AS LayerName,
+                                    color_index AS ColorIndex,
+                                    scale AS Scale,
+                                    file_path AS FilePath,
+                                    preview_image_name AS PreviewImageName,
+                                    preview_image_path AS PreviewImagePath,
+                                    file_size AS FileSize,
+                                    is_preview AS IsPreview,
+                                    version AS Version,
+                                    description AS Description,
+                                    is_active AS IsActive,
+                                    category_type AS CategoryType,
+                                    title AS Title,
+                                    keywords AS Keywords,
+                                    is_public AS IsPublic,
+                                    updated_by AS UpdatedBy,
+                                    last_accessed_at AS LastAccessedAt,
+                                    created_at AS CreatedAt,
+                                    updated_at AS UpdatedAt
+                               FROM cad_file_storage
+                               ORDER BY updated_at DESC, id DESC";
+
+            try
+            {
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = _adapter.CreateConnection();
+                    conn.Open();
+                    var rows = await conn.QueryAsync<FileStorage>(sql).ConfigureAwait(false);
+                    return rows.AsList();
+                }
+
+                using var dconn = GetConnection();
+                dconn.Open();
+                using var cmd = dconn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+
+                using var reader = cmd.ExecuteReader();
+                var list = new List<FileStorage>();
+                while (reader.Read())
+                {
+                    var file = new FileStorage();
+                    int ord;
+                    ord = reader.GetOrdinal("Id"); file.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("CategoryId"); file.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("FileAttributeId"); file.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileName"); file.FileName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileStoredName"); file.FileStoredName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("DisplayName"); file.DisplayName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileType"); file.FileType = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileHash"); file.FileHash = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("BlockName"); file.BlockName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("LayerName"); file.LayerName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("ColorIndex"); file.ColorIndex = reader.IsDBNull(ord) ? (int?)null : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Scale"); file.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                    ord = reader.GetOrdinal("FilePath"); file.FilePath = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("PreviewImageName"); file.PreviewImageName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("PreviewImagePath"); file.PreviewImagePath = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("FileSize"); file.FileSize = reader.IsDBNull(ord) ? (long?)null : reader.GetInt64(ord);
+                    ord = reader.GetOrdinal("IsPreview"); file.IsPreview = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Version"); file.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("Description"); file.Description = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("IsActive"); file.IsActive = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("CategoryType"); file.CategoryType = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("Title"); file.Title = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("Keywords"); file.Keywords = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("IsPublic"); file.IsPublic = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                    ord = reader.GetOrdinal("UpdatedBy"); file.UpdatedBy = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                    ord = reader.GetOrdinal("LastAccessedAt"); file.LastAccessedAt = reader.IsDBNull(ord) ? (DateTime?)null : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("CreatedAt"); file.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    ord = reader.GetOrdinal("UpdatedAt"); file.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                    list.Add(file);
+                }
+
+                return list;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAllFileStorageAsync 出错: {ex.Message}");
+                return new List<FileStorage>();
+            }
+        }
+
+        /// <summary>
+        /// 获取服务器端客户端版本。
+        /// </summary>
+        public async Task<string> GetServerClientVersionAsync()
+        {
+            const string sql = "SELECT config_value FROM system_config WHERE config_key = @ConfigKey LIMIT 1";
+
+            try
+            {
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = _adapter.CreateConnection();
+                    conn.Open();
+                    var value = await conn.QuerySingleOrDefaultAsync<string>(sql, new { ConfigKey = "ClientVersion" }).ConfigureAwait(false);
+                    return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+                }
+
+                using var dconn = GetConnection();
+                dconn.Open();
+                using var cmd = dconn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "ConfigKey", "ClientVersion");
+                var result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? string.Empty : Convert.ToString(result)?.Trim() ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetServerClientVersionAsync 出错: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// 读取系统配置。
+        /// </summary>
+        public async Task<string> GetSystemConfigValueAsync(string configKey)
+        {
+            if (string.IsNullOrWhiteSpace(configKey))
+            {
+                return string.Empty;
+            }
+
+            const string sql = "SELECT config_value FROM system_config WHERE config_key = @ConfigKey LIMIT 1";
+
+            try
+            {
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = _adapter.CreateConnection();
+                    conn.Open();
+                    var value = await conn.QuerySingleOrDefaultAsync<string>(sql, new { ConfigKey = configKey.Trim() }).ConfigureAwait(false);
+                    return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+                }
+
+                using var dconn = GetConnection();
+                dconn.Open();
+                using var cmd = dconn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddDmParam(cmd, "ConfigKey", configKey.Trim());
+                var result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? string.Empty : Convert.ToString(result)?.Trim() ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetSystemConfigValueAsync 出错: key={configKey}, {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// 读取系统配置并允许调用方指定是否修剪结果。
+        /// </summary>
+        public async Task<string> GetSystemConfigValueAsync(string configKey, bool trimValue)
+        {
+            var value = await GetSystemConfigValueAsync(configKey).ConfigureAwait(false);
+            return trimValue ? value.Trim() : value;
+        }
+
+        /// <summary>
+        /// 保存系统配置。
+        /// </summary>
+        public async Task<int> SetSystemConfigValueAsync(string configKey, string configValue)
+        {
+            if (string.IsNullOrWhiteSpace(configKey))
+            {
+                return 0;
+            }
+
+            const string mysqlSql = @"
+INSERT INTO system_config (config_key, config_value)
+VALUES (@ConfigKey, @ConfigValue)
+ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)";
+
+            const string dmSql = @"
+MERGE INTO system_config t
+USING (SELECT :ConfigKey AS config_key, :ConfigValue AS config_value FROM DUAL) s
+ON (t.config_key = s.config_key)
+WHEN MATCHED THEN UPDATE SET t.config_value = s.config_value
+WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.config_value)";
+
+            try
+            {
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = _adapter.CreateConnection();
+                    conn.Open();
+                    return await conn.ExecuteAsync(mysqlSql, new { ConfigKey = configKey.Trim(), ConfigValue = configValue ?? string.Empty }).ConfigureAwait(false);
+                }
+
+                using var dconn = GetConnection();
+                dconn.Open();
+                using var cmd = dconn.CreateCommand();
+                cmd.CommandText = _adapter.NormalizeSql(dmSql);
+                AddDmParam(cmd, "ConfigKey", configKey.Trim());
+                AddDmParam(cmd, "ConfigValue", configValue ?? string.Empty);
+                return cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"SetSystemConfigValueAsync 出错: key={configKey}, {ex.Message}");
+                return 0;
             }
         }
 

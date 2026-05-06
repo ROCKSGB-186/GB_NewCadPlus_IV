@@ -38,6 +38,42 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public int? IsTianZheng { get; set; }
     }
 
+    public class SyncManifest
+    {
+        public string StorageRoot { get; set; } = string.Empty;
+        public string SourceRoot { get; set; } = string.Empty;
+        public string ServerClientVersion { get; set; } = string.Empty;
+        public DateTime GeneratedAt { get; set; }
+        public List<SyncManifestItem> Items { get; set; } = new List<SyncManifestItem>();
+    }
+
+    public class SyncManifestItem
+    {
+        public int FileId { get; set; }
+        public string? FileName { get; set; }
+        public string? FileStoredName { get; set; }
+        public string? PreviewImageName { get; set; }
+        public string? FilePath { get; set; }
+        public string? PreviewImagePath { get; set; }
+        public string? FileHash { get; set; }
+        public string? PreviewImageHash { get; set; }
+        public int Version { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string? LocalFileHash { get; set; }
+        public string? LocalPreviewHash { get; set; }
+        public string? LocalFilePath { get; set; }
+        public string? LocalPreviewPath { get; set; }
+        public bool ServerFileExists { get; set; }
+        public bool ServerPreviewExists { get; set; }
+        public bool LocalFileExists { get; set; }
+        public bool LocalPreviewExists { get; set; }
+        public bool FileHashDifferent { get; set; }
+        public bool PreviewHashDifferent { get; set; }
+        public string? DifferenceSummary { get; set; }
+        public bool NeedsFileSync { get; set; }
+        public bool NeedsPreviewSync { get; set; }
+    }
+
     public class FileAttribute
     {
         // 使用 long 以兼容数据库中 BIGINT 类型

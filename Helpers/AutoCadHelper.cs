@@ -810,9 +810,9 @@ namespace GB_NewCadPlus_IV.Helpers
                         if (inst.Dispatcher.CheckAccess())
                         {
                             // 读取TextBox文本
-                            textFromUi = inst.TextBox_绘图比例?.Text ?? string.Empty;
+                            textFromUi = inst.TextBox绘图比例?.Text ?? string.Empty;
                             // 读取Tag作为默认比例兜底
-                            tagFromUi = inst.TextBox_绘图比例?.Tag?.ToString() ?? string.Empty;
+                            tagFromUi = inst.TextBox绘图比例?.Tag?.ToString() ?? string.Empty;
                         }
                         else
                         {
@@ -820,9 +820,9 @@ namespace GB_NewCadPlus_IV.Helpers
                             inst.Dispatcher.Invoke(() =>
                             {
                                 // 读取Text
-                                textFromUi = inst.TextBox_绘图比例?.Text ?? string.Empty;
+                                textFromUi = inst.TextBox绘图比例?.Text ?? string.Empty;
                                 // 读取Tag
-                                tagFromUi = inst.TextBox_绘图比例?.Tag?.ToString() ?? string.Empty;
+                                tagFromUi = inst.TextBox绘图比例?.Tag?.ToString() ?? string.Empty;
                             });
                         }
                     }

@@ -43,6 +43,11 @@ namespace GB_NewCadPlus_IV.Helpers
         public string? PreviewImagePath { get; set; }
 
         /// <summary>
+        /// 预览图文件名
+        /// </summary>
+        public string? PreviewImageName { get; set; }
+
+        /// <summary>
         /// JSON属性字典（新上传入口使用）
         /// </summary>
         public Dictionary<string, string> AttributesJson { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -271,6 +276,8 @@ namespace GB_NewCadPlus_IV.Helpers
 
                     // 准备预览图输出路径
                     string previewPath = PreparePreviewPath();
+                    dto.PreviewImagePath = previewPath;
+                    dto.PreviewImageName = Path.GetFileName(previewPath);
 
                     try
                     {
@@ -309,6 +316,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             if (captured)
                             {
                                 dto.PreviewImagePath = previewPath;
+                                dto.PreviewImageName = Path.GetFileName(previewPath);
                                 fs.PreviewImagePath = previewPath;
                                 fs.PreviewImageName = Path.GetFileName(previewPath);
                                 LogManager.Instance.LogInfo($"生成按实体包围盒的预览图: {previewPath}");
@@ -327,6 +335,7 @@ namespace GB_NewCadPlus_IV.Helpers
                                 if (TryCaptureByTemporaryInsertion(doc, ed, db, entity, worldExt, previewPath))
                                 {
                                     dto.PreviewImagePath = previewPath;
+                                    dto.PreviewImageName = Path.GetFileName(previewPath);
                                     fs.PreviewImagePath = previewPath;
                                     fs.PreviewImageName = Path.GetFileName(previewPath);
                                     captured = true;
@@ -375,6 +384,7 @@ namespace GB_NewCadPlus_IV.Helpers
                                 {
                                     previewBmp.Save(previewPath, System.Drawing.Imaging.ImageFormat.Png);
                                     dto.PreviewImagePath = previewPath;
+                                    dto.PreviewImageName = Path.GetFileName(previewPath);
                                     fs.PreviewImagePath = previewPath;
                                     fs.PreviewImageName = Path.GetFileName(previewPath);
                                     LogManager.Instance.LogInfo($"无包围盒或其它回退失败，已生成全图预览: {previewPath}");

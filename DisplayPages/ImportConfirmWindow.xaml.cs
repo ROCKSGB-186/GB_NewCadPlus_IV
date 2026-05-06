@@ -77,40 +77,31 @@ namespace GB_NewCadPlus_IV.Views
         {
             try
             {
-                // 优先使用 DTO 顶层预览路径，如果没有则回退到 FileStorage 中的预览路径
-                string previewPath = _dto?.PreviewImagePath;
-
-                // 如果 DTO 顶层路径为空，则尝试读取 FileStorage 中的预览路径
-                if (string.IsNullOrWhiteSpace(previewPath))
-                {
-                    previewPath = _dto?.FileStorage?.PreviewImagePath;
-                }
+                // 统一走候选路径解析，避免只依赖单一字段导致预览不显示
+                string previewPath = ResolvePreviewImagePath();
 
                 // 如果最终路径为空或文件不存在，则清空图片并记录日志
-                if (string.IsNullOrWhiteSpace(previewPath) || !System.IO.File.Exists(previewPath))
+                if (string.IsNullOrWhiteSpace(previewPath))
                 {
                     PreviewImage.Source = null;
-                    LogManager.Instance.LogWarning($"预览图未找到。DTO路径: {_dto?.PreviewImagePath}，FileStorage路径: {_dto?.FileStorage?.PreviewImagePath}");
+                    LogManager.Instance.LogWarning($"预览图未找到。DTO路径: {_dto?.PreviewImagePath}，FileStorage路径: {_dto?.FileStorage?.PreviewImagePath}，File路径: {_dto?.FileStorage?.FilePath}");
                     return;
                 }
 
-                // 读取文件字节到内存，避免文件锁问题
-                byte[] bytes = System.IO.File.ReadAllBytes(previewPath);
-
-                // 如果文件为空，则不显示
-                if (bytes == null || bytes.Length == 0)
+                if (!System.IO.File.Exists(previewPath))
                 {
                     PreviewImage.Source = null;
-                    LogManager.Instance.LogWarning($"预览图文件为空: {previewPath}");
+                    LogManager.Instance.LogWarning($"预览图文件不存在: {previewPath}");
                     return;
                 }
 
-                using (var ms = new MemoryStream(bytes))
+                // 使用文件流只读打开并允许共享读取，避免图片文件被占用时无法显示
+                using (var fs = new FileStream(previewPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.StreamSource = ms;
+                    bitmap.StreamSource = fs;
                     bitmap.EndInit();
                     bitmap.Freeze();
                     PreviewImage.Source = bitmap;
@@ -128,6 +119,60 @@ namespace GB_NewCadPlus_IV.Views
                 LogManager.Instance.LogError($"加载预览图失败: {ex.Message}");
                 PreviewImage.Source = null;
             }
+        }
+
+        /// <summary>
+        /// 解析预览图路径，按 DTO 顶层字段、FileStorage 字段、文件同目录命名顺序兜底。
+        /// </summary>
+        private string ResolvePreviewImagePath()
+        {
+            string[] candidates =
+            {
+                _dto?.PreviewImagePath,
+                _dto?.FileStorage?.PreviewImagePath,
+                BuildPreviewPathFromFileStorage(_dto?.FileStorage)
+            };
+
+            foreach (var candidate in candidates)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate) && System.IO.File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 当数据库只保存文件名而非完整预览路径时，尝试基于主文件目录拼出预览图路径。
+        /// </summary>
+        private static string BuildPreviewPathFromFileStorage(FileStorage fileStorage)
+        {
+            if (fileStorage == null)
+            {
+                return string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(fileStorage.PreviewImageName))
+            {
+                return string.Empty;
+            }
+
+            var baseDir = string.Empty;
+            if (!string.IsNullOrWhiteSpace(fileStorage.PreviewImagePath))
+            {
+                baseDir = Path.GetDirectoryName(fileStorage.PreviewImagePath) ?? string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(baseDir) && !string.IsNullOrWhiteSpace(fileStorage.FilePath))
+            {
+                baseDir = Path.GetDirectoryName(fileStorage.FilePath) ?? string.Empty;
+            }
+
+            return string.IsNullOrWhiteSpace(baseDir)
+                ? string.Empty
+                : Path.Combine(baseDir, fileStorage.PreviewImageName);
         }
 
         /// <summary>

@@ -7,8 +7,12 @@ using OfficeOpenXml.Style;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
+using System.Linq;
+using Microsoft.Win32;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
@@ -106,6 +110,26 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private CategoryTreeNode? _selectedCategoryNode; // 在分类架构树的当前选中的分类节点
         /// <summary>
+        /// 同步清单缓存
+        /// </summary>
+        private SyncManifest? _lastSyncManifest;
+        /// <summary>
+        /// 同步锁，避免并发执行同步流程
+        /// </summary>
+        private readonly SemaphoreSlim _syncSemaphore = new SemaphoreSlim(1, 1);
+        /// <summary>
+        /// 当前同步取消令牌源。
+        /// </summary>
+        private CancellationTokenSource? _syncCancellationSource;
+        /// <summary>
+        /// 同步源根路径（服务器共享根路径），优先来自 system_config 的 SourceRoot。
+        /// </summary>
+        private string? _syncSourceRoot;
+        /// <summary>
+        /// 同步源本地根路径（服务器本机路径），用于把数据库中的本地盘符路径映射成共享路径。
+        /// </summary>
+        private string? _syncLocalRoot;
+        /// <summary>
         /// 添加枚举类型
         /// </summary>
         public enum ManagementOperationType
@@ -194,20 +218,123 @@ namespace GB_NewCadPlus_IV
                 if (dict.TryGetValue("ServerIP", out var sip) && sip != null)// 尝试获取 ServerIP
                 {
                     // 将登录窗口中的服务器 IP 同步回设置界面文本框，保证 UI 与实际使用一致
-                    TextBox_Set_ServiceIP.Text = sip.ToString();
+                    TextBoxSetServiceIP.Text = sip.ToString();
                 }
 
                 if (dict.TryGetValue("ServerPort", out var sport) && sport != null)// 尝试获取 ServerPort
                 {
-                    TextBox_Set_ServicePort.Text = sport.ToString();//同步回设置界面文本框
+                    TextBoxSetServicePort.Text = sport.ToString();//同步回设置界面文本框
                 }
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"加载登录窗口配置失败: {ex.Message}");
-                LogManager.Instance.LogInfo($"加载登录窗口配置失败: {ex.Message}");
                 // 不要抛异常，失败则继续使用界面中已有的值
             }
+        }
+
+        /// <summary>
+        /// 生成不可访问源文件的诊断信息。
+        /// </summary>
+        private List<string> BuildInaccessibleSourceMessages(SyncManifest manifest)
+        {
+            var messages = new List<string>();
+
+            foreach (var item in manifest.Items)
+            {
+                var fileDisplayName = !string.IsNullOrWhiteSpace(item.FileName)
+                    ? item.FileName
+                    : !string.IsNullOrWhiteSpace(item.FileStoredName)
+                        ? item.FileStoredName
+                        : $"FileId={item.FileId}";
+
+                if (!IsAccessibleSourcePath(item.FilePath, item.FileStoredName, item.FileName))
+                {
+                    messages.Add($"[图元文件] {fileDisplayName} -> {BuildSourceAccessFailureReason(item.FilePath, item.FileStoredName, item.FileName)}");
+                }
+
+                var previewDisplayName = !string.IsNullOrWhiteSpace(item.PreviewImageName)
+                    ? item.PreviewImageName
+                    : !string.IsNullOrWhiteSpace(item.FileStoredName)
+                        ? item.FileStoredName
+                        : $"FileId={item.FileId}";
+
+                if (!IsAccessibleSourcePath(item.PreviewImagePath, item.PreviewImageName, item.PreviewImageName))
+                {
+                    messages.Add($"[预览图] {previewDisplayName} -> {BuildSourceAccessFailureReason(item.PreviewImagePath, item.PreviewImageName, item.PreviewImageName)}");
+                }
+            }
+
+            return messages;
+        }
+
+        /// <summary>
+        /// 生成源路径不可访问的原因说明。
+        /// </summary>
+        private string BuildSourceAccessFailureReason(string? sourcePath, string? storedName, string? fileName)
+        {
+            var normalized = NormalizePathCandidate(sourcePath);
+            if (!string.IsNullOrWhiteSpace(normalized) && File.Exists(normalized))
+            {
+                return "路径已可访问";
+            }
+
+            var sharedPath = ResolveSharedSourcePath(sourcePath, storedName, fileName);
+            if (!string.IsNullOrWhiteSpace(sharedPath) && File.Exists(sharedPath))
+            {
+                return $"原始路径不可访问，已通过共享路径定位到：{sharedPath}";
+            }
+
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return string.IsNullOrWhiteSpace(sharedPath)
+                    ? "未提供可用路径"
+                    : $"共享路径候选不可访问：{sharedPath}";
+            }
+
+            return string.IsNullOrWhiteSpace(sharedPath)
+                ? $"原始路径不可访问：{normalized}"
+                : $"原始路径不可访问：{normalized}；共享路径候选也不可访问：{sharedPath}";
+        }
+
+        /// <summary>
+        /// 读取服务器共享根路径，用于把数据库中的相对路径或目录片段解析为可访问的源路径。
+        /// </summary>
+        private async Task<string> ResolveSyncSourceRootAsync()
+        {
+            if (_databaseManager == null)
+            {
+                return string.Empty;
+            }
+
+            var configured = await _databaseManager.GetSystemConfigValueAsync("SourceRoot");
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                return NormalizePathCandidate(configured) ?? string.Empty;
+            }
+
+            var fallback = await _databaseManager.GetSystemConfigValueAsync("StorageRoot");
+            var normalizedFallback = NormalizePathCandidate(fallback);
+            if (!string.IsNullOrWhiteSpace(normalizedFallback))
+            {
+                return normalizedFallback;
+            }
+
+            return BuildDefaultSharedSourceRoot();
+        }
+
+        /// <summary>
+        /// 根据当前服务器地址构建默认共享根路径。
+        /// </summary>
+        private static string BuildDefaultSharedSourceRoot()
+        {
+            var serverIp = VariableDictionary._serverIP?.Trim();
+            if (string.IsNullOrWhiteSpace(serverIp))
+            {
+                return string.Empty;
+            }
+
+            return $@"\\{serverIp}\GB_Tools\Cad_Sw_Library";
         }
 
         /// <summary>
@@ -391,24 +518,13 @@ namespace GB_NewCadPlus_IV
                 // 加载绘图配置
                 LoadDrawingConfig();
 
-                // 尝试连接数据库（已修正：避免重复弹窗）
+                // 单一入口：主窗口只做静默连接，不允许在这里再次弹登录窗口
                 bool connected = false;
                 try
                 {
-                    // 核心修复：如果已经在 ffff 中注入了管理器，则直接信任并使用
-                    if (_databaseManager != null && _databaseManager.IsDatabaseAvailable)
-                    {
-                        connected = true;
-                        // 确保静态打开位被锁定，防止其它逻辑误触发
-                        wpfMainWindowsIsOpenClose = true;
-                    }
-                    else
-                    {
-                        // 只有在完全没有连接且未锁定状态时，才尝试一次“静默”重连
-                        // 注意：这里我们不再等待可能弹窗的 Ensure... 方法，而是调用静默检测
-                        //connected = await EnsureDatabaseConnectedSilentAsync();
-                        connected = await EnsureDatabaseConnectedSilentAsync();
-                    }
+                    connected = await EnsureDatabaseConnectedSingleEntryAsync();
+                    // 锁定已加载状态，防止后续链式事件误触发登录流程
+                    wpfMainWindowsIsOpenClose = true;
                 }
                 catch (Exception ex)
                 {
@@ -450,7 +566,7 @@ namespace GB_NewCadPlus_IV
                 Loaded += DepartmentAdminControl_Loaded; //注册加载完成事件
 
                 // 显示版本号
-                TextBox_PluginVersion.Text = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
+                TextBox插件版本.Text = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
             }
             catch (Exception ex)
             {
@@ -472,7 +588,7 @@ namespace GB_NewCadPlus_IV
             {
                 // 获取当前用户名（优先使用全局变量，再退回到设置界面输入）
                 // 优先获取原始用户名（保留大小写以便后续数据库查询），再构造小写用于简单白名单判断
-                var userNameRaw = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
+                var userNameRaw = (VariableDictionary._userName ?? TextBoxSetUsername.Text ?? string.Empty).Trim();
                 var userName = userNameRaw.ToLowerInvariant();
                 // 白名单匹配：系统设置的3个常规管理员和达梦/MySQL的两个超级管理员
                 bool isAdmin = userName == "sa" || userName == "admin" || userName == "root" || userName == "sysdba";
@@ -637,7 +753,7 @@ namespace GB_NewCadPlus_IV
                 {
                     try
                     {
-                        var uiText = TextBox_绘图比例?.Text ?? string.Empty;
+                        var uiText = TextBox绘图比例?.Text ?? string.Empty;
                         if (!string.IsNullOrWhiteSpace(uiText))
                         {
                             var s = uiText.Trim();
@@ -670,15 +786,15 @@ namespace GB_NewCadPlus_IV
                     loadedScale = 100.0;
 
                 // 把值写回 UI（使用 InvariantCulture 显示）与全局变量
-                if (TextBox_绘图比例 != null)
+                if (TextBox绘图比例 != null)
                 {
                     try
                     {
-                        TextBox_绘图比例.Text = loadedScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        TextBox绘图比例.Text = loadedScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     }
                     catch
                     {
-                        TextBox_绘图比例.Text = loadedScale.ToString();
+                        TextBox绘图比例.Text = loadedScale.ToString();
                     }
                 }
 
@@ -698,9 +814,9 @@ namespace GB_NewCadPlus_IV
             {
                 LogManager.Instance.LogWarning($"加载绘图配置失败: {ex.Message}");
                 // 出错时使用默认值
-                if (TextBox_绘图比例 != null)
+                if (TextBox绘图比例 != null)
                 {
-                    TextBox_绘图比例.Text = "100";
+                    TextBox绘图比例.Text = "100";
                 }
                 VariableDictionary.blockScale = 100.0;
                 VariableDictionary.textBoxScale = 100.0;
@@ -788,9 +904,9 @@ namespace GB_NewCadPlus_IV
                 };
 
                 // 从输入框获取绘图比例（兼容逗号小数分隔符）
-                if (TextBox_绘图比例 != null)
+                if (TextBox绘图比例 != null)
                 {
-                    var raw = (TextBox_绘图比例.Text ?? string.Empty).Trim();
+                    var raw = (TextBox绘图比例.Text ?? string.Empty).Trim();
                     if (!string.IsNullOrEmpty(raw))
                     {
                         double scale = 0.0;
@@ -851,9 +967,9 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (TextBox_绘图比例 == null) return 0;
+                if (TextBox绘图比例 == null) return 0;
 
-                var raw = (TextBox_绘图比例.Text ?? string.Empty).Trim();
+                var raw = (TextBox绘图比例.Text ?? string.Empty).Trim();
                 if (string.IsNullOrEmpty(raw)) return 0;
 
                 // 尝试直接使用不变文化解析
@@ -896,8 +1012,8 @@ namespace GB_NewCadPlus_IV
                 {
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
-                        if (TextBox_Set_ServiceIP != null) TextBox_Set_ServiceIP.Text = VariableDictionary._serverIP;
-                        if (TextBox_Set_ServicePort != null) TextBox_Set_ServicePort.Text = VariableDictionary._serverPort.ToString();
+                        if (TextBoxSetServiceIP != null) TextBoxSetServiceIP.Text = VariableDictionary._serverIP;
+                        if (TextBoxSetServicePort != null) TextBoxSetServicePort.Text = VariableDictionary._serverPort.ToString();
                     });
                 }
                 LogManager.Instance.LogInfo("WpfMainWindow: 已从外部注入数据库管理器并锁定联机状态。");
@@ -918,8 +1034,8 @@ namespace GB_NewCadPlus_IV
                 var defaultPwd = dbtype == "MYSQL" ? "123456" : "675756SGBsgb";
                 var defaultPort = dbtype == "MYSQL" ? 3308 : 5236; // 依据说明 MySQL 为 3308
 
-                var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._userName) ? defaultUser : VariableDictionary._userName.Trim();
-                var dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? defaultPwd : VariableDictionary._passWord;
+                var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._dbUserName) ? defaultUser : VariableDictionary._dbUserName.Trim();
+                var dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord) ? defaultPwd : VariableDictionary._dbPassWord;
                 var dbPort = VariableDictionary._serverPort > 0 ? VariableDictionary._serverPort : defaultPort;
                 var schemaName = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? "CAD_SW_LIBRARY" : VariableDictionary._dataBaseName.Trim();
 
@@ -928,7 +1044,16 @@ namespace GB_NewCadPlus_IV
                 bool tcpOk = await Task.Run(() => LoginWindow.TestNetworkConnection(VariableDictionary._serverIP, dbPort));
                 if (tcpOk)
                 {
-                    string conn = $"Server={VariableDictionary._serverIP};Port={dbPort};Schema={schemaName};User Id={dbUser};Password={dbPassword};";
+                    string conn;
+                    if (dbtype == "MYSQL")
+                    {
+                        conn = $"Server={VariableDictionary._serverIP};Port={dbPort};Database={schemaName};Uid={dbUser};Pwd={dbPassword};Allow User Variables=True;";
+                    }
+                    else
+                    {
+                        conn = $"Server={VariableDictionary._serverIP};Port={dbPort};Schema={schemaName};User Id={dbUser};Password={dbPassword};";
+                    }
+
                     var db = new DatabaseManager(conn);
                     if (db.IsDatabaseAvailable)
                     {
@@ -942,9 +1067,29 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 尝试使用当前界面/配置连接数据库；失败时弹出 LoginWindow 让用户登录并返回 login.CreatedDatabaseManager（若创建成功）。
-        /// 成功时设置 _databaseManager 并返回 true；失败返回 false。
+        /// 单一入口：仅做“静默连接”，不弹登录窗口。
+        /// 优先复用已注入的 DatabaseManager；否则依据当前数据库类型与配置重建连接。
         /// </summary>
+        private async Task<bool> EnsureDatabaseConnectedSingleEntryAsync()
+        {
+            // 1) 优先复用外部注入连接
+            if (_databaseManager != null && _databaseManager.IsDatabaseAvailable)
+            {
+                _useDatabaseMode = true;
+                return true;
+            }
+
+            // 2) 静默重连（无弹窗）
+            bool connected = await EnsureDatabaseConnectedSilentAsync();
+            _useDatabaseMode = connected;
+            return connected;
+        }
+
+        /// <summary>
+        /// 【已废弃】旧的“连接失败后弹登录窗”流程。
+        /// 请统一使用 EnsureDatabaseConnectedSingleEntryAsync（仅静默连接，不在主窗口生命周期内弹登录窗）。
+        /// </summary>
+        [Obsolete("EnsureDatabaseConnectedOrShowLoginAsync 已废弃。请改用 EnsureDatabaseConnectedSingleEntryAsync，避免离线+弹窗并发分叉。", true)]
         private async Task<bool> EnsureDatabaseConnectedOrShowLoginAsync()
         {
             try
@@ -965,20 +1110,20 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 3. 尝试从全局配置同步到界面控件
-                if (TextBox_Set_ServiceIP != null && string.IsNullOrWhiteSpace(TextBox_Set_ServiceIP.Text))
-                    TextBox_Set_ServiceIP.Text = VariableDictionary._serverIP;
-                if (TextBox_Set_ServicePort != null && (string.IsNullOrWhiteSpace(TextBox_Set_ServicePort.Text) || TextBox_Set_ServicePort.Text == "0"))
-                    TextBox_Set_ServicePort.Text = VariableDictionary._serverPort > 0 ? VariableDictionary._serverPort.ToString() : "5236";
+                if (TextBoxSetServiceIP != null && string.IsNullOrWhiteSpace(TextBoxSetServiceIP.Text))
+                    TextBoxSetServiceIP.Text = VariableDictionary._serverIP;
+                if (TextBoxSetServicePort != null && (string.IsNullOrWhiteSpace(TextBoxSetServicePort.Text) || TextBoxSetServicePort.Text == "0"))
+                    TextBoxSetServicePort.Text = VariableDictionary._serverPort > 0 ? VariableDictionary._serverPort.ToString() : "5236";
 
                 // 读取当前界面配置（优先）
-                VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim();
+                VariableDictionary._serverIP = TextBoxSetServiceIP.Text?.Trim();
                 if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
                 {
                     // 如果界面无值，尝试从全局变量读取
                     VariableDictionary._serverIP = !string.IsNullOrWhiteSpace(VariableDictionary._serverIP) ? VariableDictionary._serverIP : "127.0.0.1";
                 }
                 // 端口：优先使用界面值
-                VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var p) ? p : 5236;
+                VariableDictionary._serverPort = int.TryParse(TextBoxSetServicePort.Text, out var p) ? p : 5236;
 
                 // 用户名与密码优先沿用全局值
                 var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._userName) ? "SYSDBA" : VariableDictionary._userName.Trim();
@@ -1331,76 +1476,62 @@ namespace GB_NewCadPlus_IV
                     return GetDefaultPreviewImage();
                 }
 
-                // 检查内存缓存
-                if (_imageCache.ContainsKey(fileStorage.FilePath ?? fileStorage.Id.ToString()))
+                // 先确保本地预览缓存存在：若本地缓存不存在，则自动从局域网服务器回源复制到本地
+                string? localPreviewPathResult = await EnsureLocalPreviewCacheAsync(fileStorage);
+                string localPreviewPath = localPreviewPathResult ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(localPreviewPath))
                 {
-                    return _imageCache[fileStorage.FilePath ?? fileStorage.Id.ToString()];
-                }
-
-                // 检查是否有预览图片路径
-                string previewImagePath = fileStorage.PreviewImagePath ?? fileStorage.FilePath;
-                if (string.IsNullOrEmpty(previewImagePath))
-                {
-                    LogManager.Instance.LogInfo("预览图片路径为空");
+                    LogManager.Instance.LogInfo("预览图片本地缓存路径为空");
                     return GetDefaultPreviewImage();
                 }
 
-                // 检查本地缓存文件
-                string cacheFileName = $"{fileStorage.Id}_{Path.GetFileName(previewImagePath)}.png";
-                string cacheFilePath = Path.Combine(_previewCachePath, cacheFileName);
+                // 生成稳定的缓存键，避免同一图元因路径变化命中旧图
+                string cacheKey = GetPreviewCacheKey(fileStorage, localPreviewPath);
 
-                // 如果本地缓存存在且有效，直接加载
-                if (File.Exists(cacheFilePath))
+                // 检查内存缓存
+                if (_imageCache.ContainsKey(cacheKey))
+                {
+                    return _imageCache[cacheKey];
+                }
+
+                // 如果本地缓存存在且有效，直接加载；若缓存损坏，则删除后重建
+                if (File.Exists(localPreviewPath))
                 {
                     try
                     {
-                        var bitmap = LoadImageFromFile(cacheFilePath);
+                        var bitmap = LoadImageFromFile(localPreviewPath);
                         if (bitmap != null)
                         {
                             // 添加到内存缓存
-                            _imageCache[fileStorage.FilePath ?? fileStorage.Id.ToString()] = bitmap;
+                            _imageCache[cacheKey] = bitmap;
                             return bitmap;
                         }
                     }
                     catch (Exception ex)
                     {
                         LogManager.Instance.LogInfo($"从本地缓存加载图片失败: {ex.Message}");
-                        // 删除损坏的缓存文件
-                        try { File.Delete(cacheFilePath); } catch { }
+                        // 删除损坏的缓存文件，稍后尝试重新从局域网源复制一份
+                        try { File.Delete(localPreviewPath); } catch { }
                     }
                 }
 
-                // 尝试从原始路径加载图片
-                if (File.Exists(previewImagePath))
+                // 本地缓存不存在或已损坏：再次回源复制一份到本地缓存目录
+                localPreviewPath = await EnsureLocalPreviewCacheAsync(fileStorage) ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(localPreviewPath) && File.Exists(localPreviewPath))
                 {
                     try
                     {
-                        var bitmap = LoadImageFromFile(previewImagePath);
+                        var bitmap = LoadImageFromFile(localPreviewPath);
                         if (bitmap != null)
                         {
-                            // 保存到本地缓存
-                            try
-                            {
-                                using (var fileStream = File.Create(cacheFilePath))
-                                {
-                                    var encoder = new PngBitmapEncoder();
-                                    encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                                    encoder.Save(fileStream);
-                                }
-                            }
-                            catch (Exception cacheEx)
-                            {
-                                LogManager.Instance.LogInfo($"保存到缓存失败: {cacheEx.Message}");
-                            }
-
                             // 添加到内存缓存
-                            _imageCache[fileStorage.FilePath ?? fileStorage.Id.ToString()] = bitmap;
+                            _imageCache[cacheKey] = bitmap;
                             return bitmap;
                         }
                     }
                     catch (Exception ex)
                     {
-                        LogManager.Instance.LogInfo($"从原始路径加载图片失败: {ex.Message}");
+                        LogManager.Instance.LogInfo($"从本地预览缓存加载图片失败: {ex.Message}");
                     }
                 }
 
@@ -1412,6 +1543,171 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogInfo($"获取预览图片时出错: {ex.Message}");
                 return GetDefaultPreviewImage();
             }
+        }
+
+        /// <summary>
+        /// 解析预览图片的真实路径，支持：
+        /// 1) PreviewImagePath
+        /// 2) PreviewImageName + FilePath目录
+        /// 3) PreviewImageName + 本地缓存目录
+        /// 4) 必要时从数据库回源后再匹配一次
+        /// </summary>
+        private async Task<string> ResolvePreviewImagePathAsync(FileStorage fileStorage)
+        {
+            if (fileStorage == null)
+            {
+                return string.Empty;
+            }
+
+            var candidates = new List<string>();
+
+            void AddCandidate(string path)
+            {
+                if (!string.IsNullOrWhiteSpace(path) && !candidates.Contains(path, StringComparer.OrdinalIgnoreCase))
+                {
+                    candidates.Add(path);
+                }
+            }
+
+            AddCandidate(fileStorage.PreviewImagePath);
+
+            if (!string.IsNullOrWhiteSpace(fileStorage.PreviewImageName))
+            {
+                var previewName = fileStorage.PreviewImageName.Trim();
+
+                if (!string.IsNullOrWhiteSpace(fileStorage.PreviewImagePath))
+                {
+                    var dir = Path.GetDirectoryName(fileStorage.PreviewImagePath);
+                    if (!string.IsNullOrWhiteSpace(dir))
+                        AddCandidate(Path.Combine(dir, previewName));
+                }
+
+                if (!string.IsNullOrWhiteSpace(fileStorage.FilePath))
+                {
+                    var dir = Path.GetDirectoryName(fileStorage.FilePath);
+                    if (!string.IsNullOrWhiteSpace(dir))
+                        AddCandidate(Path.Combine(dir, previewName));
+                }
+
+                AddCandidate(Path.Combine(_previewCachePath, previewName));
+            }
+
+            // 如果是局域网服务器路径但本地缓存已经存在，优先返回本地缓存目录里的文件
+            if (!string.IsNullOrWhiteSpace(fileStorage.PreviewImageName))
+            {
+                var previewName = fileStorage.PreviewImageName.Trim();
+                var localCandidates = new[]
+                {
+                    Path.Combine(_previewCachePath, $"{fileStorage.Id}_{previewName}"),
+                    Path.Combine(_previewCachePath, previewName)
+                };
+
+                foreach (var localCandidate in localCandidates)
+                {
+                    if (File.Exists(localCandidate))
+                    {
+                        return localCandidate;
+                    }
+                }
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            // 数据库回源兜底：用最新记录重新补全路径字段再匹配一次
+            try
+            {
+                if (_databaseManager != null && fileStorage.Id > 0)
+                {
+                    var latest = await _databaseManager.GetFileByIdAsync(fileStorage.Id);
+                    if (latest != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(latest.PreviewImagePath))
+                            AddCandidate(latest.PreviewImagePath);
+
+                        if (!string.IsNullOrWhiteSpace(latest.PreviewImageName))
+                        {
+                            var previewName = latest.PreviewImageName.Trim();
+
+                            if (!string.IsNullOrWhiteSpace(latest.PreviewImagePath))
+                            {
+                                var dir = Path.GetDirectoryName(latest.PreviewImagePath);
+                                if (!string.IsNullOrWhiteSpace(dir))
+                                    AddCandidate(Path.Combine(dir, previewName));
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(latest.FilePath))
+                            {
+                                var dir = Path.GetDirectoryName(latest.FilePath);
+                                if (!string.IsNullOrWhiteSpace(dir))
+                                    AddCandidate(Path.Combine(dir, previewName));
+                            }
+
+                            AddCandidate(Path.Combine(_previewCachePath, previewName));
+                        }
+
+                        foreach (var candidate in candidates)
+                        {
+                            if (File.Exists(candidate))
+                            {
+                                // 回填当前对象，减少后续重复查找
+                                fileStorage.PreviewImagePath = latest.PreviewImagePath ?? fileStorage.PreviewImagePath;
+                                fileStorage.PreviewImageName = latest.PreviewImageName ?? fileStorage.PreviewImageName;
+                                if (string.IsNullOrWhiteSpace(fileStorage.FilePath) && !string.IsNullOrWhiteSpace(latest.FilePath))
+                                {
+                                    fileStorage.FilePath = latest.FilePath;
+                                }
+                                return candidate;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"回源查找预览图失败: {ex.Message}");
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 获取预览缓存的稳定键。
+        /// </summary>
+        private static string GetPreviewCacheKey(FileStorage fileStorage, string previewImagePath)
+        {
+            var pathPart = !string.IsNullOrWhiteSpace(fileStorage?.PreviewImagePath)
+                ? fileStorage.PreviewImagePath
+                : previewImagePath;
+
+            if (string.IsNullOrWhiteSpace(pathPart))
+            {
+                pathPart = fileStorage?.FilePath;
+            }
+
+            return $"{fileStorage?.Id}_{pathPart ?? string.Empty}";
+        }
+
+        /// <summary>
+        /// 获取本地预览缓存文件名。
+        /// </summary>
+        private static string GetPreviewCacheFileName(FileStorage fileStorage, string previewImagePath)
+        {
+            var sourceName = !string.IsNullOrWhiteSpace(fileStorage?.PreviewImageName)
+                ? fileStorage.PreviewImageName
+                : Path.GetFileName(previewImagePath);
+
+            if (string.IsNullOrWhiteSpace(sourceName))
+            {
+                sourceName = "preview.png";
+            }
+
+            return sourceName;
         }
 
         /// <summary>
@@ -1473,7 +1769,7 @@ namespace GB_NewCadPlus_IV
                 // 尝试使用流方式加载
                 try
                 {
-                    using (var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read))
+                    using (var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
                         var bitmap = new BitmapImage();
                         bitmap.BeginInit();
@@ -1756,14 +2052,18 @@ namespace GB_NewCadPlus_IV
                         if (previewTarget == null) previewTarget = fileStorage; // 回退方案
                     }
 
-                    // 步骤 B: 显示预览。此时 previewTarget 持有的是数据库原始路径，GetPreviewImageAsync 会查找同目录下的 PNG。
-                    ShowFilePreview(previewTarget);
-
-                    // 步骤 C: 执行属性展示
-                    await DisplayFilePropertiesInDataGridAsync(previewTarget).ConfigureAwait(true);
-
-                    // 步骤 D: 在后台恢复/缓存本地文件。这一步会修改 fileStorage.FilePath，但不会影响已经完成的预览显示。
+                    // 步骤 B: 先在后台恢复/缓存本地文件与预览图，确保局域网服务器资源被稳定复制到本地缓存。
                     string? cachedLocalPath = await EnsureLocalCachedFilePathAsync(fileStorage);
+
+                    // 步骤 C: 先显示预览；若失败，则重新回源缓存后自动重试一次。
+                    bool previewShown = await TryShowFilePreviewWithRetryAsync(fileStorage);
+                    if (!previewShown)
+                    {
+                        LogManager.Instance.LogWarning($"预览图显示失败（已重试一次）: {fileStorage.DisplayName}");
+                    }
+
+                    // 步骤 D: 执行属性展示
+                    await DisplayFilePropertiesInDataGridAsync(fileStorage).ConfigureAwait(true);
 
                     if (!string.IsNullOrEmpty(cachedLocalPath))
                     {
@@ -1779,7 +2079,7 @@ namespace GB_NewCadPlus_IV
                 else
                 {
                     // 资源模式：直接显示预览和属性
-                    ShowFilePreview(fileStorage);
+                    await TryShowFilePreviewWithRetryAsync(fileStorage);
                     _currentFileStorage = fileStorage;
                     _selectedFileStorage = fileStorage;
                 }
@@ -2643,26 +2943,26 @@ namespace GB_NewCadPlus_IV
             string? previewPath,
             bool formatDisplayName)
         {
-            file_Path.Text = filePath ?? string.Empty;
+            this.filePath.Text = filePath ?? string.Empty;
 
             var finalName = displayName ?? string.Empty;
             if (formatDisplayName && !string.IsNullOrWhiteSpace(finalName))
             {
                 finalName = FormatFileNameForDisplay(finalName);
             }
-            File_Name.Text = finalName;
+            FileName.Text = finalName;
 
-            File_Size.Text = (fileSizeBytes.HasValue && fileSizeBytes.Value > 0)
+            FileSize.Text = (fileSizeBytes.HasValue && fileSizeBytes.Value > 0)
                 ? $"{fileSizeBytes.Value / 1024.0:F2} KB"
                 : string.Empty;
 
-            File_Type.Text = fileType ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(File_Type.Text) && !string.IsNullOrWhiteSpace(filePath))
+            ClientVersion.Text = fileType ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(ClientVersion.Text) && !string.IsNullOrWhiteSpace(filePath))
             {
-                File_Type.Text = Path.GetExtension(filePath).ToLowerInvariant();
+                ClientVersion.Text = Path.GetExtension(filePath).ToLowerInvariant();
             }
 
-            view_File_Path.Text = string.IsNullOrWhiteSpace(previewPath) ? "无预览图片" : previewPath;
+            viewFilePath.Text = string.IsNullOrWhiteSpace(previewPath) ? "无预览图片" : previewPath;
         }
 
         /// <summary>
@@ -2684,7 +2984,7 @@ namespace GB_NewCadPlus_IV
                     displayName: fileInfo.Name,
                     fileType: fileInfo.Extension.ToLowerInvariant(),
                     fileSizeBytes: fileInfo.Exists ? fileInfo.Length : null,
-                    previewPath: view_File_Path.Text,
+                    previewPath: viewFilePath.Text,
                     formatDisplayName: false);
             }
             catch (Exception ex)
@@ -2736,7 +3036,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                view_File_Path.Text = imagePath;
+                viewFilePath.Text = imagePath;
 
                 // 显示预览图片
                 var bitmap = new BitmapImage();
@@ -3625,14 +3925,14 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 显示文件预览图片
         /// </summary>
-        private async void ShowFilePreview(FileStorage fileStorage)
+        private async Task<bool> ShowFilePreviewAsync(FileStorage fileStorage)
         {
             try
             {
                 if (预览 == null)
                 {
                     LogManager.Instance.LogInfo("预览图片控件为空");
-                    return;
+                    return false;
                 }
 
                 // 清空现有预览
@@ -3641,7 +3941,7 @@ namespace GB_NewCadPlus_IV
                 if (fileStorage == null)
                 {
                     LogManager.Instance.LogInfo("文件存储对象为空");
-                    return;
+                    return false;
                 }
 
                 LogManager.Instance.LogInfo($"显示文件预览: {fileStorage.DisplayName}");
@@ -3653,12 +3953,14 @@ namespace GB_NewCadPlus_IV
                 {
                     预览.Source = previewImage;
                     LogManager.Instance.LogInfo("预览图片显示成功");
+                    return true;
                 }
                 else
                 {
                     LogManager.Instance.LogWarning("无法加载预览图片");
                     // 显示默认图片或提示
                     预览.Source = GetDefaultPreviewImage();
+                    return false;
                 }
             }
             catch (Exception ex)
@@ -3666,7 +3968,37 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogError($"显示文件预览时出错: {ex.Message}");
                 // 显示错误图片
                 预览.Source = GetDefaultPreviewImage();
+                return false;
             }
+        }
+
+        /// <summary>
+        /// 先缓存、后显示：若第一次预览失败，则重新回源缓存后重试一次。
+        /// </summary>
+        private async Task<bool> TryShowFilePreviewWithRetryAsync(FileStorage fileStorage)
+        {
+            if (fileStorage == null)
+            {
+                return false;
+            }
+
+            // 第一次：直接按当前对象尝试显示
+            if (await ShowFilePreviewAsync(fileStorage).ConfigureAwait(true))
+            {
+                return true;
+            }
+
+            // 第二次：强制先重新缓存本地预览，再显示一次
+            try
+            {
+                await EnsureLocalPreviewCacheAsync(fileStorage).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"预览图重试前缓存失败: {ex.Message}");
+            }
+
+            return await ShowFilePreviewAsync(fileStorage).ConfigureAwait(true);
         }
 
 
@@ -4280,7 +4612,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 权限校验（示例：只允许管理员）
-                var userName = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
+                var userName = (VariableDictionary._userName ?? TextBoxSetUsername.Text ?? string.Empty).Trim();
                 if (!IsAdminUser(userName))
                 {
                     System.Windows.MessageBox.Show("仅管理员用户可以执行替换操作。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -4425,7 +4757,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 权限校验（与替换图元保持一致）
-                var userName = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
+                var userName = (VariableDictionary._userName ?? TextBoxSetUsername.Text ?? string.Empty).Trim();
                 if (!IsAdminUser(userName))
                 {
                     MessageBox.Show("仅管理员用户可以执行替换预览图操作。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -4530,7 +4862,7 @@ namespace GB_NewCadPlus_IV
             // 右键入口可选管理员校验
             if (needAdminCheck)
             {
-                var userName = (VariableDictionary._userName ?? TextBox_Set_Username.Text ?? string.Empty).Trim();
+                var userName = (VariableDictionary._userName ?? TextBoxSetUsername.Text ?? string.Empty).Trim();
                 if (!IsAdminUser(userName))
                 {
                     MessageBox.Show("仅管理员用户可以执行删除图元操作。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -4594,11 +4926,11 @@ namespace GB_NewCadPlus_IV
             PropertiesDataGrid.ItemsSource = null;
             if (预览 != null) 预览.Source = null;
             if (ViewImage != null) ViewImage.Source = null;
-            file_Path.Text = string.Empty;
-            File_Name.Text = string.Empty;
-            File_Size.Text = string.Empty;
-            File_Type.Text = string.Empty;
-            view_File_Path.Text = string.Empty;
+            filePath.Text = string.Empty;
+            FileName.Text = string.Empty;
+            FileSize.Text = string.Empty;
+            ClientVersion.Text = string.Empty;
+            viewFilePath.Text = string.Empty;
 
             // 刷新列表与按钮面板
             await RefreshFilesForCurrentCategoryAsync();
@@ -4721,53 +5053,54 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private async Task<string?> EnsureLocalCachedFilePathAsync(FileStorage fileStorage)
         {
-            if (fileStorage == null) return null;
+            if (fileStorage == null) return null;// 空对象保护
 
             try
             {
-                string localDir = _cadStoragePath;
-                if (string.IsNullOrWhiteSpace(localDir))
+                string localDir = _cadStoragePath;// 优先使用当前配置的本地缓存目录
+                if (string.IsNullOrWhiteSpace(localDir))// 回退到应用目录下的默认 CadFiles 子目录
                 {
-                    localDir = Path.Combine(AppPath, "CadFiles");
-                    _cadStoragePath = localDir;
+                    localDir = Path.Combine(AppPath, "CadFiles");// 默认本地缓存目录
+                    _cadStoragePath = localDir;// 同步回配置字段，保持一致性
                 }
-
+                // 确保本地缓存目录存在
                 if (!Directory.Exists(localDir))
-                    Directory.CreateDirectory(localDir);
-
+                    Directory.CreateDirectory(localDir);// 创建目录
+                // 数据库回源恢复：优先使用 fileStorage.FilePath，失效时尝试回源恢复真实路径
                 string sourcePath = fileStorage.FilePath ?? string.Empty;
 
                 // 当前路径不可用：回源恢复
                 if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
                 {
+                    // 尝试回源恢复真实路径（优先数据库最新记录）
                     string? recovered = await TryRecoverStorageSourcePathAsync(fileStorage);
                     if (!string.IsNullOrWhiteSpace(recovered))
                     {
-                        sourcePath = recovered;
+                        sourcePath = recovered; // 更新使用回源路径
                         fileStorage.FilePath = recovered; // 暂存真实源路径
                         LogManager.Instance.LogInfo($"已回源恢复图元路径: {recovered}");
                     }
                 }
-
+                // 最终路径校验：无论原始还是回源，确保路径有效
                 if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
                 {
                     LogManager.Instance.LogWarning($"无法找到源文件，未能缓存: {sourcePath}");
                     return null;
                 }
-
+                // 确定本地缓存文件名：优先 fileStorage.FileName，回退原始文件名，确保扩展名正确
                 string sourceExt = Path.GetExtension(sourcePath);
-                if (string.IsNullOrWhiteSpace(sourceExt)) sourceExt = ".dwg";
-
+                if (string.IsNullOrWhiteSpace(sourceExt)) sourceExt = ".dwg";// 默认扩展名（根据实际情况调整）
+                // 确定文件名：优先 fileStorage.FileName，回退原始文件名（不带扩展）
                 string realName = fileStorage.FileName ?? Path.GetFileNameWithoutExtension(sourcePath);
-                if (!realName.EndsWith(sourceExt, StringComparison.OrdinalIgnoreCase))
-                    realName = Path.GetFileNameWithoutExtension(realName) + sourceExt;
-
+                if (!realName.EndsWith(sourceExt, StringComparison.OrdinalIgnoreCase)) // 确保扩展名正确
+                    realName = Path.GetFileNameWithoutExtension(realName) + sourceExt;// 补上扩展名
+                // 本地缓存路径
                 string localPath = Path.Combine(localDir, realName);
-
+                // 如果本地缓存已存在且有效，则直接使用；否则复制一份到本地缓存目录
                 if (!File.Exists(localPath))
                 {
-                    File.Copy(sourcePath, localPath, true);
-                    LogManager.Instance.LogInfo($"已将图元缓存到本地: {localPath}");
+                    File.Copy(sourcePath, localPath, true); // 复制到本地缓存目录（覆盖同名文件）
+                    LogManager.Instance.LogInfo($"已将图元缓存到本地: {localPath}");// 日志记录
                 }
                 else
                 {
@@ -4776,11 +5109,61 @@ namespace GB_NewCadPlus_IV
 
                 // 后续统一使用本地缓存路径（与原有逻辑一致）
                 fileStorage.FilePath = localPath;
+
+                // 同步缓存预览图到本地缓存目录，避免局域网原始预览路径在点击后不可达
+                await EnsureLocalPreviewCacheAsync(fileStorage);
+
                 return localPath;
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogWarning($"EnsureLocalCachedFilePathAsync 失败: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 将预览图复制到本地预览缓存目录，并回写 fileStorage.PreviewImagePath。
+        /// </summary>
+        private async Task<string?> EnsureLocalPreviewCacheAsync(FileStorage fileStorage)
+        {
+            if (fileStorage == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var sourcePreviewPath = await ResolvePreviewImagePathAsync(fileStorage);
+                if (string.IsNullOrWhiteSpace(sourcePreviewPath) || !File.Exists(sourcePreviewPath))
+                {
+                    return null;
+                }
+
+                var previewName = !string.IsNullOrWhiteSpace(fileStorage.PreviewImageName)
+                    ? fileStorage.PreviewImageName.Trim()
+                    : Path.GetFileName(sourcePreviewPath);
+
+                if (string.IsNullOrWhiteSpace(previewName))
+                {
+                    previewName = $"{fileStorage.Id}_preview.png";
+                }
+
+                var localPreviewPath = Path.Combine(_previewCachePath, $"{fileStorage.Id}_{previewName}");
+
+                if (!File.Exists(localPreviewPath))
+                {
+                    File.Copy(sourcePreviewPath, localPreviewPath, true);
+                    LogManager.Instance.LogInfo($"已将预览图缓存到本地: {localPreviewPath}");
+                }
+
+                fileStorage.PreviewImageName = previewName;
+                fileStorage.PreviewImagePath = localPreviewPath;
+                return localPreviewPath;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"EnsureLocalPreviewCacheAsync 失败: {ex.Message}");
                 return null;
             }
         }
@@ -4825,8 +5208,8 @@ namespace GB_NewCadPlus_IV
             {
                 var roots = new List<string>();
 
-                if (!string.IsNullOrWhiteSpace(TextBox_Set_StoragePath?.Text))
-                    roots.Add(TextBox_Set_StoragePath.Text.Trim());
+                if (!string.IsNullOrWhiteSpace(TextBoxSetStoragePath?.Text))
+                    roots.Add(TextBoxSetStoragePath.Text.Trim());
 
                 if (!string.IsNullOrWhiteSpace(VariableDictionary._storagePath))
                     roots.Add(VariableDictionary._storagePath.Trim());
@@ -4836,18 +5219,19 @@ namespace GB_NewCadPlus_IV
 
                 string categoryType = string.IsNullOrWhiteSpace(fileStorage.CategoryType) ? "sub" : fileStorage.CategoryType;
                 string categoryId = fileStorage.CategoryId.ToString();
-
+                // 文件名优先 fileStoredName（更接近实际存储），其次 fileName（更接近原始文件）
                 var fileNames = new List<string>();
                 if (!string.IsNullOrWhiteSpace(fileStorage.FileStoredName)) fileNames.Add(fileStorage.FileStoredName);
                 if (!string.IsNullOrWhiteSpace(fileStorage.FileName)) fileNames.Add(fileStorage.FileName);
-
+                // 去重后尝试拼接路径
                 foreach (var root in roots.Where(r => !string.IsNullOrWhiteSpace(r)).Distinct(StringComparer.OrdinalIgnoreCase))
                 {
+                    // 拼接路径：根目录 + 分类类型 + 分类 Id + 文件名
                     foreach (var fn in fileNames.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase))
                     {
-                        var candidate = Path.Combine(root, categoryType, categoryId, fn);
-                        if (File.Exists(candidate))
-                            return candidate;
+                        var candidate = Path.Combine(root, categoryType, categoryId, fn);// 根据实际存储规则调整拼接逻辑
+                        if (File.Exists(candidate))// 找到有效路径立即返回
+                            return candidate;// 这里不直接更新 fileStorage.FilePath，留给调用方统一处理回写和缓存逻辑
                     }
                 }
             }
@@ -6472,7 +6856,7 @@ namespace GB_NewCadPlus_IV
 
                 // 初始化文件上传界面
                 InitializeFileUploadInterface();
-                var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            var openFileDialog = new global::Microsoft.Win32.OpenFileDialog
                 {
                     Title = "选择要上传的文件",
                     Filter = "所有文件 (*.*)|*.*|DWG文件 (*.dwg)|*.dwg|图片文件 (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|文档文件 (*.pdf;*.doc;*.docx)|*.pdf;*.doc;*.docx",
@@ -6532,7 +6916,7 @@ namespace GB_NewCadPlus_IV
         private async void DeleteGraphic_Btn_Click(object sender, RoutedEventArgs e)
         {
             var selected = StroageFileDataGrid.SelectedItem as FileStorage;
-            DeleteGraphic_Btn.IsEnabled = false;
+            DeleteGraphicBtn.IsEnabled = false;
             try
             {
                 await DeleteGraphicCoreAsync(selected, needAdminCheck: false, entryName: "按钮");
@@ -6544,7 +6928,7 @@ namespace GB_NewCadPlus_IV
             }
             finally
             {
-                DeleteGraphic_Btn.IsEnabled = true;
+                DeleteGraphicBtn.IsEnabled = true;
             }
         }
 
@@ -7239,10 +7623,10 @@ namespace GB_NewCadPlus_IV
         private void InitializeFileUploadInterface()
         {
             // 清空所有输入框
-            file_Path.Text = "";
-            File_Name.Text = "";
-            File_Size.Text = "";
-            view_File_Path.Text = "";
+            filePath.Text = "";
+            FileName.Text = "";
+            FileSize.Text = "";
+            viewFilePath.Text = "";
             ViewImage.Source = null;
 
             // 清空属性编辑网格
@@ -8288,11 +8672,11 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 获取当前输入的设置
-                string serverIP = TextBox_Set_ServiceIP.Text.Trim();
-                string serverPort = TextBox_Set_ServicePort.Text.Trim();
-                string databaseName = TextBox_Set_DatabaseName.Text.Trim();
-                string username = TextBox_Set_Username.Text.Trim();
-                string password = PasswordBox_Set_Password.Text.Trim();
+                string serverIP = TextBoxSetServiceIP.Text.Trim();
+                string serverPort = TextBoxSetServicePort.Text.Trim();
+                string databaseName = TextBoxSetDatabaseName.Text.Trim();
+                string username = TextBoxSetUsername.Text.Trim();
+                string password = PasswordBoxSetPassword.Text.Trim();
 
                 if (string.IsNullOrEmpty(serverIP) || string.IsNullOrEmpty(serverPort) ||
                     string.IsNullOrEmpty(databaseName) || string.IsNullOrEmpty(username) ||
@@ -8368,15 +8752,15 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 更新字段值
-                VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text.Trim();
-                VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text.Trim(), out int port) ? port : 3306;
-                VariableDictionary._dataBaseName = TextBox_Set_DatabaseName.Text.Trim();
+                VariableDictionary._serverIP = TextBoxSetServiceIP.Text.Trim();
+                VariableDictionary._serverPort = int.TryParse(TextBoxSetServicePort.Text.Trim(), out int port) ? port : 3306;
+                VariableDictionary._dataBaseName = TextBoxSetDatabaseName.Text.Trim();
                 //VariableDictionary._userName = TextBox_Set_Username.Text.Trim();
                 //VariableDictionary._passWord = PasswordBox_Set_Password.Text.Trim();
-                VariableDictionary._storagePath = TextBox_Set_StoragePath.Text.Trim();
-                VariableDictionary._useDPath = CheckBox_UseDPath.IsChecked ?? true;
-                VariableDictionary._autoSync = CheckBox_AutoSync.IsChecked ?? true;
-                VariableDictionary._syncInterval = int.TryParse(TextBox_SyncInterval.Text, out int interval) ? interval : 30;
+                VariableDictionary._storagePath = TextBoxSetStoragePath.Text.Trim();
+                VariableDictionary._useDPath = CheckBoxUseDPath.IsChecked ?? true;
+                VariableDictionary._autoSync = CheckBoxAutoSync.IsChecked ?? true;
+                VariableDictionary._syncInterval = int.TryParse(TextBoxSyncInterval.Text, out int interval) ? interval : 30;
 
                 // 保存到配置文件
                 Properties.Settings.Default.ServerIP = VariableDictionary._serverIP;
@@ -8562,7 +8946,7 @@ namespace GB_NewCadPlus_IV
 
                 if (openFileDialog.ShowDialog() == true)
                 {
-                    file_Path.Text = openFileDialog.FileName;
+                    filePath.Text = openFileDialog.FileName;
                     LogManager.Instance.LogInfo($"选择Excel文件: {openFileDialog.FileName}");
                 }
             }
@@ -8576,13 +8960,13 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (string.IsNullOrEmpty(file_Path.Text))
+                if (string.IsNullOrEmpty(filePath.Text))
                 {
                     MessageBox.Show("请先选择Excel文件", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                if (!File.Exists(file_Path.Text))
+                if (!File.Exists(filePath.Text))
                 {
                     MessageBox.Show("选择的Excel文件不存在", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
@@ -8596,7 +8980,7 @@ namespace GB_NewCadPlus_IV
                     return;
 
                 // 开始批量导入
-                _fileManager.BatchImportGraphicsAsync(file_Path.Text, _selectedCategoryNode, CategoryPropertiesDataGrid, _categoryTreeNodes);
+                _fileManager.BatchImportGraphicsAsync(filePath.Text, _selectedCategoryNode, CategoryPropertiesDataGrid, _categoryTreeNodes);
             }
             catch (Exception ex)
             {
@@ -15179,6 +15563,841 @@ namespace GB_NewCadPlus_IV
 
 
         #endregion
+
+        private async void 上传客户端_Btn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await UploadClientPackageAsync();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"上传客户端失败: {ex.Message}");
+                MessageBox.Show($"上传客户端失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void 下载最新版客户端_Click(object sender, RoutedEventArgs e)
+        {
+            _ = CheckClientVersionAndPromptUpdateAsync();
+        }
+
+        private void 同步图元_Click(object sender, RoutedEventArgs e)
+        {
+            _ = BuildAndRunSyncAsync();
+        }
+
+        /// <summary>
+        /// 构建同步清单并执行本地镜像同步。
+        /// </summary>
+        private async Task BuildAndRunSyncAsync()
+        {
+            if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
+            {
+                MessageBox.Show("当前数据库未连接，无法执行同步。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            _syncLocalRoot = @"D:\GB_Tools\Cad_Sw_Library";
+            _syncSourceRoot = await GetSharedSourceRootAsync();
+            if (string.IsNullOrWhiteSpace(_syncSourceRoot))
+            {
+                LogManager.Instance.LogInfo("未能确定共享根路径，将尝试直接使用数据库中的本地路径做可访问性检查。");
+            }
+
+            var manifest = await BuildSyncManifestAsync();
+            _lastSyncManifest = manifest;
+
+            var inaccessibleItems = BuildInaccessibleSourceMessages(manifest);
+            if (inaccessibleItems.Count > 0)
+            {
+                LogManager.Instance.LogInfo("同步前源路径不可访问检查结果：" + Environment.NewLine + string.Join(Environment.NewLine, inaccessibleItems));
+
+                var prompt = $"检测到 {inaccessibleItems.Count} 条源文件/预览图不可访问。是否仍然继续同步？" +
+                             Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine + Environment.NewLine, inaccessibleItems);
+                var response = MessageBox.Show(prompt, "源路径检查", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                if (response != MessageBoxResult.OK)
+                {
+                    return;
+                }
+            }
+
+            var progressWindow = new GB_NewCadPlus_IV.SyncProgressWindow();
+            var owner = System.Windows.Window.GetWindow(this);
+            if (owner != null && !ReferenceEquals(owner, progressWindow))
+            {
+                progressWindow.Owner = owner;
+            }
+
+            Exception? syncError = null;
+            bool syncCanceled = false;
+            using var syncCancellationSource = new CancellationTokenSource();
+            _syncCancellationSource = syncCancellationSource;
+            progressWindow.CancelRequested += (_, __) => syncCancellationSource.Cancel();
+
+            var syncTask = ExecuteSyncAsync(manifest, new Progress<SyncProgressInfo>(progressWindow.UpdateProgress), syncCancellationSource.Token);
+
+            progressWindow.Loaded += async (_, __) =>
+            {
+                try
+                {
+                    await syncTask;
+                }
+                catch (OperationCanceledException)
+                {
+                    syncCanceled = true;
+                }
+                catch (Exception ex)
+                {
+                    syncError = ex;
+                }
+                finally
+                {
+                    _syncCancellationSource = null;
+                    progressWindow.Close();
+                }
+            };
+
+            progressWindow.UpdateProgress(new SyncProgressInfo
+            {
+                Stage = "准备同步...",
+                StageDetail = inaccessibleItems.Count > 0
+                    ? $"发现 {inaccessibleItems.Count} 条源文件/预览图不可访问。{Environment.NewLine}{string.Join(Environment.NewLine, inaccessibleItems)}"
+                    : "源路径检查通过",
+                CurrentItem = string.Empty,
+                CompletedOperations = 0,
+                TotalOperations = 0,
+                IsIndeterminate = true
+            });
+
+            try
+            {
+                progressWindow.ShowDialog();
+
+                if (syncCanceled || syncCancellationSource.IsCancellationRequested)
+                {
+                    MessageBox.Show("同步已取消。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                if (syncError != null)
+                {
+                    throw syncError;
+                }
+
+                MessageBox.Show("图元与预览图同步完成。", "同步完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"同步图元失败: {ex.Message}");
+                MessageBox.Show($"同步图元失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 执行同步流程并向进度窗口汇报状态。
+        /// </summary>
+        private async Task ExecuteSyncAsync(SyncManifest manifest, IProgress<SyncProgressInfo> progress, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _syncSemaphore.WaitAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                progress?.Report(new SyncProgressInfo
+                {
+                    Stage = "读取服务器清单",
+                    StageDetail = "正在加载图元与预览图信息...",
+                    CurrentItem = "正在加载图元与预览图信息...",
+                    IsIndeterminate = true
+                });
+
+                var total = manifest.Items.Count * 2 + 1;
+                var completed = 0;
+
+                progress?.Report(new SyncProgressInfo
+                {
+                    Stage = "开始镜像同步",
+                    StageDetail = "正在统计同步任务...",
+                    CurrentItem = $"共 {manifest.Items.Count} 条图元记录",
+                    CompletedOperations = completed,
+                    TotalOperations = total,
+                    IsIndeterminate = false
+                });
+
+                foreach (var item in manifest.Items)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    completed++;
+                    progress?.Report(new SyncProgressInfo
+                    {
+                        Stage = "同步图元文件",
+                        StageDetail = "正在复制图元文件...",
+                        CurrentItem = item.FileName ?? item.FileStoredName ?? $"FileId={item.FileId}",
+                        CompletedOperations = completed,
+                        TotalOperations = total,
+                        IsIndeterminate = false
+                    });
+                }
+
+                var result = await MirrorSyncManifestAsync(manifest, progress, cancellationToken);
+
+                completed = total - 1;
+                progress?.Report(new SyncProgressInfo
+                {
+                    Stage = "保存同步清单",
+                    StageDetail = "正在写入 sync_manifest.json...",
+                    CurrentItem = "正在写入 sync_manifest.json...",
+                    CompletedOperations = completed,
+                    TotalOperations = total,
+                    IsIndeterminate = false
+                });
+
+                cancellationToken.ThrowIfCancellationRequested();
+                await PersistSyncManifestAsync(manifest);
+
+                progress?.Report(new SyncProgressInfo
+                {
+                    Stage = "同步完成",
+                    StageDetail = "同步流程已结束",
+                    CurrentItem = $"图元 {result.TotalFilesSynced}，预览 {result.TotalPreviewsSynced}",
+                    CompletedOperations = total,
+                    TotalOperations = total,
+                    IsIndeterminate = false
+                });
+            }
+            finally
+            {
+                _syncSemaphore.Release();
+            }
+        }
+
+        /// <summary>
+        /// 检查服务器端客户端版本，并提示是否需要更新。
+        /// </summary>
+        private async Task CheckClientVersionAndPromptUpdateAsync()
+        {
+            if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
+            {
+                MessageBox.Show("当前数据库未连接，无法检查客户端版本。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                var serverVersion = await _databaseManager.GetServerClientVersionAsync();
+                if (string.IsNullOrWhiteSpace(serverVersion))
+                {
+                    MessageBox.Show("服务器端未配置客户端版本。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var localVersion = TextBox客户端版本?.Text?.Trim() ?? string.Empty;
+                if (IsRemoteVersionNewer(serverVersion, localVersion))
+                {
+                    var downloadedPath = await DownloadClientPackageAsync(serverVersion);
+                    if (!string.IsNullOrWhiteSpace(downloadedPath))
+                    {
+                        MessageBox.Show($"已下载新版本客户端包：{downloadedPath}", "发现新版本", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show($"检测到新版本：服务器 {serverVersion}，本地 {localVersion}。客户端包尚未配置。", "发现新版本", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show($"当前已是最新版本：{localVersion}。", "版本检查", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"检查客户端版本失败: {ex.Message}");
+                MessageBox.Show($"检查客户端版本失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 构建同步清单。
+        /// </summary>
+        private async Task<SyncManifest> BuildSyncManifestAsync()
+        {
+            var storageRoot = GetConfiguredStorageRoot();
+            var sourceRoot = _syncSourceRoot ?? await ResolveSyncSourceRootAsync();
+            var serverClientVersion = await _databaseManager!.GetServerClientVersionAsync();
+            var files = await _databaseManager.GetAllFileStorageAsync();
+            var manifest = new SyncManifest
+            {
+                StorageRoot = storageRoot,
+                SourceRoot = sourceRoot,
+                ServerClientVersion = serverClientVersion,
+                GeneratedAt = DateTime.Now
+            };
+
+            foreach (var file in files)
+            {
+                var item = await BuildSyncManifestItemAsync(file, storageRoot);
+                manifest.Items.Add(item);
+            }
+
+            return manifest;
+        }
+
+        /// <summary>
+        /// 将同步清单持久化到本地。
+        /// </summary>
+        private async Task PersistSyncManifestAsync(SyncManifest manifest)
+        {
+            var manifestPath = Path.Combine(GetConfiguredStorageRoot(), "sync_manifest.json");
+            var manifestDirectory = Path.GetDirectoryName(manifestPath);
+            if (!string.IsNullOrWhiteSpace(manifestDirectory) && !Directory.Exists(manifestDirectory))
+            {
+                Directory.CreateDirectory(manifestDirectory);
+            }
+
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(manifest, Newtonsoft.Json.Formatting.Indented);
+            await Task.Run(() => File.WriteAllText(manifestPath, json));
+        }
+
+        /// <summary>
+        /// 根据文件存储信息构建单条同步记录。
+        /// </summary>
+        private async Task<SyncManifestItem> BuildSyncManifestItemAsync(FileStorage file, string storageRoot)
+        {
+            var serverFilePath = ResolveSharedSourcePath(file.FilePath, file.FileStoredName, file.FileName);
+            var localFilePath = ResolveLocalMirrorPath(storageRoot, serverFilePath, file.FileStoredName, file.FileName);
+            var serverPreviewPath = ResolveSharedSourcePath(file.PreviewImagePath, file.PreviewImageName, file.PreviewImageName);
+            var localPreviewPath = ResolveLocalMirrorPath(storageRoot, serverPreviewPath, file.PreviewImageName, file.PreviewImageName);
+            var localFileHash = await TryCalculateFileHashAsync(localFilePath);
+            var localPreviewHash = await TryCalculateFileHashAsync(localPreviewPath);
+            var serverPreviewHash = await TryCalculateFileHashAsync(serverPreviewPath);
+            var fileHashDifferent = HasHashDifference(file.FileHash, localFileHash);
+            var previewHashDifferent = HasHashDifference(serverPreviewHash, localPreviewHash);
+
+            return new SyncManifestItem
+            {
+                FileId = file.Id,
+                FileName = file.FileName,
+                FileStoredName = file.FileStoredName,
+                PreviewImageName = file.PreviewImageName,
+                // 同步源必须使用客户端可访问的共享路径，不能继续写回数据库中的服务器本地盘符路径
+                FilePath = serverFilePath,
+                PreviewImagePath = serverPreviewPath,
+                FileHash = file.FileHash,
+                PreviewImageHash = serverPreviewHash,
+                Version = file.Version,
+                UpdatedAt = file.UpdatedAt,
+                LocalFileHash = localFileHash,
+                LocalPreviewHash = localPreviewHash,
+                LocalFilePath = localFilePath,
+                LocalPreviewPath = localPreviewPath,
+                FileHashDifferent = fileHashDifferent,
+                PreviewHashDifferent = previewHashDifferent,
+                ServerFileExists = IsAccessibleSourcePath(serverFilePath, file.FileStoredName, file.FileName),
+                ServerPreviewExists = IsAccessibleSourcePath(serverPreviewPath, file.PreviewImageName, file.PreviewImageName),
+                LocalFileExists = !string.IsNullOrWhiteSpace(localFilePath) && File.Exists(localFilePath),
+                LocalPreviewExists = !string.IsNullOrWhiteSpace(localPreviewPath) && File.Exists(localPreviewPath),
+                DifferenceSummary = BuildDifferenceSummary(fileHashDifferent, previewHashDifferent, localFilePath, localPreviewPath),
+                NeedsFileSync = fileHashDifferent || !File.Exists(localFilePath ?? string.Empty) || !IsAccessibleSourcePath(serverFilePath, file.FileStoredName, file.FileName),
+                NeedsPreviewSync = previewHashDifferent || !File.Exists(localPreviewPath ?? string.Empty) || !IsAccessibleSourcePath(serverPreviewPath, file.PreviewImageName, file.PreviewImageName)
+            };
+        }
+
+        /// <summary>
+        /// 执行同步清单的本地镜像复制。
+        /// </summary>
+        private async Task<(int TotalFilesSynced, int TotalPreviewsSynced)> MirrorSyncManifestAsync(SyncManifest manifest, IProgress<SyncProgressInfo> progress, CancellationToken cancellationToken)
+        {
+            var filesSynced = 0;
+            var previewsSynced = 0;
+            var completed = 0;
+            var total = manifest.Items.Count * 2;
+
+            foreach (var item in manifest.Items)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (item.NeedsFileSync && await TryMirrorFileAsync(item.FilePath, item.LocalFilePath, cancellationToken))
+                {
+                    filesSynced++;
+                    item.LocalFileExists = !string.IsNullOrWhiteSpace(item.LocalFilePath) && File.Exists(item.LocalFilePath);
+                    item.LocalFileHash = await TryCalculateFileHashAsync(item.LocalFilePath);
+                }
+
+                completed++;
+                progress?.Report(new SyncProgressInfo
+                {
+                    Stage = "同步图元文件",
+                    CurrentItem = item.FileName ?? item.FileStoredName ?? $"FileId={item.FileId}",
+                    CompletedOperations = completed,
+                    TotalOperations = total,
+                    IsIndeterminate = false,
+                    StageDetail = item.NeedsFileSync ? "正在复制图元文件..." : "图元文件已是最新"
+                });
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (item.NeedsPreviewSync && await TryMirrorFileAsync(item.PreviewImagePath, item.LocalPreviewPath, cancellationToken))
+                {
+                    previewsSynced++;
+                    item.LocalPreviewExists = !string.IsNullOrWhiteSpace(item.LocalPreviewPath) && File.Exists(item.LocalPreviewPath);
+                    item.LocalPreviewHash = await TryCalculateFileHashAsync(item.LocalPreviewPath);
+                }
+
+                completed++;
+                progress?.Report(new SyncProgressInfo
+                {
+                    Stage = "同步预览图",
+                    CurrentItem = item.PreviewImageName ?? item.FileStoredName ?? $"FileId={item.FileId}",
+                    CompletedOperations = completed,
+                    TotalOperations = total,
+                    IsIndeterminate = false,
+                    StageDetail = item.NeedsPreviewSync ? "正在复制预览图..." : "预览图已是最新"
+                });
+
+                item.LocalFileHash = await TryCalculateFileHashAsync(item.LocalFilePath);
+                item.LocalPreviewHash = await TryCalculateFileHashAsync(item.LocalPreviewPath);
+                item.LocalFileExists = !string.IsNullOrWhiteSpace(item.LocalFilePath) && File.Exists(item.LocalFilePath);
+                item.LocalPreviewExists = !string.IsNullOrWhiteSpace(item.LocalPreviewPath) && File.Exists(item.LocalPreviewPath);
+                item.FileHashDifferent = HasHashDifference(item.FileHash, item.LocalFileHash);
+                item.PreviewHashDifferent = HasHashDifference(item.PreviewImageHash, item.LocalPreviewHash);
+                item.NeedsFileSync = item.FileHashDifferent || !item.LocalFileExists || !item.ServerFileExists;
+                item.NeedsPreviewSync = item.PreviewHashDifferent || !item.LocalPreviewExists || !item.ServerPreviewExists;
+                item.DifferenceSummary = BuildDifferenceSummary(item.FileHashDifferent, item.PreviewHashDifferent, item.LocalFilePath, item.LocalPreviewPath);
+            }
+
+            return (filesSynced, previewsSynced);
+        }
+
+        /// <summary>
+        /// 检查源路径是否真的可访问；不可访问时尝试用共享根路径重建。
+        /// </summary>
+        private bool IsAccessibleSourcePath(string? sourcePath, string? storedName, string? fileName)
+        {
+            var normalized = ResolveSharedSourcePath(sourcePath, storedName, fileName);
+            if (!string.IsNullOrWhiteSpace(normalized) && File.Exists(normalized))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(sourcePath) && File.Exists(sourcePath))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 按共享根路径重建源文件候选路径。
+        /// </summary>
+        private string? ResolveSharedSourcePath(string? originalPath, string? storedName, string? fileName)
+        {
+            var root = NormalizePathCandidate(_syncSourceRoot);
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                var normalized = NormalizePathCandidate(originalPath);
+                return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+            }
+
+            var candidate = NormalizePathCandidate(originalPath);
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                var localRoot = NormalizePathCandidate(_syncLocalRoot);
+                if (!string.IsNullOrWhiteSpace(localRoot) && candidate.StartsWith(localRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    var relative = candidate.Substring(localRoot.Length).TrimStart('\\', '/');
+                    return string.IsNullOrWhiteSpace(relative) ? root : Path.Combine(root, relative);
+                }
+
+                if (Path.IsPathRooted(candidate))
+                {
+                    var driveRoot = Path.GetPathRoot(candidate);
+                    if (!string.IsNullOrWhiteSpace(driveRoot) && candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return candidate;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(driveRoot) && candidate.Length > driveRoot.Length)
+                    {
+                        var relative = candidate.Substring(driveRoot.Length).TrimStart('\\', '/');
+                        return Path.Combine(root, relative);
+                    }
+                }
+                else
+                {
+                    return Path.Combine(root, candidate);
+                }
+            }
+
+            var fallbackName = !string.IsNullOrWhiteSpace(storedName) ? storedName : fileName;
+            return string.IsNullOrWhiteSpace(fallbackName) ? null : Path.Combine(root, fallbackName);
+        }
+
+        /// <summary>
+        /// 将单个文件从服务器路径复制到本地镜像路径。
+        /// </summary>
+        private async Task<bool> TryMirrorFileAsync(string? sourcePath, string? localPath, CancellationToken cancellationToken)
+        {
+            var normalizedSourcePath = NormalizePathCandidate(sourcePath);
+            var normalizedLocalPath = NormalizePathCandidate(localPath);
+
+            if (string.IsNullOrWhiteSpace(normalizedSourcePath) || string.IsNullOrWhiteSpace(normalizedLocalPath))
+            {
+                return false;
+            }
+
+            if (string.Equals(normalizedSourcePath, normalizedLocalPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return File.Exists(normalizedSourcePath);
+            }
+
+            if (!File.Exists(normalizedSourcePath))
+            {
+                return false;
+            }
+
+            var localDirectory = Path.GetDirectoryName(normalizedLocalPath);
+            if (!string.IsNullOrWhiteSpace(localDirectory) && !Directory.Exists(localDirectory))
+            {
+                Directory.CreateDirectory(localDirectory);
+            }
+
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Copy(normalizedSourcePath, normalizedLocalPath, true);
+            }, cancellationToken);
+            return true;
+        }
+
+        /// <summary>
+        /// 获取当前使用的本地存储根目录。
+        /// </summary>
+        private string GetConfiguredStorageRoot()
+        {
+            var configured = TextBoxSetStoragePath?.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(configured))
+            {
+                configured = @"D:\GB_Tools\Cad_Sw_Library";
+            }
+
+            return configured;
+        }
+
+        /// <summary>
+        /// 获取用于同步源的共享根路径，优先使用数据库配置，其次使用登录窗口中的服务器地址回退。
+        /// </summary>
+        private async Task<string> GetSharedSourceRootAsync()
+        {
+            var configured = _syncSourceRoot;
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                return NormalizePathCandidate(configured) ?? string.Empty;
+            }
+
+            if (_databaseManager != null)
+            {
+                configured = await _databaseManager.GetSystemConfigValueAsync("SourceRoot");
+                if (!string.IsNullOrWhiteSpace(configured))
+                {
+                    return NormalizePathCandidate(configured) ?? string.Empty;
+                }
+
+                configured = await _databaseManager.GetSystemConfigValueAsync("StorageRoot");
+                if (!string.IsNullOrWhiteSpace(configured))
+                {
+                    return NormalizePathCandidate(configured) ?? string.Empty;
+                }
+            }
+
+            var serverIp = VariableDictionary._serverIP?.Trim();
+            if (string.IsNullOrWhiteSpace(serverIp))
+            {
+                return string.Empty;
+            }
+
+            return $@"\\{serverIp}\GB_Tools\Cad_Sw_Library";
+        }
+
+        /// <summary>
+        /// 规范化候选路径。
+        /// </summary>
+        private static string? NormalizePathCandidate(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            return path.Replace('/', '\\').Trim();
+        }
+
+        /// <summary>
+        /// 根据服务器路径和存储根推导本地镜像路径。
+        /// </summary>
+        private static string? ResolveLocalMirrorPath(string storageRoot, string? serverPath, string? storedName, string? fileName)
+        {
+            if (string.IsNullOrWhiteSpace(storageRoot))
+            {
+                return null;
+            }
+
+            var root = storageRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var candidate = NormalizePathCandidate(serverPath);
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                if (Path.IsPathRooted(candidate))
+                {
+                    if (candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return candidate;
+                    }
+
+                    var relative = GetLibraryRelativePath(candidate);
+                    if (!string.IsNullOrWhiteSpace(relative))
+                    {
+                        return Path.Combine(root, relative);
+                    }
+
+                    return Path.Combine(root, Path.GetFileName(candidate));
+                }
+
+                return Path.Combine(root, candidate);
+            }
+
+            var fallbackName = !string.IsNullOrWhiteSpace(storedName) ? storedName : fileName;
+            return string.IsNullOrWhiteSpace(fallbackName) ? null : Path.Combine(root, fallbackName);
+        }
+
+        /// <summary>
+        /// 从路径中提取相对于 Cad_Sw_Library 的相对路径，避免把 Cad_Sw_Library 重复拼接两次。
+        /// </summary>
+        private static string? GetLibraryRelativePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            var normalized = path.Replace('/', '\\').Trim();
+            var marker = $"{Path.DirectorySeparatorChar}Cad_Sw_Library{Path.DirectorySeparatorChar}";
+            var markerIndex = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex >= 0)
+            {
+                var relativeStart = markerIndex + marker.Length;
+                if (relativeStart < normalized.Length)
+                {
+                    return normalized.Substring(relativeStart).TrimStart('\\', '/');
+                }
+            }
+
+            if (normalized.EndsWith($"{Path.DirectorySeparatorChar}Cad_Sw_Library", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Empty;
+            }
+
+            var root = Path.GetPathRoot(normalized);
+            if (!string.IsNullOrWhiteSpace(root) && normalized.Length > root.Length)
+            {
+                return normalized.Substring(root.Length).TrimStart('\\', '/');
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 判断是否需要同步。
+        /// </summary>
+        private static bool NeedsSync(string? sourcePath, string? localPath)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(localPath))
+            {
+                return false;
+            }
+
+            return !File.Exists(localPath) || !File.Exists(sourcePath);
+        }
+
+        /// <summary>
+        /// 判断两个哈希是否不同。
+        /// </summary>
+        private static bool HasHashDifference(string? remoteHash, string? localHash)
+        {
+            var normalizedRemote = remoteHash?.Trim() ?? string.Empty;
+            var normalizedLocal = localHash?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(normalizedRemote) && string.IsNullOrWhiteSpace(normalizedLocal))
+            {
+                return false;
+            }
+
+            return !string.Equals(normalizedRemote, normalizedLocal, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// 生成差异摘要，便于排查增量同步。
+        /// </summary>
+        private static string BuildDifferenceSummary(bool fileHashDifferent, bool previewHashDifferent, string? localFilePath, string? localPreviewPath)
+        {
+            var parts = new List<string>();
+
+            if (fileHashDifferent)
+            {
+                parts.Add("图元文件hash不同");
+            }
+
+            if (previewHashDifferent)
+            {
+                parts.Add("预览图hash不同");
+            }
+
+            if (!File.Exists(localFilePath ?? string.Empty))
+            {
+                parts.Add("图元文件本地缺失");
+            }
+
+            if (!File.Exists(localPreviewPath ?? string.Empty))
+            {
+                parts.Add("预览图本地缺失");
+            }
+
+            return parts.Count == 0 ? "已同步" : string.Join(";", parts);
+        }
+
+        /// <summary>
+        /// 选择并上传客户端包，同时保存版本与包路径。
+        /// </summary>
+        private async Task UploadClientPackageAsync()
+        {
+            if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
+            {
+                MessageBox.Show("当前数据库未连接，无法上传客户端包。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var version = TextBox插件版本?.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                MessageBox.Show("请先填写服务器版本号。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择客户端安装包",
+                Filter = "客户端包|*.zip;*.7z;*.rar;*.exe;*.msi|所有文件|*.*",
+                CheckFileExists = true,
+                Multiselect = false
+            };
+
+            if (openFileDialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            var sourcePath = openFileDialog.FileName;
+            var targetDir = Path.Combine(GetConfiguredStorageRoot(), "ClientPackages");
+            if (!Directory.Exists(targetDir))
+            {
+                Directory.CreateDirectory(targetDir);
+            }
+
+            var targetPath = Path.Combine(targetDir, $"Client_{version}{Path.GetExtension(sourcePath)}");
+            await Task.Run(() => File.Copy(sourcePath, targetPath, true));
+
+            await _databaseManager.SetSystemConfigValueAsync("ClientVersion", version);
+            await _databaseManager.SetSystemConfigValueAsync("ClientPackagePath", targetPath);
+
+            TextBox客户端版本.Text = version;
+            MessageBox.Show($"客户端包已保存：{targetPath}\n版本已写入数据库：{version}", "上传完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// 通过文件路径计算哈希。
+        /// </summary>
+        private static async Task<string?> TryCalculateFileHashAsync(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return await FileManager.CalculateFileHashAsync(stream);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// 下载客户端包到本地缓存目录。
+        /// </summary>
+        private async Task<string> DownloadClientPackageAsync(string serverVersion)
+        {
+            var packagePath = await _databaseManager!.GetSystemConfigValueAsync("ClientPackagePath");
+            if (string.IsNullOrWhiteSpace(packagePath))
+            {
+                return string.Empty;
+            }
+
+            if (!File.Exists(packagePath))
+            {
+                return string.Empty;
+            }
+
+            var downloadDir = Path.Combine(GetConfiguredStorageRoot(), "ClientPackages");
+            if (!Directory.Exists(downloadDir))
+            {
+                Directory.CreateDirectory(downloadDir);
+            }
+
+            var targetPath = Path.Combine(downloadDir, $"Client_{serverVersion}{Path.GetExtension(packagePath)}");
+            await Task.Run(() => File.Copy(packagePath, targetPath, true));
+            return targetPath;
+        }
+
+        /// <summary>
+        /// 判断服务器版本是否高于本地版本。
+        /// </summary>
+        private static bool IsRemoteVersionNewer(string serverVersion, string localVersion)
+        {
+            if (string.IsNullOrWhiteSpace(serverVersion))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(localVersion))
+            {
+                return true;
+            }
+
+            var serverParts = serverVersion.Split('.');
+            var localParts = localVersion.Split('.');
+            var length = Math.Max(serverParts.Length, localParts.Length);
+
+            for (var i = 0; i < length; i++)
+            {
+                var serverPart = i < serverParts.Length && int.TryParse(serverParts[i], out var s) ? s : 0;
+                var localPart = i < localParts.Length && int.TryParse(localParts[i], out var l) ? l : 0;
+
+                if (serverPart > localPart)
+                {
+                    return true;
+                }
+
+                if (serverPart < localPart)
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
     }
     /// <summary>
     /// DataGrid 绑定使用的行模型（用于 LayerDictionary_DataGrid）

@@ -8,12 +8,7 @@ using static GB_NewCadPlus_IV.WpfMainWindow;
 using DataTable = System.Data.DataTable;
 using MessageBox = System.Windows.MessageBox;
 using TextBox = System.Windows.Controls.TextBox;
-using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.FileStorage; // 文件存储别名
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.FileAttribute; // 文件属性别名
-using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.CadCategory; // 分类别名
-using CadSubcategory = GB_NewCadPlus_IV.FunctionalMethod.CadSubcategory; // 子分类别名
-using FileTag = GB_NewCadPlus_IV.FunctionalMethod.FileTag; // 文件标签别名
-using FileAccessLog = GB_NewCadPlus_IV.FunctionalMethod.FileAccessLog; // 文件访问日志别名
+
 
 namespace GB_NewCadPlus_IV.FunctionalMethod
 {

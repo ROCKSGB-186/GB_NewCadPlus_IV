@@ -15,8 +15,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         public static string? _serverIP;//服务器IP地址
         public static int _serverPort;//服务器端口号
         public static string _dataBaseName = "cad_sw_library";//数据库名称
-        public static string? _userName;//用户名
-        public static string? _passWord;//密码
+        public static string? _userName;//应用登录用户名（users 表）
+        public static string? _passWord;//应用登录密码（users 表）
+        public static string? _dbUserName;//数据库物理连接用户名（如 SYSDBA/root）
+        public static string? _dbPassWord;//数据库物理连接密码（如 675756SGBsgb/123456）
         public static string? _databaseType = "DM"; // 数据库类型: MySQL 或 DM
         public static string? _storagePath;//数据库存储路径
         public static bool _useDPath;//是否使用DPath

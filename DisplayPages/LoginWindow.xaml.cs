@@ -81,7 +81,7 @@ namespace GB_NewCadPlus_IV
             {
                 // MySQL 常用端口，只有在端口输入为空或为达梦默认时才替换为 MySQL 默认
                 if (string.IsNullOrWhiteSpace(TxtServerPort.Text))
-                    TxtServerPort.Text = "3306"; // MySQL 常见端口，项目中曾用 3308 可按需修改
+                    TxtServerPort.Text = "3308"; // MySQL 默认端口按项目约定使用 3308
                 if (string.IsNullOrWhiteSpace(TxtUsername.Text))
                     TxtUsername.Text = "root"; // MySQL 管理用户，生产请替换为低权限用户
                 if (string.IsNullOrWhiteSpace(PwdBox.Password))
@@ -104,9 +104,11 @@ namespace GB_NewCadPlus_IV
             // 把选择写入全局变量，后续异步任务会读取这些值
             VariableDictionary._databaseType = selectedDb;
             VariableDictionary._serverIP = TxtServerIP.Text.Trim();
-            VariableDictionary._serverPort = int.TryParse(TxtServerPort.Text.Trim(), out int port) ? port : (selectedDb == "MYSQL" ? 3306 : 5236);
-            VariableDictionary._userName = TxtUsername.Text.Trim(); // UI 上的用户名（可能是管理账号用于初始化）
-            VariableDictionary._passWord = PwdBox.Password; // UI 上的密码
+            VariableDictionary._serverPort = int.TryParse(TxtServerPort.Text.Trim(), out int port) ? port : (selectedDb == "MYSQL" ? 3308 : 5236);
+            VariableDictionary._userName = TxtUsername.Text.Trim(); // 应用登录用户名
+            VariableDictionary._passWord = PwdBox.Password; // 应用登录密码
+            VariableDictionary._dbUserName = selectedDb == "MYSQL" ? "root" : "SYSDBA"; // 物理连接账号
+            VariableDictionary._dbPassWord = selectedDb == "MYSQL" ? "123456" : "675756SGBsgb"; // 物理连接密码
 
             // 快速 TCP 层连通性检测，使用当前全局端口
             bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._serverPort));
@@ -114,7 +116,7 @@ namespace GB_NewCadPlus_IV
             {
                 // 首次尝试失败：提示用户填写有效服务器IP/端口（保留端口提示）
                 TxtStatus.Text = $"无法连接到服务器 {VariableDictionary._serverIP}:{VariableDictionary._serverPort}，请在上方输入正确的服务器IP/端口后点击“保存服务器\\端口”。";
-                TxtServerPort.Text = VariableDictionary._databaseType == "MYSQL" ? "3306" : "5236";
+                TxtServerPort.Text = VariableDictionary._databaseType == "MYSQL" ? "3308" : "5236";
                 TxtServerIP.Focus();
                 CmbDepartments.ItemsSource = null;
                 return;
@@ -148,14 +150,19 @@ namespace GB_NewCadPlus_IV
                 //var uiPwd = string.IsNullOrWhiteSpace(PwdBox.Password) ? "SYSDBA" : PwdBox.Password; // 密码（在后台使用）
 
 
-                var uiUser = "SYSDBA" ; // 用户名（在后台使用）
-                var uiPwd = "675756SGBsgb" ; // 密码（在后台使用）
+                var selectedDb = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant(); // 读取当前数据库类型
+                var uiUser = string.IsNullOrWhiteSpace(VariableDictionary._dbUserName)
+                    ? (selectedDb == "MYSQL" ? "root" : "SYSDBA")
+                    : VariableDictionary._dbUserName.Trim(); // 部门读取使用物理连接账号
+                var uiPwd = string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord)
+                    ? (selectedDb == "MYSQL" ? "123456" : "675756SGBsgb")
+                    : VariableDictionary._dbPassWord; // 部门读取使用物理连接密码
 
                 try
                 {
                     // 使用在 UI 线程捕获的用户名/密码创建服务实例，避免直接访问控件
                     // 根据当前选择的数据库类型决定使用 DM 或 MySQL 的 AuthService
-                    var selectedDb = VariableDictionary._databaseType ?? "DM";
+                    selectedDb = VariableDictionary._databaseType ?? "DM";
                     try
                     {
                         if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
@@ -383,8 +390,11 @@ namespace GB_NewCadPlus_IV
                 }
                 VariableDictionary._serverIP = TxtServerIP.Text.Trim();
                 VariableDictionary._serverPort = int.TryParse(TxtServerPort.Text.Trim(), out int port) ? port : 5236;
-                VariableDictionary._userName = TxtUsername.Text.Trim();
-                VariableDictionary._passWord = PwdBox.Password.Trim();
+            VariableDictionary._userName = TxtUsername.Text.Trim();
+            VariableDictionary._passWord = PwdBox.Password.Trim();
+            var dbTypeForLogin = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant();
+            VariableDictionary._dbUserName = dbTypeForLogin == "MYSQL" ? "root" : "SYSDBA";
+            VariableDictionary._dbPassWord = dbTypeForLogin == "MYSQL" ? "123456" : "675756SGBsgb";
                 // 恢复配置中的数据库类型（如果存在）并同步到 UI
                 try
                 {
@@ -555,8 +565,8 @@ namespace GB_NewCadPlus_IV
                             var svc = new MySqlAuthService(
                                 VariableDictionary._serverIP,
                                 VariableDictionary._serverPort.ToString(),
-                                "root",
-                                "123456"
+                                VariableDictionary._dbUserName,
+                                VariableDictionary._dbPassWord
                             );
                             svc.EnsureAllTablesExist(); // 确保业务表结构完整
                             // 最终使用用户输入的账号密码在 USERS 表中进行业务身份认证
@@ -569,8 +579,8 @@ namespace GB_NewCadPlus_IV
                             var svc = new DMAuthService(
                                 VariableDictionary._serverIP,
                                 VariableDictionary._serverPort.ToString(),
-                                "SYSDBA",
-                                "675756SGBsgb"
+                                VariableDictionary._dbUserName,
+                                VariableDictionary._dbPassWord
                             );
                             svc.EnsureAllTablesExist(); // 强制初始化或检查表结构
                             // 在物理连接成功的基础上，通过 SQL 查询验证应用用户身份
@@ -613,11 +623,24 @@ namespace GB_NewCadPlus_IV
                         {
                             try
                             {
-                                string dbPart = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName)
-                                    ? string.Empty
-                                    : $"Schema={VariableDictionary._dataBaseName};";
-                                VariableDictionary._newConnectionString =
-                                    $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};{dbPart}User Id={VariableDictionary._userName};Password={VariableDictionary._passWord};";
+                                // 统一入口：根据数据库类型组装连接串，避免后续主窗口静默连接与登录连接不一致
+                                string dbType = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant();
+                                if (dbType == "MYSQL")
+                                {
+                                    string dbPart = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName)
+                                        ? "Database=cad_sw_library;"
+                                        : $"Database={VariableDictionary._dataBaseName};";
+                                    VariableDictionary._newConnectionString =
+                                        $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};{dbPart}Uid={VariableDictionary._dbUserName};Pwd={VariableDictionary._dbPassWord};Allow User Variables=True;";
+                                }
+                                else
+                                {
+                                    string dbPart = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName)
+                                        ? "Schema=CAD_SW_LIBRARY;"
+                                        : $"Schema={VariableDictionary._dataBaseName};";
+                                    VariableDictionary._newConnectionString =
+                                        $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};{dbPart}User Id={VariableDictionary._dbUserName};Password={VariableDictionary._dbPassWord};";
+                                }
 
                                 return new DatabaseManager(VariableDictionary._newConnectionString);
                             }
@@ -815,7 +838,7 @@ namespace GB_NewCadPlus_IV
                         if (string.IsNullOrWhiteSpace(TxtServerPort.Text))
                             TxtServerPort.Text = "3308"; // 你的 MySQL 端口示例
                         if (string.IsNullOrWhiteSpace(TxtUsername.Text))
-                            TxtUsername.Text = "sa"; // 常见测试用户（请在生产中替换）
+                            TxtUsername.Text = "root"; // MySQL 管理连接默认账号
                         // 不自动设置密码，避免写入明文
                     }
                     else
