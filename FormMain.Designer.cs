@@ -4282,7 +4282,7 @@ namespace GB_NewCadPlus_IV
             this.label_VER.Name = "label_VER";
             this.label_VER.Size = new System.Drawing.Size(109, 20);
             this.label_VER.TabIndex = 0;
-            this.label_VER.Text = "2.26.04.20.0119";
+            this.label_VER.Text = "2.26.05.11.0122";
             // 
             // button_向右下
             // 

@@ -315,8 +315,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 显示主窗体
         /// </summary>
-        [CommandMethod(nameof(gfff))]
-        public static void gfff()
+        [CommandMethod(nameof(ffff))]
+        public static void ffff()
         {
             try
             {
@@ -337,8 +337,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 LogManager.Instance.LogError($"错误堆栈: {ex.StackTrace}");
             }
         }
-        [CommandMethod(nameof(ffff))]
-        public static void ffff()
+        [CommandMethod(nameof(gfff))]
+        public static void gfff()
         {
             try
             {

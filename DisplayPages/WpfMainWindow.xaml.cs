@@ -58,9 +58,9 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private FileStorage? _currentFileStorage;
         /// <summary>
-        /// 当前文件属性信息
+        /// (已废弃) 当前文件属性信息
         /// </summary>
-        private FileAttribute? _currentFileAttribute;
+        // private FileAttribute? _currentFileAttribute;
         /// <summary>
         /// 数据库连接字符串
         /// </summary>
@@ -78,9 +78,9 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private string? _selectedFilePath;
         /// <summary>
-        /// 文件属性信息
+        /// (已废弃) 文件属性信息
         /// </summary>
-        private FileAttribute? _selectedFileAttribute;
+        // private FileAttribute? _selectedFileAttribute;
         /// <summary>
         /// 文件管理器
         /// </summary>
@@ -1696,19 +1696,19 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 获取本地预览缓存文件名。
         /// </summary>
-        private static string GetPreviewCacheFileName(FileStorage fileStorage, string previewImagePath)
-        {
-            var sourceName = !string.IsNullOrWhiteSpace(fileStorage?.PreviewImageName)
-                ? fileStorage.PreviewImageName
-                : Path.GetFileName(previewImagePath);
+        //private static string GetPreviewCacheFileName(FileStorage fileStorage, string previewImagePath)
+        //{
+        //    var sourceName = !string.IsNullOrWhiteSpace(fileStorage?.PreviewImageName)
+        //        ? fileStorage.PreviewImageName
+        //        : Path.GetFileName(previewImagePath);
 
-            if (string.IsNullOrWhiteSpace(sourceName))
-            {
-                sourceName = "preview.png";
-            }
+        //    if (string.IsNullOrWhiteSpace(sourceName))
+        //    {
+        //        sourceName = "preview.png";
+        //    }
 
-            return sourceName;
-        }
+        //    return sourceName;
+        //}
 
         /// <summary>
         /// 从文件加载图片（带错误处理）
@@ -1816,24 +1816,24 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 来执行清理操作。
         /// </summary>
-        protected void CleanupOnClosing(CancelEventArgs e)
-        {
-            try
-            {
-                // 停止同步或其它需要清理的服务（如果有）
-                //_serverSyncManager?.StopSync();
+        //protected void CleanupOnClosing(CancelEventArgs e)
+        //{
+        //    try
+        //    {
+        //        // 停止同步或其它需要清理的服务（如果有）
+        //        //_serverSyncManager?.StopSync();
 
-                // 清理图片缓存
-                CleanupInvalidImageCache();
-                // 清理项目临时文件（管道表/计算表/AutoCadHelper临时DWG）
-                CleanupGeneratedTempArtifacts();
-                // 如果有其它需要释放的资源或取消的操作，在这里处理
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"关闭窗口时清理缓存失败: {ex.Message}");
-            }
-        }
+        //        // 清理图片缓存
+        //        CleanupInvalidImageCache();
+        //        // 清理项目临时文件（管道表/计算表/AutoCadHelper临时DWG）
+        //        CleanupGeneratedTempArtifacts();
+        //        // 如果有其它需要释放的资源或取消的操作，在这里处理
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"关闭窗口时清理缓存失败: {ex.Message}");
+        //    }
+        //}
 
         /// <summary>
         /// 删除单个临时文件（失败不抛异常）
@@ -1912,39 +1912,7 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show($"清理缓存失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-        /// <summary>
-        /// 获取缩放比例
-        /// </summary>
-        /// <param name="fileStorage"></param>
-        /// <returns></returns>
-        private double GetScaleFromFileStorage(FileStorage fileStorage)
-        {
-            // 尝试从 FileStorage 以兼容的方式读取 Scale 字段（支持 "Scale" 或 "scale"，并兼容多种数值类型）
-            try
-            {
-                if (fileStorage == null) return VariableDictionary.blockScale;
-
-                var t = fileStorage.GetType();
-                var prop = t.GetProperty("Scale") ?? t.GetProperty("scale");
-                if (prop != null)
-                {
-                    var val = prop.GetValue(fileStorage);
-                    if (val == null) return VariableDictionary.blockScale;
-
-                    if (val is double d) return d;
-                    if (val is float f) return Convert.ToDouble(f);
-                    if (val is decimal dec) return Convert.ToDouble(dec);
-                    if (val is int iv) return Convert.ToDouble(iv);
-                    if (double.TryParse(val.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
-                        return parsed;
-                }
-            }
-            catch
-            {
-                // 忽略，返回默认
-            }
-            return VariableDictionary.blockScale;
-        }
+      
 
         #region 文件按钮点击与拖拽处理
 
@@ -2286,25 +2254,31 @@ namespace GB_NewCadPlus_IV
                 // 例如当拖拽启动并需要提供文件路径给下游时：
                 if (_isButtonMouseDown && !_isButtonDragging)
                 {
+                    // 计算当前鼠标位置与起点的差值，判断是否超过系统定义的拖拽阈值
                     Vector diff = e.GetPosition(null) - _buttonDragStartPoint;
                     if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
                         Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
                     {
-                        _isButtonDragging = true;
+                        _isButtonDragging = true; // 标记为正在拖拽，避免重复触发
                         if (sender is Button btn)
                         {
+                            // 关键修正：拖拽时也通过 Tag 解析出 FileStorage，并确保使用同一个本地缓存文件路径，避免不同操作使用了不同的缓存副本导致混乱。
                             FileStorage? fileStorage = ResolveFileStorageFromTag(btn.Tag);
-                            if (fileStorage != null)
+                            if (fileStorage != null) // 确保解析成功
                             {
+                                // 这里的 localPath 是确保存在且稳定的本地缓存路径，供拖拽使用
                                 var localPath = await EnsureLocalCachedFilePathAsync(fileStorage);
+                                // 只有在成功获取到本地缓存路径时才启动拖拽，确保下游接收方能正确获取文件
                                 if (!string.IsNullOrWhiteSpace(localPath))
                                 {
                                     // 开始拖拽并附带本地文件路径（示例）
                                     //DataObject data = new DataObject(DataFormats.FileDrop, new string[] { localPath });
                                     //System.Windows.DragDrop.DoDragDrop(btn, data, DragDropEffects.Copy);
                                     // 使用完全限定名以消除歧义，localPath 为本地文件路径
-                                    var data = new System.Windows.DataObject(System.Windows.DataFormats.FileDrop, new string[] { localPath }); // DataObject 使用 WPF 类型
-                                    System.Windows.DragDrop.DoDragDrop(btn, data, System.Windows.DragDropEffects.Copy); // DragDropEffects 使用 WPF 类型
+                                    //var data = new System.Windows.DataObject(System.Windows.DataFormats.FileDrop, new string[] { localPath }); // DataObject 使用 WPF 类型
+                                    //System.Windows.DragDrop.DoDragDrop(btn, data, System.Windows.DragDropEffects.Copy); // DragDropEffects 使用 WPF 类型
+                                    var (ok, err) = await ExecuteInsertAndWaitResultAsync(localPath);
+                                    if (!ok) LogManager.Instance.LogWarning($"插入失败: {err}");
                                 }
                             }
                         }
@@ -2316,7 +2290,6 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogError($"拖拽处理出错: {ex.Message}");
             }
         }
-
 
         //private async void DynamicButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         //{
@@ -2936,32 +2909,36 @@ namespace GB_NewCadPlus_IV
         /// 统一写入文件信息面板（避免重复代码）
         /// </summary>
         private void UpdateFileInfoPanel(
-            string? filePath,
-            string? displayName,
-            string? fileType,
-            long? fileSizeBytes,
-            string? previewPath,
+            string? filePath,// 优先显示物理路径，如果需要也可以改为显示逻辑路径或其他标识
+            string? displayName,// 显示名称优先，如果没有则显示文件名，是否格式化显示名称（例如去除前缀、下划线等）根据实际需求调整
+            string? fileType,// 优先显示文件类型，如果没有则可以考虑从路径提取扩展名
+            long? fileSizeBytes,// 显示文件大小（字节），如果没有则显示为 null
+            string? previewPath,// 显示预览图片路径，如果没有则显示为 "无预览图片"
             bool formatDisplayName)
         {
+            // 201229：新增对 null 值的处理，避免直接赋值给 Text 属性时抛异常
             this.filePath.Text = filePath ?? string.Empty;
-
+            // 201229：新增对 displayName 的 null 或空白处理，避免直接赋值给 Text 属性时抛异常，同时根据 formatDisplayName 决定是否格式化显示名称
             var finalName = displayName ?? string.Empty;
+            // 201229：新增对格式化显示名称的处理，避免直接赋值给 Text 属性时抛异常，同时根据 formatDisplayName 决定是否格式化显示名称
             if (formatDisplayName && !string.IsNullOrWhiteSpace(finalName))
             {
-                finalName = FormatFileNameForDisplay(finalName);
+                finalName = FormatFileNameForDisplay(finalName);// 根据实际需求实现格式化逻辑，例如去除前缀、下划线等    
             }
-            FileName.Text = finalName;
-
+            FileName.Text = finalName;// 201229：新增对 null 值的处理，避免直接赋值给 Text 属性时抛异常
+            // 201229：新增对 fileType 的 null 或空白处理，避免直接赋值给 Text 属性时抛异常，同时如果 fileType 为空则尝试从 filePath 提取扩展名作为文件类型显示
             FileSize.Text = (fileSizeBytes.HasValue && fileSizeBytes.Value > 0)
                 ? $"{fileSizeBytes.Value / 1024.0:F2} KB"
                 : string.Empty;
-
+            // 201229：新增对 fileType 的 null 或空白处理，避免直接赋值给 Text 属性时抛异常，同时如果 fileType 为空则尝试从 filePath 提取扩展名作为文件类型显示
             ClientVersion.Text = fileType ?? string.Empty;
+            // 201229：新增对 ClientVersion 的显示逻辑，如果 fileType 为空则尝试从 filePath 提取扩展名作为文件类型显示，避免直接赋值给 Text 属性时抛异常
             if (string.IsNullOrWhiteSpace(ClientVersion.Text) && !string.IsNullOrWhiteSpace(filePath))
             {
+                // 201229：新增对 ClientVersion 的显示逻辑，如果 fileType 为空则尝试从 filePath 提取扩展名作为文件类型显示，避免直接赋值给 Text 属性时抛异常
                 ClientVersion.Text = Path.GetExtension(filePath).ToLowerInvariant();
             }
-
+            // 201229：新增对 previewPath 的 null 或空白处理，避免直接赋值给 Text 属性时抛异常，同时如果 previewPath 为空则显示为 "无预览图片"
             viewFilePath.Text = string.IsNullOrWhiteSpace(previewPath) ? "无预览图片" : previewPath;
         }
 
@@ -2972,20 +2949,20 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(filePath))
+                if (string.IsNullOrWhiteSpace(filePath))// 201229：新增对空路径的处理，避免 FileInfo 抛异常
                 {
-                    UpdateFileInfoPanel(string.Empty, string.Empty, string.Empty, null, string.Empty, false);
+                    UpdateFileInfoPanel(string.Empty, string.Empty, string.Empty, null, string.Empty, false);// 清空面板显示
                     return;
                 }
-
+                // 201229：新增对文件不存在的处理，避免 FileInfo 抛异常
                 var fileInfo = new FileInfo(filePath);
                 UpdateFileInfoPanel(
-                    filePath: filePath,
-                    displayName: fileInfo.Name,
-                    fileType: fileInfo.Extension.ToLowerInvariant(),
-                    fileSizeBytes: fileInfo.Exists ? fileInfo.Length : null,
-                    previewPath: viewFilePath.Text,
-                    formatDisplayName: false);
+                    filePath: filePath,// 优先显示物理路径，如果需要也可以改为显示逻辑路径或其他标识
+                    displayName: fileInfo.Name,// 显示文件名（含扩展名），如果需要也可以改为显示更友好的名称
+                    fileType: fileInfo.Extension.ToLowerInvariant(),// 优先显示文件类型（扩展名），如果没有则可以考虑显示为 "未知类型"
+                    fileSizeBytes: fileInfo.Exists ? fileInfo.Length : null,// 显示文件大小（字节），如果文件不存在则显示为 null
+                    previewPath: viewFilePath.Text,// 保持现有预览图片路径显示不变，如果需要也可以改为 "无预览图片"
+                    formatDisplayName: false);// 是否对显示名称进行格式化（例如去除前缀、下划线等），根据实际需求调整
             }
             catch (Exception ex)
             {
@@ -2996,26 +2973,33 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 显示文件信息（FileStorage模式）
         /// </summary>
+        /// <summary>
+        /// 显示文件存储信息到用户界面面板。
+        /// </summary>
+        /// <param name="fileStorage">包含文件详细信息的 FileStorage 对象。如果为 null，则清空面板显示。</param>
         public void DisplayFileStorageInfo(FileStorage fileStorage)
         {
             try
             {
+                // 处理空对象情况，重置文件信息面板
                 if (fileStorage == null)
                 {
                     UpdateFileInfoPanel(string.Empty, string.Empty, string.Empty, null, string.Empty, false);
                     return;
                 }
 
+                // 更新面板以显示具体的文件详细信息
                 UpdateFileInfoPanel(
-                    filePath: fileStorage.FilePath,
-                    displayName: fileStorage.DisplayName ?? fileStorage.FileName,
-                    fileType: fileStorage.FileType,
-                    fileSizeBytes: fileStorage.FileSize,
-                    previewPath: fileStorage.PreviewImagePath,
-                    formatDisplayName: true);
+                    filePath: fileStorage.FilePath,// 优先显示物理路径，如果需要也可以改为显示逻辑路径或其他标识
+                    displayName: fileStorage.DisplayName ?? fileStorage.FileName,// 显示名称优先，如果没有则显示文件名
+                    fileType: fileStorage.FileType,// 优先显示文件类型，如果没有则可以考虑从路径提取扩展名
+                    fileSizeBytes: fileStorage.FileSize,// 显示文件大小（字节），如果没有则显示为 null
+                    previewPath: fileStorage.PreviewImagePath,// 显示预览图片路径，如果没有则显示为 "无预览图片"
+                    formatDisplayName: true);// 是否对显示名称进行格式化（例如去除前缀、下划线等），根据实际需求调整
             }
             catch (Exception ex)
             {
+                // 记录显示文件信息过程中的异常
                 LogManager.Instance.LogInfo($"显示文件信息失败: {ex.Message}");
             }
         }
@@ -3066,7 +3050,6 @@ namespace GB_NewCadPlus_IV
             };
             panel.Children.Add(noFilesText);
         }
-
 
         /// <summary>
         /// 查找TabItem的父级TabItem
@@ -3900,12 +3883,11 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 获取文件属性
-                var fileAttribute = await _databaseManager.GetFileAttributeByGraphicIdAsync(fileStorage.Id);
+                // 获取文件属性（新架构：获取图元主对象与 JSON 属性字典）
+                var result = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileStorage.FileHash);
 
-                // 准备显示数据
-                //var displayData = PrepareFileDisplayDataForDataGrid(fileStorage, fileAttribute);
-                var displayData = PrepareFileDisplayData(fileStorage, fileAttribute);
+                // 准备显示数据: 直接传入 JSON 字典而不是旧属性对象
+                var displayData = PrepareFileDisplayData(fileStorage, result.Attributes);
                 PropertiesDataGrid.ItemsSource = displayData;
                 // 记录当前显示的属性快照，便于后续判断哪些字段被修改（用于插入后应用属性）
                 CapturePropertiesSnapshot(displayData);
@@ -4000,8 +3982,6 @@ namespace GB_NewCadPlus_IV
 
             return await ShowFilePreviewAsync(fileStorage).ConfigureAwait(true);
         }
-
-
 
         /// <summary>
         /// 执行Resources图元按钮点击后的操作
@@ -4502,7 +4482,11 @@ namespace GB_NewCadPlus_IV
             }
         }
 
-        // 每行加载时调用
+        /// <summary>
+        /// 每行加载时调用
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void DataGrid_LoadingRow(object? sender, System.Windows.Controls.DataGridRowEventArgs e)
         {
             try
@@ -4567,6 +4551,8 @@ namespace GB_NewCadPlus_IV
             // 将菜单挂到当前行
             row.ContextMenu = cm;
         }
+
+#endregion
 
         #region 图元替换/删除等 事件处理方法
 
@@ -4686,28 +4672,31 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// DataGrid 行右键菜单：删除图元
+        /// 管理员模块中对分类下图元 DataGrid 行右键菜单：删除图元
         /// </summary>
         private async void DeleteRowGraphicMenuItem_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
+                // 获取菜单项对象
                 var mi = sender as System.Windows.Controls.MenuItem;
+                // 优先从 CommandParameter 获取当前行对象
                 object? storageObj = mi?.CommandParameter;
-
+                // 兜底回退到 DataContext / PlacementTarget
                 if (storageObj == null && mi != null)
                 {
+                    // 第一层回退：MenuItem.DataContext
                     storageObj = mi.DataContext;
-                    if (storageObj == null)
+                    if (storageObj == null)// 第二层回退：ContextMenu.PlacementTarget.DataContext
                     {
-                        var cm = mi.Parent as System.Windows.Controls.ContextMenu;
-                        var row = cm?.PlacementTarget as System.Windows.Controls.DataGridRow;
-                        storageObj = row?.DataContext;
+                        var cm = mi.Parent as System.Windows.Controls.ContextMenu;// 先尝试直接父级
+                        var row = cm?.PlacementTarget as System.Windows.Controls.DataGridRow;// 如果父级不是 ContextMenu，则向上查找
+                        storageObj = row?.DataContext;// 最终回退到行的 DataContext
                     }
                 }
-
+                // 强类型转换为 FileStorage
                 var selected = storageObj as FileStorage;
-                await DeleteGraphicCoreAsync(selected, needAdminCheck: true, entryName: "右键菜单");
+                await DeleteGraphicCoreAsync(selected, needAdminCheck: true, entryName: "右键菜单");// 执行删除核心逻辑（包含权限校验、用户确认、数据库删除、预览缓存清理、界面刷新等）
             }
             catch (Exception ex)
             {
@@ -4816,7 +4805,7 @@ namespace GB_NewCadPlus_IV
                         {
                             foreach (var f in System.IO.Directory.GetFiles(_previewCachePath, storage.Id + "_*.png", SearchOption.TopDirectoryOnly))
                             {
-                                try { System.IO.File.Delete(f); } catch { /* 中文注释：单文件删除失败忽略 */ }
+                                try { System.IO.File.Delete(f); } catch { /* 单文件删除失败忽略 */ }
                             }
                         }
                     }
@@ -4889,7 +4878,7 @@ namespace GB_NewCadPlus_IV
                 return false;
 
             // 执行级联删除
-            bool ok = await _databaseManager.DeleteCadGraphicCascadeAsync(selected.Id, physicalDelete: true);
+                bool ok = await _databaseManager.DeleteCadGraphicCascadeAsync(selected.Id, physicalDelete: true);
             if (!ok)
             {
                 LogManager.Instance.LogWarning($"[{entryName}] 删除失败：{selectedName}（ID={selected.Id}）");
@@ -4916,7 +4905,6 @@ namespace GB_NewCadPlus_IV
             {
                 _selectedFileStorage = null;
                 _currentFileStorage = null;
-                _selectedFileAttribute = null;
                 _selectedFilePath = null;
                 _selectedPreviewImagePath = null;
             }
@@ -5041,9 +5029,7 @@ namespace GB_NewCadPlus_IV
                 return (false, ex.Message);
             }
         }
-
-
-        // 2) 在 WpfMainWindow 类中新增这组辅助方法（建议放在 ReplaceFileMenuItem_Click 附近）
+        
 
         /// <summary>
         /// 确保图元在本地 CadFiles 有可用副本：
@@ -6026,150 +6012,7 @@ namespace GB_NewCadPlus_IV
                 Children = new List<CategoryTreeNode>();
             }
         }
-
-        /// <summary>
-        /// 通过Row索引查找Grid
-        /// </summary>
-        //private Grid FindGridByRow(DependencyObject parent, int targetRow)
-        //{
-        //    LogManager.Instance.LogInfo($"开始查找Row={targetRow}的Grid");
-
-        //    for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        //    {
-        //        var child = VisualTreeHelper.GetChild(parent, i);
-
-        //        // 检查是否是Grid且有Grid.Row属性
-        //        if (child is Grid grid)
-        //        {
-        //            var row = Grid.GetRow(grid);
-        //            LogManager.Instance.LogInfo($"找到Grid，Row={row}");
-        //            if (row == targetRow)
-        //            {
-        //                LogManager.Instance.LogInfo($"找到目标Grid，Row={targetRow}");
-        //                return grid;
-        //            }
-        //        }
-
-        //        // 递归查找子元素
-        //        var result = FindGridByRow(child, targetRow);
-        //        if (result != null)
-        //        {
-        //            return result;
-        //        }
-        //    }
-
-        //    return null;
-        //}
-
-        /// <summary>
-        /// 加载CAD子分类（递归加载多级子分类）
-        /// </summary>
-        //private async Task LoadCadSubcategoriesAsync(int parentId, TreeViewItem parentItem, int level)
-        //{
-        //    try
-        //    {
-        //        var subcategories = await _databaseManager.GetCadSubcategoriesByParentIdAsync(parentId);// 获取指定父级ID的子分类
-        //        foreach (var subcategory in subcategories)// 遍历子分类
-        //        {
-        //            // 创建子分类节点
-        //            string indent = new string(' ', level * 2); // 根据层级添加缩进
-        //            TreeViewItem subcategoryItem = new TreeViewItem// 创建子分类节点
-        //            {
-        //                Header = $"{indent}{subcategory.DisplayName}",// 显示子分类名称
-        //                Tag = new { Type = "Subcategory", Id = subcategory.Id, Object = subcategory }// 设置Tag属性
-        //            };
-        //            await LoadCadGraphicsAsync(subcategory.Id, subcategoryItem); // 加载图元
-        //            await LoadCadSubcategoriesAsync(subcategory.Id, subcategoryItem, level + 1); // 递归加载子子分类
-        //            parentItem.Items.Add(subcategoryItem);// 添加子分类节点到父分类节点
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"加载CAD子分类时出错: {ex.Message}");
-        //    }
-        //}
-
-        /// <summary>
-        /// 加载CAD图元
-        /// </summary>
-        //private async Task LoadCadGraphicsAsync(int subcategoryId, TreeViewItem parentItem)
-        //{
-        //    try
-        //    {
-        //        var files = await _databaseManager.GetFileStorageBySubcategoryIdAsync(subcategoryId);
-        //        foreach (var file in files)
-        //        {
-        //            TreeViewItem fileItem = new TreeViewItem
-        //            {
-        //                Header = $"    {file.LayerName}",
-        //                Tag = new { Type = "Graphic", Id = file.Id, Object = file }
-        //            };
-        //            parentItem.Items.Add(fileItem);
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"加载CAD图元时出错: {ex.Message}");
-        //    }
-        //}
-
-        /// <summary>
-        /// 加载SW子分类（递归加载多级子分类）
-        /// </summary>
-        //private async Task LoadSwSubcategoriesAsync(int parentId, TreeViewItem parentItem, int level)
-        //{
-        //    try
-        //    {
-        //        var subcategories = await _databaseManager.GetSwSubcategoriesByParentIdAsync(parentId);
-        //        foreach (var subcategory in subcategories)
-        //        {
-        //            // 创建子分类节点
-        //            string indent = new string(' ', level * 2); // 根据层级添加缩进
-        //            TreeViewItem subcategoryItem = new TreeViewItem
-        //            {
-        //                Header = $"{indent}{subcategory.DisplayName}",
-        //                Tag = new { Type = "Subcategory", Id = subcategory.Id, Object = subcategory }
-        //            };
-
-        //            // 加载图元
-        //            await LoadSwGraphicsAsync(subcategory.Id, subcategoryItem);
-
-        //            // 递归加载子子分类
-        //            await LoadSwSubcategoriesAsync(subcategory.Id, subcategoryItem, level + 1);
-
-        //            parentItem.Items.Add(subcategoryItem);
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"加载SW子分类时出错: {ex.Message}");
-        //    }
-        //}
-
-        /// <summary>
-        /// 加载SW图元
-        /// </summary>
-        //private async Task LoadSwGraphicsAsync(int subcategoryId, TreeViewItem parentItem)
-        //{
-        //    try
-        //    {
-        //        var graphics = await _databaseManager.GetSwGraphicsBySubcategoryIdAsync(subcategoryId);
-        //        foreach (var graphic in graphics)
-        //        {
-        //            TreeViewItem graphicItem = new TreeViewItem
-        //            {
-        //                Header = $"    {graphic.FileName}",
-        //                Tag = new { Type = "Graphic", Id = graphic.Id, Object = graphic }
-        //            };
-        //            parentItem.Items.Add(graphicItem);
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"加载SW图元时出错: {ex.Message}");
-        //    }
-        //}
-
+        
 
         #endregion
 
@@ -6270,7 +6113,7 @@ namespace GB_NewCadPlus_IV
         }
 
         #endregion
-        #endregion
+        
 
         #region 按键点击操作
 
@@ -7049,6 +6892,10 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+        /// <summary>
+        /// 更新文件和保存到数据库的入口方法，从 UI 状态构造 DTO 对象并委托到核心方法执行上传流程。该方法负责校验用户输入、构建上传数据结构，并调用核心方法完成文件存储和数据库写入。
+        /// </summary>
+        /// <returns></returns>
         public async Task UploadFileAndSaveToDatabase()
         {
             // 从 UI 状态构造 DTO，然后委托到核心方法
@@ -7132,6 +6979,7 @@ namespace GB_NewCadPlus_IV
         /// <exception cref="FileNotFoundException">当要上传的文件不存在时抛出</exception>
         public async Task UploadFileAndSaveToDatabase(ImportEntityDto dto)
         {
+            // 参数校验
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             if (dto.FileStorage == null) throw new ArgumentException("dto.FileStorage 不能为空", nameof(dto));
 
@@ -7148,7 +6996,7 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show("文件管理器未初始化，无法上传文件。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
-
+            // 获取当前选中分类信息（确保分类存在）
             await _uploadSemaphore.WaitAsync().ConfigureAwait(false);
 
             // 记录已落盘文件，失败时用于物理回滚
@@ -7161,7 +7009,7 @@ namespace GB_NewCadPlus_IV
             {
                 LogManager.Instance.LogInfo("开始上传文件并保存到数据库（JSON链路）");
 
-                // 校验源文件
+                // 校验源文件(即将上传的文件)
                 var sourcePath = dto.FileStorage.FilePath;
                 if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
                     throw new FileNotFoundException("要上传的文件不存在", sourcePath);
@@ -7169,6 +7017,7 @@ namespace GB_NewCadPlus_IV
                 // 1) 上传主文件到存储目录，返回完整 FileStorage 元数据
                 using (var fs = File.OpenRead(sourcePath))
                 {
+                    // 这里直接调用文件管理器的上传方法，传入必要的上下文信息
                     var uploaded = await _fileManager.UploadFileAsync(
                         _databaseManager,
                         dto.FileStorage.CategoryId,
@@ -7193,7 +7042,7 @@ namespace GB_NewCadPlus_IV
                     if (!string.IsNullOrWhiteSpace(dto.FileStorage.FilePath))
                         uploadedFiles.Add(dto.FileStorage.FilePath);
 
-                    LogManager.Instance.LogInfo($"文件上传成功: {dto.FileStorage.FilePath}");
+                    LogManager.Instance.LogInfo($"记录上传文件路径成功: {dto.FileStorage.FilePath}");
                 }
 
                 // 2) 复制预览图（若存在）
@@ -7201,14 +7050,14 @@ namespace GB_NewCadPlus_IV
                 {
                     try
                     {
-                        var previewInfo = new FileInfo(dto.PreviewImagePath);
-                        string previewStoredName = $"{Guid.NewGuid()}{previewInfo.Extension}";
-                        string previewStoredPath = Path.Combine(Path.GetDirectoryName(dto.FileStorage.FilePath) ?? Path.GetTempPath(), previewStoredName);
-
+                        var previewInfo = new FileInfo(dto.PreviewImagePath);// 获取预览图信息
+                        string previewStoredName = $"{Guid.NewGuid()}{previewInfo.Extension}";// 生成唯一文件名
+                        string previewStoredPath = Path.Combine(Path.GetDirectoryName(dto.FileStorage.FilePath) ?? Path.GetTempPath(), previewStoredName);// 存储在同一目录下，便于管理
+                        // 物理复制预览图到存储目录
                         File.Copy(dto.PreviewImagePath, previewStoredPath, true);
-
+                        // 回填预览图字段
                         dto.FileStorage.PreviewImageName = previewStoredName;
-                        dto.FileStorage.PreviewImagePath = previewStoredPath;
+                        dto.FileStorage.PreviewImagePath = previewStoredPath;// 回填存储后的预览图路径
 
                         // 记录预览图路径（回滚用）
                         uploadedFiles.Add(previewStoredPath);
@@ -7636,144 +7485,11 @@ namespace GB_NewCadPlus_IV
             _selectedFilePath = null;
             _selectedPreviewImagePath = null;
             _currentFileStorage = null;
-            _currentFileAttribute = null;
+            // （待清理）旧代码： _currentFileAttribute = null;
             _selectedCategoryNode = null;
         }
 
-        /// <summary>
-        /// 设置文件属性
-        /// </summary>
-        /// <param name="attribute"></param>
-        /// <param name="propertyName"></param>
-        /// <param name="propertyValue"></param>
-        /// <returns> </returns>
-
-        public void SetFileAttributeProperty(FileAttribute attribute, string propertyName, string propertyValue)
-        {
-            if (string.IsNullOrEmpty(propertyName) || string.IsNullOrEmpty(propertyValue))
-                return;
-            bool boolValue = false;
-            _currentFileStorage = _currentFileStorage ?? new FileStorage();
-            if (propertyValue == "是") boolValue = true;
-            try
-            {
-                switch (propertyName.ToLower())
-                {
-                    case "长度":
-                        if (decimal.TryParse(propertyValue, out decimal length))
-                            attribute.Length = length;
-                        break;
-                    case "宽度":
-                        if (decimal.TryParse(propertyValue, out decimal width))
-                            attribute.Width = width;
-                        break;
-                    case "高度":
-                        if (decimal.TryParse(propertyValue, out decimal height))
-                            attribute.Height = height;
-                        break;
-                    case "角度":
-                        if (decimal.TryParse(propertyValue, out decimal angle))
-                            attribute.Angle = angle;
-                        break;
-                    case "基点x":
-                        if (decimal.TryParse(propertyValue, out decimal baseX))
-                            attribute.BasePointX = baseX;
-                        break;
-                    case "基点y":
-                        if (decimal.TryParse(propertyValue, out decimal baseY))
-                            attribute.BasePointY = baseY;
-                        break;
-                    case "基点z":
-                        if (decimal.TryParse(propertyValue, out decimal baseZ))
-                            attribute.BasePointZ = baseZ;
-                        break;
-                    case "介质":
-                        attribute.MediumName = propertyValue;
-                        break;
-                    case "规格":
-                        attribute.Specifications = propertyValue;
-                        break;
-                    case "材质":
-                        attribute.Material = propertyValue;
-                        break;
-                    case "标准号":
-                        attribute.StandardNumber = propertyValue;
-                        break;
-                    case "功率":
-                        if (decimal.TryParse(propertyValue, out decimal power))
-                            attribute.Power = power;
-                        break;
-                    case "容积":
-                        if (decimal.TryParse(propertyValue, out decimal volume))
-                            attribute.Volume = volume;
-                        break;
-                    case "压力":
-                        if (decimal.TryParse(propertyValue, out decimal pressure))
-                            attribute.Pressure = pressure;
-                        break;
-                    case "温度":
-                        if (decimal.TryParse(propertyValue, out decimal temperature))
-                            attribute.Temperature = temperature;
-                        break;
-                    case "直径":
-                        if (decimal.TryParse(propertyValue, out decimal diameter))
-                            attribute.Diameter = diameter;
-                        break;
-                    case "外径":
-                        if (decimal.TryParse(propertyValue, out decimal outerDiameter))
-                            attribute.OuterDiameter = outerDiameter;
-                        break;
-                    case "内径":
-                        if (decimal.TryParse(propertyValue, out decimal innerDiameter))
-                            attribute.InnerDiameter = innerDiameter;
-                        break;
-                    case "厚度":
-                        if (decimal.TryParse(propertyValue, out decimal thickness))
-                            attribute.Thickness = thickness;
-                        break;
-                    case "重量":
-                        if (decimal.TryParse(propertyValue, out decimal weight))
-                            attribute.Weight = weight;
-                        break;
-                    case "型号":
-                        attribute.Model = propertyValue;
-                        break;
-                    case "备注":
-                        attribute.Remarks = propertyValue;
-                        break;
-                    case "名称":
-                        attribute.FileName = propertyValue;
-                        break;
-                    case "元素块名":
-                        _currentFileStorage.BlockName = propertyValue;
-                        break;
-                    case "层名":
-                        _currentFileStorage.LayerName = propertyValue;
-                        break;
-                    case "颜色索引":
-                        if (int.TryParse(propertyValue, out int colorIdx))
-                            _currentFileStorage.ColorIndex = colorIdx;
-                        break;
-                    case "是否公开":
-                        // IsPublic 在模型中为 int（0/1），接受中文表示或数值
-                        if (propertyValue == "是")
-                            _currentFileStorage.IsPublic = 1;
-                        else if (propertyValue == "否")
-                            _currentFileStorage.IsPublic = 0;
-                        else if (int.TryParse(propertyValue, out int isPub))
-                            _currentFileStorage.IsPublic = isPub;
-                        break;
-                    case "描述":
-                        _currentFileStorage.Description = propertyValue;
-                        break;
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"设置属性 {propertyName} 时出错: {ex.Message}");
-            }
-        }
-
+      
         /// <summary>
         /// 设置文件存储属性
         /// </summary>
@@ -7872,21 +7588,19 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                // 确保选中项是 FileStorage 类型
                 if (StroageFileDataGrid.SelectedItem is FileStorage selectedFile)
                 {
                     LogManager.Instance.LogInfo($"选中文件: {selectedFile.DisplayName} (ID: {selectedFile.Id})");
-                    _selectedFileStorage = selectedFile;
+                    _selectedFileStorage = selectedFile;// 更新当前选中文件存储对象，供后续属性编辑使用
 
                     // 显示文件基本信息
-                    DisplayFileBasicInfo(selectedFile);
+                    DisplayFileStorageInfo(selectedFile);
                     // 加载并显示文件属性
                     await LoadAndDisplayFileAttributesAsync(selectedFile);
-
                     // 加载预览图片
                     var previewImage = await GetPreviewImageAsync(selectedFile);
-                    // 预览图片会在PreviewImage_Loaded事件中处理
-                    // 初始化属性编辑界面
-                    //InitializeFilePropertiesGrid();
+
                 }
             }
             catch (Exception ex)
@@ -7913,12 +7627,14 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 获取文件属性
-                var fileAttribute = await _databaseManager.GetFileAttributeByGraphicIdAsync(fileStorage.Id);
-                _selectedFileAttribute = fileAttribute;
+                // 获取文件属性 (新架构，走 JSON 查询)
+                var result = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileStorage.FileHash);
+
+                // 暂时将当前字典保存供以后编辑扩展（可选，如有此变量）
+                // _currentFileAttributesJson = result.Attributes;
 
                 // 准备显示数据
-                var displayData = PrepareFileDisplayData(fileStorage, fileAttribute);
+                var displayData = PrepareFileDisplayData(fileStorage, result.Attributes);
                 CategoryPropertiesDataGrid.ItemsSource = displayData;
 
                 LogManager.Instance.LogInfo("文件属性加载完成");
@@ -7936,148 +7652,149 @@ namespace GB_NewCadPlus_IV
         /// <param name="fileStorage"></param>
         /// <param name="fileAttribute"></param>
         /// <returns></returns>
-        public List<CategoryPropertyEditModel> PrepareFileDisplayData(FileStorage fileStorage, FileAttribute fileAttribute)
-        {
+        // 屏蔽旧方法签名，因为全部已转换为 Dictionary<string, string> 的重载版本
+        //public List<CategoryPropertyEditModel> PrepareFileDisplayData(FileStorage fileStorage, FileAttribute fileAttribute)
+        //{
 
-            var propertyRows = new List<CategoryPropertyEditModel>();
+        //    var propertyRows = new List<CategoryPropertyEditModel>();
 
-            try
-            {
-                LogManager.Instance.LogDebug("准备文件显示数据（限制 FileStorage 字段）");
+        //    try
+        //    {
+        //        LogManager.Instance.LogDebug("准备文件显示数据（限制 FileStorage 字段）");
 
-                // 使用有序集合按显示顺序收集要显示的属性键/值
-                var allProperties = new List<KeyValuePair<string, string>>();
+        //        // 使用有序集合按显示顺序收集要显示的属性键/值
+        //        var allProperties = new List<KeyValuePair<string, string>>();
 
-                // 1) 仅加入 cad_file_storage 指定的字段（按要求：file_name, display_name, element_block_name, layer_name, color_index, scale）
-                if (fileStorage != null)
-                {
-                    // 添加文件名称和显示名称（新增）
-                    string fileName = fileStorage.FileName ?? string.Empty;
-                    string displayName = fileStorage.DisplayName ?? string.Empty;
+        //        // 1) 仅加入 cad_file_storage 指定的字段（按要求：file_name, display_name, element_block_name, layer_name, color_index, scale）
+        //        if (fileStorage != null)
+        //        {
+        //            // 添加文件名称和显示名称（新增）
+        //            string fileName = fileStorage.FileName ?? string.Empty;
+        //            string displayName = fileStorage.DisplayName ?? string.Empty;
 
-                    // 注意：Category 前缀与 AddObjectProperties 保持一致，便于 GetPropertyDisplayName 做映射
-                    string eb = fileStorage.BlockName ?? string.Empty;
-                    string ln = fileStorage.LayerName ?? string.Empty;
+        //            // 注意：Category 前缀与 AddObjectProperties 保持一致，便于 GetPropertyDisplayName 做映射
+        //            string eb = fileStorage.BlockName ?? string.Empty;
+        //            string ln = fileStorage.LayerName ?? string.Empty;
 
-                    // 颜色索引：FileStorage.ColorIndex 定义为 int?，直接安全取值并转换为字符串
-                    string ci = fileStorage.ColorIndex.HasValue ? fileStorage.ColorIndex.Value.ToString() : string.Empty;
+        //            // 颜色索引：FileStorage.ColorIndex 定义为 int?，直接安全取值并转换为字符串
+        //            string ci = fileStorage.ColorIndex.HasValue ? fileStorage.ColorIndex.Value.ToString() : string.Empty;
 
-                    // 比例：优先使用模型中的 Scale（double?），避免隐式从 decimal/double 的转换
-                    // 若模型无值，显示为空字符串
-                    string sc = fileStorage.Scale.HasValue ? fileStorage.Scale.Value.ToString("G") : string.Empty;
+        //            // 比例：优先使用模型中的 Scale（double?），避免隐式从 decimal/double 的转换
+        //            // 若模型无值，显示为空字符串
+        //            string sc = fileStorage.Scale.HasValue ? fileStorage.Scale.Value.ToString("G") : string.Empty;
 
-                    // 按顺序添加属性：文件名称、显示名称、块名、层名、颜色索引、比例
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.FileName", fileName));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.DisplayName", displayName));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.ElementBlockName", eb));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.LayerName", ln));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.ColorIndex", ci));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.Scale", sc));
-                }
+        //            // 按顺序添加属性：文件名称、显示名称、块名、层名、颜色索引、比例
+        //            allProperties.Add(new KeyValuePair<string, string>("文件信息.FileName", fileName));
+        //            allProperties.Add(new KeyValuePair<string, string>("文件信息.DisplayName", displayName));
+        //            allProperties.Add(new KeyValuePair<string, string>("文件信息.ElementBlockName", eb));
+        //            allProperties.Add(new KeyValuePair<string, string>("文件信息.LayerName", ln));
+        //            allProperties.Add(new KeyValuePair<string, string>("文件信息.ColorIndex", ci));
+        //            allProperties.Add(new KeyValuePair<string, string>("文件信息.Scale", sc));
+        //        }
 
-                // 2) 追加 cad_file_attributes 中的所有可展示属性（使用现有方法统一处理命名与格式化）
-                if (fileAttribute != null)
-                {
-                    AddObjectProperties(allProperties, fileAttribute, "属性信息");
-                }
+        //        // 2) 追加 cad_file_attributes 中的所有可展示属性（使用现有方法统一处理命名与格式化）
+        //        if (fileAttribute != null)
+        //        {
+        //            AddObjectProperties(allProperties, fileAttribute, "属性信息");
+        //        }
 
-                // 3) 把列表转换为两列显示格式（与以前行为一致）
-                for (int i = 0; i < allProperties.Count; i += 2)
-                {
-                    var row = new CategoryPropertyEditModel();
+        //        // 3) 把列表转换为两列显示格式（与以前行为一致）
+        //        for (int i = 0; i < allProperties.Count; i += 2)
+        //        {
+        //            var row = new CategoryPropertyEditModel();
 
-                    // 第一列
-                    var prop1 = allProperties[i];
-                    row.PropertyName1 = GetPropertyDisplayName(prop1.Key);
-                    row.PropertyValue1 = prop1.Value ?? string.Empty;
+        //            // 第一列
+        //            var prop1 = allProperties[i];
+        //            row.PropertyName1 = GetPropertyDisplayName(prop1.Key);
+        //            row.PropertyValue1 = prop1.Value ?? string.Empty;
 
-                    // 第二列（如果有）
-                    if (i + 1 < allProperties.Count)
-                    {
-                        var prop2 = allProperties[i + 1];
-                        row.PropertyName2 = GetPropertyDisplayName(prop2.Key);
-                        row.PropertyValue2 = prop2.Value ?? string.Empty;
-                    }
+        //            // 第二列（如果有）
+        //            if (i + 1 < allProperties.Count)
+        //            {
+        //                var prop2 = allProperties[i + 1];
+        //                row.PropertyName2 = GetPropertyDisplayName(prop2.Key);
+        //                row.PropertyValue2 = prop2.Value ?? string.Empty;
+        //            }
 
-                    propertyRows.Add(row);
-                }
+        //            propertyRows.Add(row);
+        //        }
 
-                // 4) 保证至少有若干空行用于编辑
-                while (propertyRows.Count < 5)
-                {
-                    propertyRows.Add(new CategoryPropertyEditModel());
-                }
+        //        // 4) 保证至少有若干空行用于编辑
+        //        while (propertyRows.Count < 5)
+        //        {
+        //            propertyRows.Add(new CategoryPropertyEditModel());
+        //        }
 
-                LogManager.Instance.LogDebug($"准备完成 {propertyRows.Count} 行属性数据（仅限指定 FileStorage 字段 + FileAttribute）");
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogError($"准备文件显示数据时出错: {ex.Message}");
-            }
+        //        LogManager.Instance.LogDebug($"准备完成 {propertyRows.Count} 行属性数据（仅限指定 FileStorage 字段 + FileAttribute）");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogError($"准备文件显示数据时出错: {ex.Message}");
+        //    }
 
-            return propertyRows;
+        //    return propertyRows;
 
-            #region 添加属性属性显示名称映射
-            //var propertyRows = new List<CategoryPropertyEditModel>();
+        //    #region 添加属性属性显示名称映射
+        //    //var propertyRows = new List<CategoryPropertyEditModel>();
 
-            //try
-            //{
-            //    LogManager.Instance.LogDebug("准备文件显示数据");
+        //    //try
+        //    //{
+        //    //    LogManager.Instance.LogDebug("准备文件显示数据");
 
-            //    // 收集所有属性
-            //    var allProperties = new List<KeyValuePair<string, string>>();
+        //    //    // 收集所有属性
+        //    //    var allProperties = new List<KeyValuePair<string, string>>();
 
-            //    // 添加FileStorage属性
-            //    if (fileStorage != null)
-            //    {
-            //        AddObjectProperties(allProperties, fileStorage, "文件信息");
-            //    }
+        //    //    // 添加FileStorage属性
+        //    //    if (fileStorage != null)
+        //    //    {
+        //    //        AddObjectProperties(allProperties, fileStorage, "文件信息");
+        //    //    }
 
-            //    // 添加FileAttribute属性
-            //    if (fileAttribute != null)
-            //    {
-            //        AddObjectProperties(allProperties, fileAttribute, "属性信息");
-            //    }
+        //    //    // 添加FileAttribute属性
+        //    //    if (fileAttribute != null)
+        //    //    {
+        //    //        AddObjectProperties(allProperties, fileAttribute, "属性信息");
+        //    //    }
 
-            //    // 转换为两列显示格式
-            //    for (int i = 0; i < allProperties.Count; i += 2)
-            //    {
-            //        var row = new CategoryPropertyEditModel();
+        //    //    // 转换为两列显示格式
+        //    //    for (int i = 0; i < allProperties.Count; i += 2)
+        //    //    {
+        //    //        var row = new CategoryPropertyEditModel();
 
-            //        // 第一列
-            //        var prop1 = allProperties[i];
-            //        row.PropertyName1 = GetPropertyDisplayName(prop1.Key);
-            //        row.PropertyValue1 = prop1.Value ?? "";
+        //    //        // 第一列
+        //    //        var prop1 = allProperties[i];
+        //    //        row.PropertyName1 = GetPropertyDisplayName(prop1.Key);
+        //    //        row.PropertyValue1 = prop1.Value ?? "";
 
-            //        // 第二列（如果有）
-            //        if (i + 1 < allProperties.Count)
-            //        {
-            //            var prop2 = allProperties[i + 1];
-            //            row.PropertyName2 = GetPropertyDisplayName(prop2.Key);
-            //            row.PropertyValue2 = prop2.Value ?? "";
-            //        }
+        //    //        // 第二列（如果有）
+        //    //        if (i + 1 < allProperties.Count)
+        //    //        {
+        //    //            var prop2 = allProperties[i + 1];
+        //    //            row.PropertyName2 = GetPropertyDisplayName(prop2.Key);
+        //    //            row.PropertyValue2 = prop2.Value ?? "";
+        //    //        }
 
-            //        propertyRows.Add(row);
-            //    }
+        //    //        propertyRows.Add(row);
+        //    //    }
 
-            //    // 确保至少有几行空行用于编辑
-            //    while (propertyRows.Count < 5)
-            //    {
-            //        propertyRows.Add(new CategoryPropertyEditModel());
-            //    }
+        //    //    // 确保至少有几行空行用于编辑
+        //    //    while (propertyRows.Count < 5)
+        //    //    {
+        //    //        propertyRows.Add(new CategoryPropertyEditModel());
+        //    //    }
 
-            //    LogManager.Instance.LogDebug($"准备完成 {propertyRows.Count} 行属性数据");
-            //}
-            //catch (Exception ex)
-            //{
-            //    LogManager.Instance.LogError($"准备文件显示数据时出错: {ex.Message}");
-            //}
+        //    //    LogManager.Instance.LogDebug($"准备完成 {propertyRows.Count} 行属性数据");
+        //    //}
+        //    //catch (Exception ex)
+        //    //{
+        //    //    LogManager.Instance.LogError($"准备文件显示数据时出错: {ex.Message}");
+        //    //}
 
-            //return propertyRows;
+        //    //return propertyRows;
 
-            #endregion
+        //    #endregion
 
-        }
+        //}
 
         /// <summary>
         /// 准备文件显示数据（新方案：FileStorage + JSON属性字典）
@@ -8094,16 +7811,25 @@ namespace GB_NewCadPlus_IV
             {
                 // 用于按顺序收集所有要显示的属性
                 var allProperties = new List<KeyValuePair<string, string>>();
+                // 用于去重：记录已经显示过的属性（显示名称）
+                var displayedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 // 先显示主表中的关键字段
                 if (fileStorage != null)
                 {
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.FileName", fileStorage.FileName ?? string.Empty));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.DisplayName", fileStorage.DisplayName ?? string.Empty));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.ElementBlockName", fileStorage.BlockName ?? string.Empty));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.LayerName", fileStorage.LayerName ?? string.Empty));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.ColorIndex", fileStorage.ColorIndex?.ToString() ?? string.Empty));
-                    allProperties.Add(new KeyValuePair<string, string>("文件信息.Scale", fileStorage.Scale?.ToString() ?? string.Empty));
+                    void AddMainProp(string internalKey, string value)
+                    {
+                        string displayName = GetPropertyDisplayName(internalKey);
+                        allProperties.Add(new KeyValuePair<string, string>(internalKey, value ?? string.Empty));
+                        displayedNames.Add(displayName);
+                    }
+
+                    AddMainProp("文件信息.FileName", fileStorage.FileName);
+                    AddMainProp("文件信息.DisplayName", fileStorage.DisplayName);
+                    AddMainProp("文件信息.ElementBlockName", fileStorage.BlockName);
+                    AddMainProp("文件信息.LayerName", fileStorage.LayerName);
+                    AddMainProp("文件信息.ColorIndex", fileStorage.ColorIndex?.ToString());
+                    AddMainProp("文件信息.Scale", fileStorage.Scale?.ToString());
                 }
 
                 // 再显示 JSON 属性字典中的动态属性
@@ -8112,7 +7838,13 @@ namespace GB_NewCadPlus_IV
                     foreach (var kv in attributesJson)
                     {
                         if (string.IsNullOrWhiteSpace(kv.Key)) continue;
+
+                        // 检查该属性映射后的显示名称是否已经存在
+                        string displayName = GetPropertyDisplayName(kv.Key.Trim());
+                        if (displayedNames.Contains(displayName)) continue;
+
                         allProperties.Add(new KeyValuePair<string, string>(kv.Key.Trim(), kv.Value ?? string.Empty));
+                        displayedNames.Add(displayName);
                     }
                 }
 
@@ -8652,8 +8384,6 @@ namespace GB_NewCadPlus_IV
         }
         #endregion
 
-        #endregion
-
         private void 保存设置按钮_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -8741,6 +8471,10 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show($"应用设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        #endregion
+
+
 
         #region 服务器设置方法
 
@@ -8956,38 +8690,7 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show($"选择Excel文件时出错: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-        private void 批量添加图元_Btn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(filePath.Text))
-                {
-                    MessageBox.Show("请先选择Excel文件", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                if (!File.Exists(filePath.Text))
-                {
-                    MessageBox.Show("选择的Excel文件不存在", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                // 显示确认对话框
-                var result = MessageBox.Show("确定要批量添加图元吗？这将导入Excel文件中的所有数据。",
-                    "确认", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-                if (result == MessageBoxResult.No)
-                    return;
-
-                // 开始批量导入
-                _fileManager.BatchImportGraphicsAsync(filePath.Text, _selectedCategoryNode, CategoryPropertiesDataGrid, _categoryTreeNodes);
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogError($"批量添加图元时出错: {ex.Message}");
-                MessageBox.Show($"批量添加图元时出错: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+      
 
         /// <summary>
         /// 创建模板DataTable
@@ -9203,6 +8906,7 @@ namespace GB_NewCadPlus_IV
                 try
                 {
                     dialogResult = confirmWindow.ShowDialog();
+
                 }
                 catch (Exception exShow)
                 {
@@ -9244,7 +8948,7 @@ namespace GB_NewCadPlus_IV
             _currentFileStorage = dto.FileStorage;
 
             // 旧 FileAttribute 仅保留兼容，不再作为主写库来源
-            _currentFileAttribute = dto.FileAttribute;
+            // _currentFileAttribute = dto.FileAttribute;
         }
         /// <summary>
         /// 确认导入
@@ -9252,10 +8956,13 @@ namespace GB_NewCadPlus_IV
         /// <param name="dto"></param>
         private void ApplyAttributeTextToDto(ImportEntityDto dto)
         {
-            if (dto == null || dto.FileAttribute == null || dto.FileStorage == null) return;
+            if (dto == null || dto.FileStorage == null) return;
 
             // 1) 从 Remarks（或其他字符串）提取 key/value 对
-            var raw = dto.FileAttribute.Remarks ?? string.Empty;
+            string raw = "";
+            dto.AttributesJson.TryGetValue("Remarks", out raw);
+            if (string.IsNullOrWhiteSpace(raw)) raw = string.Empty;
+
             var pairs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             // 支持多种分隔：冒号、等号、空格；每行一个
@@ -9301,11 +9008,9 @@ namespace GB_NewCadPlus_IV
 
             if (pairs.Count == 0) return;
 
-            // 2) 准备候选属性字典（FileStorage 与 FileAttribute 的 PropertyInfo）
+            // 2) 准备候选属性字典（FileStorage 的 PropertyInfo）
             var fsType = typeof(FileStorage);
-            var faType = typeof(FileAttribute);
             var fsProps = fsType.GetProperties().Where(p => p.CanWrite).ToList();
-            var faProps = faType.GetProperties().Where(p => p.CanWrite).ToList();
 
             // 3) 映射表（优先使用属性名、其次使用显示名映射 _propertyDisplayNameMap）
             string Normalize(string s)
@@ -9338,28 +9043,9 @@ namespace GB_NewCadPlus_IV
 
                 bool matched = false;
 
-                // 尝试直接匹配 FileAttribute 属性名
-                foreach (var prop in faProps)
-                {
-                    var pName = prop.Name;
-                    if (Normalize(pName) == nTag)
-                    {
-                        TrySetPropertyValue(dto.FileAttribute, prop, val);
-                        matched = true;
-                        break;
-                    }
-                    // 尝试匹配显示名（_propertyDisplayNameMap）
-                    if (DictionaryHelper._propertyDisplayNameMap.TryGetValue(pName, out var dispName))
-                    {
-                        if (Normalize(dispName) == nTag || Normalize(dispName).Contains(nTag) || nTag.Contains(Normalize(dispName)))
-                        {
-                            TrySetPropertyValue(dto.FileAttribute, prop, val);
-                            matched = true;
-                            break;
-                        }
-                    }
-                }
-                if (matched) continue;
+                // 将值写入 JSON 字典
+                dto.AttributesJson[tag] = val;
+                matched = true;
 
                 // 尝试直接匹配 FileStorage 属性名
                 foreach (var prop in fsProps)
@@ -9384,7 +9070,7 @@ namespace GB_NewCadPlus_IV
                 if (matched) continue;
 
                 // 5) 若仍未匹配，尝试容错匹配：按包含关系匹配显示名或属性名
-                foreach (var prop in faProps.Concat(fsProps))
+                foreach (var prop in fsProps)
                 {
                     var pName = prop.Name;
                     if (DictionaryHelper._propertyDisplayNameMap.TryGetValue(pName, out var dispName))
@@ -9392,9 +9078,7 @@ namespace GB_NewCadPlus_IV
                         if (Normalize(dispName).IndexOf(nTag, StringComparison.OrdinalIgnoreCase) >= 0 ||
                             nTag.IndexOf(Normalize(dispName), StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            // decide target object
-                            var target = prop.DeclaringType == faType ? (object)dto.FileAttribute : (object)dto.FileStorage;
-                            TrySetPropertyValue(target, prop, val);
+                            TrySetPropertyValue(dto.FileStorage, prop, val);
                             matched = true;
                             break;
                         }
@@ -9404,8 +9088,7 @@ namespace GB_NewCadPlus_IV
                         if (Normalize(pName).IndexOf(nTag, StringComparison.OrdinalIgnoreCase) >= 0 ||
                             nTag.IndexOf(Normalize(pName), StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            var target = prop.DeclaringType == faType ? (object)dto.FileAttribute : (object)dto.FileStorage;
-                            TrySetPropertyValue(target, prop, val);
+                            TrySetPropertyValue(dto.FileStorage, prop, val);
                             matched = true;
                             break;
                         }
@@ -12846,82 +12529,6 @@ namespace GB_NewCadPlus_IV
         }
 
         #region 优化后的CSV导出（增强版）：
-
-        /// <summary>
-        /// 【最终版】公式合法性批量校验
-        /// </summary>
-        //private List<string> ValidateCalcSectionsFormulaReferences(List<ExcelCalcSection> sections)
-        //{
-        //    var errors = new List<string>();
-        //    var availableCells = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        //    // 1. 收集所有标准化的 Sheet 名称，用于后续修复公式
-        //    var allNormalizedSheets = new List<string>();
-        //    var sheetNameMap = new Dictionary<string, string>(); // 原始 -> 标准化
-
-        //    foreach (var sec in sections)
-        //    {
-        //        string normSheet = GB_NewCadPlus_IV.Helpers.CalcFormulaHelper.NormalizeSheetName(sec.GridName);
-        //        if (!sheetNameMap.ContainsKey(sec.GridName))
-        //        {
-        //            sheetNameMap[sec.GridName] = normSheet;
-        //            allNormalizedSheets.Add(sec.GridName); // 传入原始名称，让正则去匹配
-        //        }
-
-        //        foreach (var row in sec.Rows)
-        //        {
-        //            if (!string.IsNullOrWhiteSpace(row.Address))
-        //            {
-        //                string cellId = $"{normSheet}!{row.Address.ToUpperInvariant()}";
-        //                availableCells.Add(cellId);
-        //            }
-        //        }
-        //    }
-
-        //    LogManager.Instance.LogInfo($"[校验] 加载 {availableCells.Count} 个单元格，{allNormalizedSheets.Count} 个Sheet用于公式修复。");
-
-        //    // 2. 遍历校验
-        //    foreach (var sec in sections)
-        //    {
-        //        string currentNormSheet = GB_NewCadPlus_IV.Helpers.CalcFormulaHelper.NormalizeSheetName(sec.GridName);
-
-        //        foreach (var row in sec.Rows)
-        //        {
-        //            if (string.IsNullOrWhiteSpace(row.Formula) || !row.Formula.Trim().StartsWith("="))
-        //                continue;
-
-        //            // 【关键调用】使用修复后的提取方法
-        //            var refs = GB_NewCadPlus_IV.Helpers.CalcFormulaHelper.RepairAndExtractReferences(
-        //                row.Formula,
-        //                sec.GridName,
-        //                allNormalizedSheets // 传入所有Sheet名，帮助识别哪里缺了感叹号
-        //            );
-
-        //            foreach (var refId in refs)
-        //            {
-        //                if (!availableCells.Contains(refId))
-        //                {
-        //                    // 如果修复后还是找不到，才报错
-        //                    string errorMsg = $"{refId} (原始Sheet: {sec.GridName}, 单元格: {row.Address}) -> 公式: {row.Formula}";
-        //                    errors.Add(errorMsg);
-
-        //                    if (errors.Count > 50)
-        //                    {
-        //                        errors.Add("... (错误过多，已截断)");
-        //                        return errors;
-        //                    }
-        //                }
-        //            }
-        //        }
-        //    }
-
-        //    return errors;
-        //}
-
-        /// <summary>
-        /// 模糊匹配：当标准化匹配失败时，尝试去除所有非字母数字字符后进行匹配
-        /// 用于处理极端命名不一致情况
-        /// </summary>
         private bool FuzzyMatchCell(string missingRefId, HashSet<string> availableCells)
         {
             int idx = missingRefId.IndexOf('!');
@@ -13044,6 +12651,9 @@ namespace GB_NewCadPlus_IV
 
         #region
 
+        /// <summary>
+        /// excel 分段信息：以空行分隔，第一列设备名可合并
+        /// </summary>
         private sealed class ExcelCalcSection
         {
             public string DeviceName { get; set; } = string.Empty;

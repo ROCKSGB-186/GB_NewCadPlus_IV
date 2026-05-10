@@ -340,10 +340,10 @@ namespace GB_NewCadPlus_IV.Views
             if (_isConfirmProcessing) // 防止重复触发
                 return;
 
-            _isConfirmProcessing = true;
-            BtnConfirm.IsEnabled = false;
-            var prevCursor = Mouse.OverrideCursor;
-            Mouse.OverrideCursor = Cursors.Wait;
+            _isConfirmProcessing = true;// 设置正在处理标志，防止重复点击
+            BtnConfirm.IsEnabled = false;// 禁用按钮，避免重复点击
+            var prevCursor = Mouse.OverrideCursor;// 设置等待光标，提示用户正在处理
+            Mouse.OverrideCursor = Cursors.Wait;// 设置等待光标，提示用户正在处理
 
             try
             {
@@ -380,7 +380,7 @@ namespace GB_NewCadPlus_IV.Views
                 }
 
                 // 3. 再次从UI更新DTO，确保所有更改都已保存
-                UpdateDtoFromGrid();
+                UpdateDtoFromGrid(); // 确保先保存用户在表格中修改的属性
 
                 // 4. 执行导入（将 DTO 注册到主窗口并执行上传）
                 _mainWindow.SetSelectedFileForImport(_dto);
@@ -410,6 +410,7 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private void UpdateDtoFromGrid()
         {
+            // 从数据网格的 ItemsSource 中获取当前显示的属性列表
             var items = PropertiesGrid.ItemsSource as List<CategoryPropertyEditModel>;
             if (items == null) return;
 

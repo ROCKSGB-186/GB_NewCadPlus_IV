@@ -74,152 +74,20 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public bool NeedsPreviewSync { get; set; }
     }
 
+    /// <summary>
+    /// [已废弃] 图元属性模型。之前使用 cad_file_attributes 表存放各种预定义列，
+    /// 现已被字典/JSON字符串 (cad_block_attributes_json) 完全取代。
+    /// 仅为了防止其它残留类报错暂时保留空壳，或可直接删除。
+    /// </summary>
     public class FileAttribute
     {
-        // 使用 long 以兼容数据库中 BIGINT 类型
+        // 仅保留Id，让残留能编译
         public long Id { get; set; }
-        public long? CategoryId { get; set; }
-        public long FileStorageId { get; set; }
-        public string? FileName { get; set; }
         public string? FileAttributeId { get; set; }
-        public string? Description { get; set; }
-        public string? AttributeGroup { get; set; }
-        public string? Remarks { get; set; }
-        public string? Customize1 { get; set; }
-        public string? Customize2 { get; set; }
-        public string? Customize3 { get; set; }
-
-        // 使用 decimal? 与数据库小数类型更兼容，避免隐式转换错误
-        public decimal? Length { get; set; }
-        public decimal? Width { get; set; }
-        public decimal? Height { get; set; }
-        public decimal? Angle { get; set; }
-        public decimal? BasePointX { get; set; }
-        public decimal? BasePointY { get; set; }
-        public decimal? BasePointZ { get; set; }
-
-        public string? Model { get; set; }
-        public string? Specifications { get; set; }
-        public string? Material { get; set; }
-        public string? MediumName { get; set; }
-        public string? StandardNumber { get; set; }
-
-        public decimal? Power { get; set; }
-        public decimal? Volume { get; set; }
-        public decimal? Flow { get; set; }
-        public decimal? Velocity { get; set; }
-        public decimal? Lift { get; set; }
-        public decimal? Pressure { get; set; }
-        public decimal? Temperature { get; set; }
-        public string? PressureRating { get; set; }
-        public decimal? OperatingPressure { get; set; }
-        public decimal? OperatingTemperature { get; set; }
-
-        public decimal? Diameter { get; set; }
-        public decimal? OuterDiameter { get; set; }
-        public decimal? InnerDiameter { get; set; }
-        public string? NominalDiameter { get; set; }
-        public decimal? Thickness { get; set; }
-        public decimal? Weight { get; set; }
-        public decimal? Density { get; set; }
-
-        // 电气/机械特性
-        public decimal? Voltage { get; set; }
-        public decimal? Current { get; set; }
-        public decimal? Frequency { get; set; }
-        public decimal? Conductivity { get; set; }
-        public decimal? Moisture { get; set; }
-        public decimal? Humidity { get; set; }
-        public decimal? Vacuum { get; set; }
-        public decimal? Radiation { get; set; }
-
-        // 管道/法兰/连接相关
-        public string? PipeSpec { get; set; }
-        public string? PipeNominalDiameter { get; set; }
-        public decimal? PipeWallThickness { get; set; }
-        public string? PipePressureClass { get; set; }
-        public string? ConnectionType { get; set; }
-        public string? PipeSlope { get; set; }
-        public string? AnticorrosionTreatment { get; set; }
-
-        // 阀门及材料
-        public string? ValveModel { get; set; }
-        public string? ValveBodyMaterial { get; set; }
-        public string? ValveDiscMaterial { get; set; }
-        public string? ValveBallMaterial { get; set; }
-        public string? SealMaterial { get; set; }
-        public string? DriveType { get; set; }
-        public string? OpenMode { get; set; }
-        public string? ApplicableMedium { get; set; }
-
-        // 法兰/螺栓
-        public string? FlangeModel { get; set; }
-        public string? FlangeType { get; set; }
-        public string? FlangeFaceType { get; set; }
-        public string? FlangeStandard { get; set; }
-        public string? BoltSpec { get; set; }
-
-        // 减径器
-        public string? ReducerSpec { get; set; }
-        public string? ReducerLargeDn { get; set; }
-        public string? ReducerSmallDn { get; set; }
-        public decimal? ReducerWallThicknessLarge { get; set; }
-        public decimal? ReducerWallThicknessSmall { get; set; }
-        public string? ReducerConnectionType { get; set; }
-        public string? ReducerConicity { get; set; }
-        public string? ReducerEccentricDirection { get; set; }
-        public string? ReducerApplicableMedium { get; set; }
-        public string? ReducerAnticorrosion { get; set; }
-
-        // 泵
-        public string? PumpModel { get; set; }
-        public decimal? PumpFlow { get; set; }
-        public decimal? PumpHead { get; set; }
-        public string? PumpBodyMaterial { get; set; }
-        public decimal? MotorPower { get; set; }
-        public string? InletOutletDiameter { get; set; }
-        public decimal? RatedSpeed { get; set; }
-        public string? PumpApplicableMedium { get; set; }
-        public decimal? WorkingPressure { get; set; }
-        public string? ProtectionLevel { get; set; }
-
-        // 膨胀节
-        public string? ExpansionJointModel { get; set; }
-        public string? BellowsMaterial { get; set; }
-        public string? FlangeOrNozzleMaterial { get; set; }
-        public decimal? CompensationAmount { get; set; }
-        public string? ExpansionJointConnectionType { get; set; }
-        public string? ExpansionJointMedium { get; set; }
-        public decimal? ExpansionJointWorkingTemp { get; set; }
-
-        // 烟气/脱硫/风管
-        public decimal? FlueGasCapacity { get; set; }
-        public decimal? DesulfurizationEfficiency { get; set; }
-        public decimal? DropletSize { get; set; }
-        public int? SprayLayerCount { get; set; }
-        public string? ChimneySpec { get; set; }
-        public decimal? ChimneyDiameter { get; set; }
-        public decimal? ChimneyHeight { get; set; }
-        public string? ChimneyMaterial { get; set; }
-        public decimal? ChimneyThickness { get; set; }
-        public decimal? OutletWindSpeed { get; set; }
-        public decimal? InsulationThickness { get; set; }
-        public string? SupportType { get; set; }
-        public decimal? FlueGasTemperature { get; set; }
-
-        // 仪表/检测设备
-        public string? PressureGaugeModel { get; set; }
-        public string? ThermometerModel { get; set; }
-        public string? FilterModel { get; set; }
-        public string? CheckValveModel { get; set; }
-        public string? SprinklerModel { get; set; }
-        public string? FlowMeterModel { get; set; }
-        public string? SafetyValveModel { get; set; }
-        public string? FlexibleJointModel { get; set; }
-
-        public DateTime? CreatedAt { get; set; }
-        public DateTime? UpdatedAt { get; set; }
     }
+
+
+
 
     // 兼容之前 DatabaseManager 中使用的 SW 相关模型
     public class SwCategory

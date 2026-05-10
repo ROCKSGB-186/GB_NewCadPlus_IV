@@ -100,42 +100,42 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 下载文件
         /// </summary>
-        public async Task<Stream> DownloadFileAsync(int fileId, string userName, string ipAddress)
-        {
-            try
-            {
-                // 获取文件信息
-                var file = await _databaseManager.GetFileByIdAsync(fileId);
-                if (file == null)
-                {
-                    throw new Exception("文件不存在或已被删除");
-                }
+        //public async Task<Stream> DownloadFileAsync(int fileId, string userName, string ipAddress)
+        //{
+        //    try
+        //    {
+        //        // 获取文件信息
+        //        var file = await _databaseManager.GetFileByIdAsync(fileId);
+        //        if (file == null)
+        //        {
+        //            throw new Exception("文件不存在或已被删除");
+        //        }
 
-                // 检查文件是否存在
-                if (!File.Exists(file.FilePath))
-                {
-                    throw new Exception("文件在磁盘上不存在");
-                }
+        //        // 检查文件是否存在
+        //        if (!File.Exists(file.FilePath))
+        //        {
+        //            throw new Exception("文件在磁盘上不存在");
+        //        }
 
-                // 记录访问日志
-                var accessLog = new FileAccessLog
-                {
-                    FileId = fileId,
-                    UserName = userName,
-                    ActionType = "Download",
-                    AccessTime = DateTime.Now,
-                    IpAddress = ipAddress
-                };
-                await _databaseManager.AddFileAccessLogAsync(accessLog);
+        //        // 记录访问日志
+        //        var accessLog = new FileAccessLog
+        //        {
+        //            FileId = fileId,
+        //            UserName = userName,
+        //            ActionType = "Download",
+        //            AccessTime = DateTime.Now,
+        //            IpAddress = ipAddress
+        //        };
+        //        await _databaseManager.AddFileAccessLogAsync(accessLog);
 
-                // 返回文件流
-                return File.OpenRead(file.FilePath);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"下载文件失败: {ex.Message}", ex);
-            }
-        }
+        //        // 返回文件流
+        //        return File.OpenRead(file.FilePath);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new Exception($"下载文件失败: {ex.Message}", ex);
+        //    }
+        //}
 
         /// <summary>
         /// 获取分类下的所有文件
@@ -143,10 +143,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="categoryId">分类ID</param>
         /// <param name="categoryType">分类类型</param>
         /// <returns></returns>
-        public async Task<List<FileStorage>> GetFilesByCategoryAsync(int categoryId, string categoryType)
-        {
-            return await _databaseManager.GetFilesByCategoryIdAsync(categoryId, categoryType);
-        }
+        //public async Task<List<FileStorage>> GetFilesByCategoryAsync(int categoryId, string categoryType)
+        //{
+        //    return await _databaseManager.GetFilesByCategoryIdAsync(categoryId, categoryType);
+        //}
 
        /// <summary>
        /// 删除文件
@@ -155,33 +155,34 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
        /// <param name="deletedBy">删除者</param>
        /// <returns>是否删除成功</returns>
        /// <exception cref="Exception"></exception>
-        public async Task<bool> DeleteFileAsync(int fileId, string deletedBy)
-        {
-            try
-            {
-                // 获取文件信息
-                var file = await _databaseManager.GetFileByIdAsync(fileId);
-                if (file == null)
-                {
-                    return false;
-                }
+        //public async Task<bool> DeleteFileAsync(int fileId, string deletedBy)
+        //{
+        //    try
+        //    {
+        //        // 获取文件信息
+        //        var file = await _databaseManager.GetFileByIdAsync(fileId);
+        //        if (file == null)
+        //        {
+        //            return false;
+        //        }
 
-                // 从数据库中软删除
-                int result = await _databaseManager.DeleteFileAsync(fileId, deletedBy);
+        //        // 从数据库中软删除
+        //        int result = await _databaseManager.DeleteFileAsync(fileId, deletedBy);
 
-                // 可选：从磁盘删除文件（根据业务需求决定）
-                // if (File.Exists(file.FilePath))
-                // {
-                //     File.Delete(file.FilePath);
-                // }
+        //        // 可选：从磁盘删除文件（根据业务需求决定）
+        //        // if (File.Exists(file.FilePath))
+        //        // {
+        //        //     File.Delete(file.FilePath);
+        //        // }
 
-                return result > 0;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"删除文件失败: {ex.Message}", ex);
-            }
-        }
+        //        return result > 0;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new Exception($"删除文件失败: {ex.Message}", ex);
+        //    }
+        //}
+
         /// <summary>
         /// 获取管道属性保存路径
         /// </summary>
@@ -324,6 +325,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
         }
+
         /// <summary>
         /// 保存管道属性
         /// </summary>
@@ -410,50 +412,53 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 System.Diagnostics.Debug.WriteLine($"[FileManager] SaveLastPipeAttributes failed: {ex.Message}");
             }
         }
+
         /// <summary>
         /// 判断字符串是否为空
         /// </summary>
         /// <param name="s"></param>
         /// <returns></returns>
-        public static bool IsConsideredEmpty(string? s)
-        {
-            if (string.IsNullOrWhiteSpace(s)) return true;
-            var t = s.Trim();
-            if (t == "-" || t == "—") return true;
-            var tl = t.ToLowerInvariant();
-            if (tl == "n/a" || tl == "na" || tl == "无" || tl == "0") return true;
-            return false;
-        }
+        //public static bool IsConsideredEmpty(string? s)
+        //{
+        //    if (string.IsNullOrWhiteSpace(s)) return true;
+        //    var t = s.Trim();
+        //    if (t == "-" || t == "—") return true;
+        //    var tl = t.ToLowerInvariant();
+        //    if (tl == "n/a" || tl == "na" || tl == "无" || tl == "0") return true;
+        //    return false;
+        //}
+
         /// <summary>
         /// 合并管道属性
         /// </summary>
         /// <param name="sampleAttrMap">示例属性映射</param>
         /// <param name="savedAttrs">保存的属性</param>
         /// <returns></returns>
-        public static Dictionary<string, string> MergeSavedPipeAttributes(Dictionary<string, string>? sampleAttrMap, Dictionary<string, string>? savedAttrs)
-        {
-            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            sampleAttrMap = sampleAttrMap ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            savedAttrs = savedAttrs ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //public static Dictionary<string, string> MergeSavedPipeAttributes(Dictionary<string, string>? sampleAttrMap, Dictionary<string, string>? savedAttrs)
+        //{
+        //    var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //    sampleAttrMap = sampleAttrMap ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //    savedAttrs = savedAttrs ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // 合并键集合（保持不区分大小写）
-            var keys = new HashSet<string>(sampleAttrMap.Keys, StringComparer.OrdinalIgnoreCase);
-            foreach (var k in savedAttrs.Keys) keys.Add(k);
+        //    // 合并键集合（保持不区分大小写）
+        //    var keys = new HashSet<string>(sampleAttrMap.Keys, StringComparer.OrdinalIgnoreCase);
+        //    foreach (var k in savedAttrs.Keys) keys.Add(k);
 
-            foreach (var key in keys)
-            {
-                sampleAttrMap.TryGetValue(key, out var sampleVal);
-                savedAttrs.TryGetValue(key, out var savedVal);
+        //    foreach (var key in keys)
+        //    {
+        //        sampleAttrMap.TryGetValue(key, out var sampleVal);
+        //        savedAttrs.TryGetValue(key, out var savedVal);
 
-                // 优先使用示例中已有且不是占位/空的值；否则使用保存值（若有），否则空字符串
-                if (!IsConsideredEmpty(sampleVal))
-                    result[key] = sampleVal!;
-                else
-                    result[key] = savedVal ?? string.Empty;
-            }
+        //        // 优先使用示例中已有且不是占位/空的值；否则使用保存值（若有），否则空字符串
+        //        if (!IsConsideredEmpty(sampleVal))
+        //            result[key] = sampleVal!;
+        //        else
+        //            result[key] = savedVal ?? string.Empty;
+        //    }
 
-            return result;
-        }
+        //    return result;
+        //}
+
         /// <summary>
         /// 计算文件的哈希值
         /// </summary>
@@ -598,18 +603,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
 
                 // 3. 如果数据库记录已创建，删除数据库记录
+                // 已废弃 DeleteFileAttributeAsync
                 if (fileAttribute != null)
                 {
-                    try
-                    {
-                        // 删除属性记录
-                        await databaseManager.DeleteFileAttributeAsync(fileAttribute.Id);
-                        System.Diagnostics.Debug.WriteLine("已删除文件属性记录");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"删除属性记录失败: {ex.Message}");
-                    }
+                    System.Diagnostics.Debug.WriteLine("[Rollback] 略过旧表属性记录删除");
                 }
             
 
@@ -795,57 +792,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 throw;
             }
         }
-
-        /// <summary>
-        /// 更新文件属性
-        /// </summary>
-        /// <param name="fileAttribute"></param>
-        /// <param name="propertyName"></param>
-        /// <param name="propertyValue"></param>
-        private void UpdateFileAttributeProperty(FileAttribute fileAttribute, string propertyName, string propertyValue)
-        {
-            if (string.IsNullOrEmpty(propertyName) || fileAttribute == null)
-                return;
-
-            try
-            {
-                var property = fileAttribute.GetType().GetProperty(propertyName);
-                if (property != null && property.CanWrite)
-                {
-                    // 根据属性类型进行转换
-                    if (property.PropertyType == typeof(string))
-                    {
-                        property.SetValue(fileAttribute, propertyValue);
-                    }
-                    else if (property.PropertyType == typeof(int?) || property.PropertyType == typeof(int))
-                    {
-                        if (int.TryParse(propertyValue, out int intValue))
-                        {
-                            property.SetValue(fileAttribute, intValue);
-                        }
-                    }
-                    else if (property.PropertyType == typeof(double?) || property.PropertyType == typeof(double))
-                    {
-                        if (double.TryParse(propertyValue, out double doubleValue))
-                        {
-                            property.SetValue(fileAttribute, doubleValue);
-                        }
-                    }
-                    else if (property.PropertyType == typeof(DateTime?) || property.PropertyType == typeof(DateTime))
-                    {
-                        if (DateTime.TryParse(propertyValue, out DateTime dateTimeValue))
-                        {
-                            property.SetValue(fileAttribute, dateTimeValue);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"更新属性 {propertyName} 时出错: {ex.Message}");
-            }
-        }
-
+        
         /// <summary>
         /// 处理文件标签
         /// </summary>
@@ -1082,316 +1029,28 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
-        /// <summary>
-        /// 批量导入图元（JSON属性新链路）
-        /// </summary>
-        public async Task BatchImportGraphicsAsync(string excelFilePath, CategoryTreeNode _selectedCategoryNode, ItemsControl _categoryTreeView, List<CategoryTreeNode> _categoryTreeNodes)
-        {
-            try
-            {
-                // 记录开始日志
-                LogManager.Instance.LogInfo($"开始批量导入图元: {excelFilePath}");
-
-                // 读取Excel数据
-                DataTable dataTable = ReadExcelToDataTable(excelFilePath);
-
-                // 空数据直接返回
-                if (dataTable == null || dataTable.Rows.Count == 0)
-                {
-                    MessageBox.Show("Excel文件中没有数据", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                // 成功失败计数
-                int successCount = 0;
-                int failCount = 0;
-
-                // 逐行导入
-                foreach (DataRow row in dataTable.Rows)
-                {
-                    try
-                    {
-                        // 创建主表对象
-                        var fileStorage = CreateFileStorageFromRow(row);
-                        if (fileStorage == null)
-                        {
-                            failCount++;
-                            LogManager.Instance.LogWarning("创建FileStorage对象失败");
-                            continue;
-                        }
-
-                        // 创建JSON属性字典
-                        var attrs = CreateFileAttributeFromRow(row, 0) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                        // 事务写入主表+JSON属性表
-                        var (storageId, attrId) = await _databaseManager.AddFileStorageAndAttributesJsonAsync(fileStorage, attrs, "default");
-
-                        // 结果判断
-                        if (storageId > 0 && attrId > 0)
-                        {
-                            successCount++;
-                            LogManager.Instance.LogInfo($"成功导入图元: {fileStorage.DisplayName} (StorageId={storageId}, AttrId={attrId})");
-                        }
-                        else
-                        {
-                            failCount++;
-                            LogManager.Instance.LogWarning($"导入图元失败: {fileStorage.DisplayName}");
-                        }
-                    }
-                    catch (Exception exRow)
-                    {
-                        // 单行失败不影响整体
-                        failCount++;
-                        LogManager.Instance.LogError($"导入单个图元时出错: {exRow.Message}");
-                    }
-                }
-
-                // 显示导入结果
-                MessageBox.Show($"批量导入完成\n成功: {successCount} 个\n失败: {failCount} 个",
-                    "完成", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                LogManager.Instance.LogInfo($"批量导入完成 - 成功: {successCount}, 失败: {failCount}");
-
-                // 刷新分类树
-                await _categoryManager.RefreshCategoryTreeAsync(_selectedCategoryNode, _categoryTreeView, _categoryTreeNodes, _databaseManager);
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogError($"批量导入图元时出错: {ex.Message}");
-                MessageBox.Show($"批量导入图元时出错: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        /// <summary>
-        /// 从Excel行数据创建FileStorage对象
-        /// </summary>
-        private FileStorage CreateFileStorageFromRow(DataRow row)
-        {
-            try
-            {
-                var fileStorage = new FileStorage
-                {                    
-                    CategoryId = GetIntValue(row, "分类ID"),
-                    CategoryType = "sub", // 默认为主分类
-                    FileName = GetStringValue(row, "文件名"),
-                    DisplayName = GetStringValue(row, "显示名称"),
-                    FilePath = GetStringValue(row, "文件路径"),
-                    FileType = GetStringValue(row, "文件类型"),
-                    FileSize = GetLongValue(row, "文件大小"),
-                    BlockName = GetStringValue(row, "元素块名"),
-                    LayerName = GetStringValue(row, "图层名称"),
-                    ColorIndex = GetIntValue(row, "颜色索引"),
-                    Scale = GetDoubleValue(row, "比例", 1.0),
-                    PreviewImageName = GetStringValue(row, "预览图片名称"),
-                    PreviewImagePath = GetStringValue(row, "预览图片路径"),
-                    IsPreview = GetIntValue(row, "是否预览", 0),
-                    CreatedBy = GetStringValue(row, "创建者"),
-                    Title = GetStringValue(row, "标题"),
-                    Version = GetIntValue(row, "版本号", 1),
-                    IsActive = GetIntValue(row, "是否激活", 1),
-                    IsPublic = GetIntValue(row, "是否公开", 1),
-                    Description = GetStringValue(row, "描述"),
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-
-                return fileStorage;
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogError($"创建FileStorage对象时出错: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// 从Excel行数据创建 JSON 属性字典（新方案）
-        /// </summary>
-        private Dictionary<string, string> CreateFileAttributeFromRow(DataRow row, int storageFileId)
-        {
-            // 始终返回非空字典，避免上层空引用
-            var attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            try
-            {
-                // 防御式检查，避免传入空行导致异常
-                if (row == null || row.Table == null)
-                {
-                    return attrs;
-                }
-
-                // 写入关联主键（字符串形式，便于JSON统一）
-                attrs["FileStorageId"] = storageFileId.ToString();
-
-                // 局部函数，字符串有值才写入
-                void AddIfNotEmpty(string key, string value)
-                {
-                    if (!string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(value))
-                    {
-                        attrs[key.Trim()] = value.Trim();
-                    }
-                }
-
-                // 局部函数，数值有效才写入，统一用英文小数点
-                void AddIfNumber(string key, double value)
-                {
-                    if (Math.Abs(value) > 1e-12)
-                    {
-                        attrs[key] = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    }
-                }
-
-                // 按你原有字段映射写入
-                AddIfNumber("Width", GetDoubleValue(row, "宽度"));
-                AddIfNumber("Height", GetDoubleValue(row, "高度"));
-                AddIfNumber("Length", GetDoubleValue(row, "长度"));
-                AddIfNumber("Angle", GetDoubleValue(row, "角度"));
-                AddIfNumber("BasePointX", GetDoubleValue(row, "基点X"));
-                AddIfNumber("BasePointY", GetDoubleValue(row, "基点Y"));
-                AddIfNumber("BasePointZ", GetDoubleValue(row, "基点Z"));
-
-                AddIfNotEmpty("MediumName", GetStringValue(row, "介质"));
-                AddIfNotEmpty("Specifications", GetStringValue(row, "规格"));
-                AddIfNotEmpty("Material", GetStringValue(row, "材质"));
-                AddIfNotEmpty("StandardNumber", GetStringValue(row, "标准编号"));
-
-                AddIfNumber("Power", GetDoubleValue(row, "功率"));
-                AddIfNumber("Volume", GetDoubleValue(row, "容积"));
-                AddIfNumber("Pressure", GetDoubleValue(row, "压力"));
-                AddIfNumber("Temperature", GetDoubleValue(row, "温度"));
-                AddIfNumber("Diameter", GetDoubleValue(row, "直径"));
-                AddIfNumber("OuterDiameter", GetDoubleValue(row, "外径"));
-                AddIfNumber("InnerDiameter", GetDoubleValue(row, "内径"));
-                AddIfNumber("Thickness", GetDoubleValue(row, "厚度"));
-                AddIfNumber("Weight", GetDoubleValue(row, "重量"));
-
-                AddIfNotEmpty("Model", GetStringValue(row, "型号"));
-                AddIfNotEmpty("Remarks", GetStringValue(row, "备注"));
-                AddIfNotEmpty("Customize1", GetStringValue(row, "自定义1"));
-                AddIfNotEmpty("Customize2", GetStringValue(row, "自定义2"));
-                AddIfNotEmpty("Customize3", GetStringValue(row, "自定义3"));
-
-                // 写入时间戳，便于后续追踪
-                attrs["CreatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                attrs["UpdatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-
-                return attrs;
-            }
-            catch (Exception ex)
-            {
-                // 记录日志并返回当前已收集到的字典（不抛出，防止批量导入中断）
-                LogManager.Instance.LogError($"创建JSON属性字典时出错: {ex.Message}");
-                return attrs;
-            }
-        }
-
-        /// <summary>
-        /// 将旧 FileAttribute 转为 JSON 字典（过渡桥接）
-        /// </summary>
-        private Dictionary<string, string> ConvertFileAttributeToDictionary(FileAttribute fileAttribute)
-        {
-            // 创建不区分大小写字典
-            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            // 空对象直接返回空字典
-            if (fileAttribute == null) return dict;
-
-            // 通过反射遍历旧模型属性，自动收集非空值
-            foreach (var p in typeof(FileAttribute).GetProperties())
-            {
-                // 只读取可读属性
-                if (!p.CanRead) continue;
-
-                // 过滤技术字段（可按需扩展）
-                if (string.Equals(p.Name, "Id", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(p.Name, "CreatedAt", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(p.Name, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                // 获取属性值
-                var v = p.GetValue(fileAttribute);
-
-                // 空值跳过
-                if (v == null) continue;
-
-                // 转换字符串
-                var s = Convert.ToString(v);
-
-                // 空字符串跳过
-                if (string.IsNullOrWhiteSpace(s)) continue;
-
-                // 写入字典
-                dict[p.Name] = s.Trim();
-            }
-
-            return dict;
-        }
-
-        /// <summary>
-        /// 读取Excel文件到DataTable
-        /// </summary>
-        private DataTable ReadExcelToDataTable(string filePath)
-        {
-            try
-            {
-                DataTable dataTable = new DataTable();
-
-                // 使用EPPlus读取Excel
-                using (var package = new OfficeOpenXml.ExcelPackage(new FileInfo(filePath)))
-                {
-                    var worksheet = package.Workbook.Worksheets[0]; // 读取第一个工作表
-
-                    // 读取标题行
-                    for (int col = 1; col <= worksheet.Dimension.End.Column; col++)
-                    {
-                        var cellValue = worksheet.Cells[1, col].Value?.ToString() ?? "";
-                        dataTable.Columns.Add(cellValue);
-                    }
-
-                    // 读取数据行
-                    for (int row = 2; row <= worksheet.Dimension.End.Row; row++)
-                    {
-                        var dataRow = dataTable.NewRow();
-                        for (int col = 1; col <= worksheet.Dimension.End.Column; col++)
-                        {
-                            dataRow[col - 1] = worksheet.Cells[row, col].Value ?? DBNull.Value;
-                        }
-                        dataTable.Rows.Add(dataRow);
-                    }
-                }
-
-                return dataTable;
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogError($"读取Excel文件时出错: {ex.Message}");
-                return null;
-            }
-        }
-
+        
         /// <summary>
         /// 辅助方法
         /// </summary>
         /// <param name="row">行</param>
         /// <param name="columnName">列</param>
         /// <returns></returns>
-        private string GetStringValue(DataRow row, string columnName)
-        {
-            try
-            {
-                if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
-                {
-                    return row[columnName].ToString();
-                }
-                return string.Empty;
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
+        //private string GetStringValue(DataRow row, string columnName)
+        //{
+        //    try
+        //    {
+        //        if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
+        //        {
+        //            return row[columnName].ToString();
+        //        }
+        //        return string.Empty;
+        //    }
+        //    catch
+        //    {
+        //        return string.Empty;
+        //    }
+        //}
 
         /// <summary>
         /// 获取整型值
@@ -1400,24 +1059,24 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="columnName"></param>
         /// <param name="defaultValue"></param>
         /// <returns></returns>
-        private int GetIntValue(DataRow row, string columnName, int defaultValue = 0)
-        {
-            try
-            {
-                if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
-                {
-                    if (int.TryParse(row[columnName].ToString(), out int result))
-                    {
-                        return result;
-                    }
-                }
-                return defaultValue;
-            }
-            catch
-            {
-                return defaultValue;
-            }
-        }
+        //private int GetIntValue(DataRow row, string columnName, int defaultValue = 0)
+        //{
+        //    try
+        //    {
+        //        if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
+        //        {
+        //            if (int.TryParse(row[columnName].ToString(), out int result))
+        //            {
+        //                return result;
+        //            }
+        //        }
+        //        return defaultValue;
+        //    }
+        //    catch
+        //    {
+        //        return defaultValue;
+        //    }
+        //}
 
         /// <summary>
         /// 获取长整型值
@@ -1427,24 +1086,24 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="defaultValue"></param>
         /// <returns></returns>
         /// 
-        private long GetLongValue(DataRow row, string columnName, long defaultValue = 0)
-        {
-            try
-            {
-                if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
-                {
-                    if (long.TryParse(row[columnName].ToString(), out long result))
-                    {
-                        return result;
-                    }
-                }
-                return defaultValue;
-            }
-            catch
-            {
-                return defaultValue;
-            }
-        }
+        //private long GetLongValue(DataRow row, string columnName, long defaultValue = 0)
+        //{
+        //    try
+        //    {
+        //        if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
+        //        {
+        //            if (long.TryParse(row[columnName].ToString(), out long result))
+        //            {
+        //                return result;
+        //            }
+        //        }
+        //        return defaultValue;
+        //    }
+        //    catch
+        //    {
+        //        return defaultValue;
+        //    }
+        //}
 
         /// <summary>
         /// 获取双精度值
@@ -1453,56 +1112,25 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="columnName"></param>
         /// <param name="defaultValue"></param>
         /// <returns></returns>
-        private double GetDoubleValue(DataRow row, string columnName, double defaultValue = 0.0)
-        {
-            try
-            {
-                if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
-                {
-                    if (double.TryParse(row[columnName].ToString(), out double result))
-                    {
-                        return result;
-                    }
-                }
-                return defaultValue;
-            }
-            catch
-            {
-                return defaultValue;
-            }
-        }
+        //private double GetDoubleValue(DataRow row, string columnName, double defaultValue = 0.0)
+        //{
+        //    try
+        //    {
+        //        if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
+        //        {
+        //            if (double.TryParse(row[columnName].ToString(), out double result))
+        //            {
+        //                return result;
+        //            }
+        //        }
+        //        return defaultValue;
+        //    }
+        //    catch
+        //    {
+        //        return defaultValue;
+        //    }
+        //}
 
-        /// <summary>
-        /// 获取布尔值
-        /// </summary>
-        /// <param name="row"></param>
-        /// <param name="columnName"></param>
-        /// <param name="defaultValue"></param>
-        /// <returns></returns>
-        private bool GetBoolValue(DataRow row, string columnName, bool defaultValue = false)
-        {
-            try
-            {
-                if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
-                {
-                    if (bool.TryParse(row[columnName].ToString(), out bool result))
-                    {
-                        return result;
-                    }
-                    // 处理"是"/"否"等中文表示
-                    string value = row[columnName].ToString().ToLower();
-                    if (value == "是" || value == "true" || value == "1")
-                        return true;
-                    if (value == "否" || value == "false" || value == "0")
-                        return false;
-                }
-                return defaultValue;
-            }
-            catch
-            {
-                return defaultValue;
-            }
-        }
 
     }
 }

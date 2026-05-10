@@ -13,7 +13,6 @@ using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
 // 兼容旧代码：现在使用顶级模型类型而不是 DatabaseManager 内嵌类型
 using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.FileStorage;
-using FileAttribute = GB_NewCadPlus_IV.FunctionalMethod.FileAttribute;
 
 namespace GB_NewCadPlus_IV.Helpers
 {
@@ -28,9 +27,9 @@ namespace GB_NewCadPlus_IV.Helpers
         public FileStorage FileStorage { get; set; } = new FileStorage();
 
         /// <summary>
-        /// 文件属性信息（旧模型，过渡期保留，不再作为上传写库主入口）
+        /// (弃用)文件属性信息
         /// </summary>
-        public FileAttribute FileAttribute { get; set; } = new FileAttribute();
+        // public FileAttribute FileAttribute { get; set; } = new FileAttribute();
 
         /// <summary>
         /// 属性业务ID（兼容字段）
@@ -106,10 +105,9 @@ namespace GB_NewCadPlus_IV.Helpers
                         return null;
                     }
 
-                    // 初始化DTO、文件主信息对象、旧属性对象、JSON属性字典
+                    // 初始化DTO、文件主信息对象、JSON属性字典
                     dto = new ImportEntityDto();
                     var fs = dto.FileStorage;
-                    var fa = dto.FileAttribute;
                     var attrs = dto.AttributesJson;
 
                     // 局部函数，安全写入文本属性到JSON字典
@@ -150,8 +148,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     fs.Scale = 1.0;
 
                     // 初始化旧属性对象，保持兼容
-                    fa.CreatedAt = DateTime.Now;
-                    fa.UpdatedAt = DateTime.Now;
+
 
                     // 记录基础元数据到JSON
                     AddTextAttr("CreatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -182,11 +179,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         fs.ColorIndex = br.Color.ColorIndex;
                         fs.Scale = br.ScaleFactors.X;
 
-                        // 同步写入旧属性对象，兼容旧界面和旧逻辑
-                        fa.Angle = (decimal)br.Rotation;
-                        fa.BasePointX = (decimal)br.Position.X;
-                        fa.BasePointY = (decimal)br.Position.Y;
-                        fa.BasePointZ = (decimal)br.Position.Z;
+
 
                         // 写入JSON动态属性
                         AddNumberAttr("Angle", br.Rotation);
@@ -222,8 +215,8 @@ namespace GB_NewCadPlus_IV.Helpers
                             // 如果有属性文本，则写入旧属性对象和JSON备注
                             if (attributesText.Count > 0)
                             {
-                                fa.Remarks = string.Join("\n", attributesText);
-                                AddTextAttr("Remarks", fa.Remarks);
+                                var remarks = string.Join("\n", attributesText);
+                                AddTextAttr("Remarks", remarks);
                             }
                         }
                     }
@@ -237,7 +230,7 @@ namespace GB_NewCadPlus_IV.Helpers
 
                     // 默认文件名使用显示名称
                     fs.FileName = fs.DisplayName;
-                    fa.FileName = fs.DisplayName;
+
 
                     // 把主表关键字段写入JSON，方便测试核对
                     AddTextAttr("FileName", fs.FileName ?? string.Empty);
@@ -258,10 +251,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         double width = ext.MaxPoint.Y - ext.MinPoint.Y;
                         double height = ext.MaxPoint.Z - ext.MinPoint.Z;
 
-                        // 同步写入旧属性对象
-                        fa.Length = (decimal)length;
-                        fa.Width = (decimal)width;
-                        fa.Height = (decimal)height;
+
 
                         // 写入JSON动态属性
                         AddNumberAttr("Length", length);

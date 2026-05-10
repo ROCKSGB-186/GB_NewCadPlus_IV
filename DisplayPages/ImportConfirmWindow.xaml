@@ -6,7 +6,7 @@
     xmlns:local="clr-namespace:GB_NewCadPlus_IV"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="确认导入图元"
-    Width="900"
+    Width="1000"
     Height="700"
     WindowStartupLocation="CenterOwner"
     mc:Ignorable="d">

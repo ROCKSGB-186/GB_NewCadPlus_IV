@@ -20,3 +20,4 @@
 - 在 AreaByPoints 交互中，按 Z 必须可撤销上一步，并保留选点过程的动态预览连线。
 - 首选将功能按文件拆分：线型相关放在 LineTypeStyleHelper.cs，通用系统变量读取放在 AutoCadHelper.cs，命令入口保留在 FunctionalMethod\Command.cs；今后按此约定拆分方法。
 - 在管道端点继承逻辑中，命中图元的“名称”必须写入管道“起点/终点”属性，不允许覆盖管道“名称”属性。
+- 用户偏好将 MySqlAuthService.cs 视为特定于 MySQL 的文件，NOW()/LAST_INSERT_ID() 可以保留为预期的残留物，而 DatabaseManager.cs 应完全统一到共享数据库写入助手。
