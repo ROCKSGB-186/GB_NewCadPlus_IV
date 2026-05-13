@@ -1,4 +1,4 @@
-using GB_NewCadPlus_IV.DisplayPages;
+﻿using GB_NewCadPlus_IV.DisplayPages;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
@@ -4877,6 +4877,19 @@ namespace GB_NewCadPlus_IV
             if (confirm != MessageBoxResult.Yes)
                 return false;
 
+            // 优先通过 FileManager 删除服务器物理文件，避免数据库按被污染路径误删本地缓存
+            if (_fileManager != null)
+            {
+                try
+                {
+                    await _fileManager.DeletePhysicalFilesAsync(_databaseManager, selected, deleteBackupFiles: true);
+                }
+                catch (Exception exDeleteFile)
+                {
+                    LogManager.Instance.LogWarning($"[{entryName}] 删除服务器物理文件失败（继续执行数据库删除）: {exDeleteFile.Message}");
+                }
+            }
+
             // 执行级联删除
                 bool ok = await _databaseManager.DeleteCadGraphicCascadeAsync(selected.Id, physicalDelete: true);
             if (!ok)
@@ -4944,76 +4957,14 @@ namespace GB_NewCadPlus_IV
             if (string.IsNullOrWhiteSpace(localPreviewPath) || !System.IO.File.Exists(localPreviewPath))
                 return (false, "本地预览图不存在或路径无效。");
             // 数据库管理器校验
-            if (_databaseManager == null) return (false, "数据库管理器未初始化。");
+            if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable) return (false, "数据库管理器未初始化或数据库不可用。");
+            // 文件管理服务校验
+            if (_fileManager == null) return (false, "文件管理服务未初始化。");
 
             try
             {
-                // 记录旧预览路径（用于缺失时兜底）
-                string oldPreviewPath = storage.PreviewImagePath ?? string.Empty;
-                // 确定目标目录：优先旧预览目录，回退到图元文件目录
-                string targetDir = string.Empty;
-
-                // 若旧预览路径可用，则用其目录
-                if (!string.IsNullOrWhiteSpace(oldPreviewPath))
-                    targetDir = System.IO.Path.GetDirectoryName(oldPreviewPath) ?? string.Empty;
-
-                // 若旧目录不可用，则回退到图元文件目录
-                if (string.IsNullOrWhiteSpace(targetDir) && !string.IsNullOrWhiteSpace(storage.FilePath))
-                    targetDir = System.IO.Path.GetDirectoryName(storage.FilePath) ?? string.Empty;
-
-                // 再兜底到本地应用目录
-                if (string.IsNullOrWhiteSpace(targetDir))
-                    targetDir = System.IO.Path.Combine(AppPath, "PreviewImages");
-
-                // 确保目标目录存在
-                if (!System.IO.Directory.Exists(targetDir))
-                    System.IO.Directory.CreateDirectory(targetDir);
-
-                // 确定目标文件名（优先沿用原预览文件名，保持“替换逻辑”一致）
-                string ext = System.IO.Path.GetExtension(localPreviewPath);
-                if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
-
-                // 优先沿用旧预览名称，若无则生成新名称
-                string previewName = storage.PreviewImageName ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(previewName))
-                {
-                    // 若旧路径有文件名则沿用
-                    if (!string.IsNullOrWhiteSpace(oldPreviewPath))
-                        previewName = System.IO.Path.GetFileName(oldPreviewPath);
-                }
-                if (string.IsNullOrWhiteSpace(previewName))
-                    previewName = $"{Guid.NewGuid():N}{ext}";
-
-                // 若文件名无扩展，补上扩展
-                if (string.IsNullOrWhiteSpace(System.IO.Path.GetExtension(previewName)))
-                    previewName = System.IO.Path.GetFileNameWithoutExtension(previewName) + ext;
-
-                // 目标全路径
-                string targetPreviewPath = System.IO.Path.Combine(targetDir, previewName);
-
-                // 若目标文件已存在，先备份一份
-                if (System.IO.File.Exists(targetPreviewPath))
-                {
-                    try
-                    {
-                        // 备份文件路径
-                        string bak = targetPreviewPath + ".bak";
-                        // 覆盖式备份
-                        System.IO.File.Copy(targetPreviewPath, bak, true);
-                    }
-                    catch
-                    {
-                        // 备份失败不阻断主流程
-                    }
-                }
-
-                // 复制新预览图到目标路径（覆盖）
-                System.IO.File.Copy(localPreviewPath, targetPreviewPath, true);
-
-                // 回写内存对象字段
-                storage.PreviewImagePath = targetPreviewPath;
-                storage.PreviewImageName = System.IO.Path.GetFileName(targetPreviewPath);
-                storage.UpdatedAt = DateTime.Now;
+                // 统一走 FileManager：替换服务器预览图并回写内存对象字段
+                await _fileManager.ReplacePreviewFileAsync(_databaseManager, storage, localPreviewPath);
 
                 // 更新数据库（与现有文件更新逻辑一致）
                 bool dbOk = await _databaseManager.UpdateFileStorageAsync(storage);
@@ -5029,8 +4980,6 @@ namespace GB_NewCadPlus_IV
                 return (false, ex.Message);
             }
         }
-        
-
         /// <summary>
         /// 确保图元在本地 CadFiles 有可用副本：
         /// - 优先使用现有 FilePath
@@ -5063,7 +5012,7 @@ namespace GB_NewCadPlus_IV
                     if (!string.IsNullOrWhiteSpace(recovered))
                     {
                         sourcePath = recovered; // 更新使用回源路径
-                        fileStorage.FilePath = recovered; // 暂存真实源路径
+                        // fileStorage.FilePath 保持服务器权威路径，不在缓存流程中回写
                         LogManager.Instance.LogInfo($"已回源恢复图元路径: {recovered}");
                     }
                 }
@@ -5094,7 +5043,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 后续统一使用本地缓存路径（与原有逻辑一致）
-                fileStorage.FilePath = localPath;
+                // fileStorage.FilePath 保持服务器权威路径，不在此处回写本地缓存路径
 
                 // 同步缓存预览图到本地缓存目录，避免局域网原始预览路径在点击后不可达
                 await EnsureLocalPreviewCacheAsync(fileStorage);
@@ -5109,7 +5058,7 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 将预览图复制到本地预览缓存目录，并回写 fileStorage.PreviewImagePath。
+        /// 将预览图复制到本地预览缓存目录，仅返回本地缓存路径，不回写权威路径。
         /// </summary>
         private async Task<string?> EnsureLocalPreviewCacheAsync(FileStorage fileStorage)
         {
@@ -5143,8 +5092,8 @@ namespace GB_NewCadPlus_IV
                     LogManager.Instance.LogInfo($"已将预览图缓存到本地: {localPreviewPath}");
                 }
 
-                fileStorage.PreviewImageName = previewName;
-                fileStorage.PreviewImagePath = localPreviewPath;
+                // fileStorage.PreviewImageName 保持数据库中的权威值，不在本地缓存流程中改写
+                // fileStorage.PreviewImagePath 保持服务器权威路径，不在此处回写本地缓存路径
                 return localPreviewPath;
             }
             catch (Exception ex)
@@ -5192,16 +5141,51 @@ namespace GB_NewCadPlus_IV
             // 2) 兜底：按常见存储根 + categoryType/categoryId + fileStoredName 拼接
             try
             {
-                var roots = new List<string>();
+                var rawRoots = new List<string>();
 
                 if (!string.IsNullOrWhiteSpace(TextBoxSetStoragePath?.Text))
-                    roots.Add(TextBoxSetStoragePath.Text.Trim());
+                    rawRoots.Add(TextBoxSetStoragePath.Text.Trim());
 
                 if (!string.IsNullOrWhiteSpace(VariableDictionary._storagePath))
-                    roots.Add(VariableDictionary._storagePath.Trim());
+                    rawRoots.Add(VariableDictionary._storagePath.Trim());
 
-                roots.Add(@"D:\GB_Tools\Cad_Sw_Library");
-                roots.Add(@"C:\GB_Tools\Cad_Sw_Library");
+                var roots = new List<string>();
+                string serverIp = (VariableDictionary._serverIP ?? string.Empty).Trim();
+                foreach (var rawRoot in rawRoots.Where(r => !string.IsNullOrWhiteSpace(r)).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    string normalizedRoot = rawRoot.Replace('/', '\\').Trim();
+                    if (string.IsNullOrWhiteSpace(normalizedRoot))
+                        continue;
+
+                    if (normalizedRoot.StartsWith("\\\\", StringComparison.Ordinal))
+                    {
+                        roots.Add(normalizedRoot);
+                        continue;
+                    }
+
+                    bool isDrivePath = normalizedRoot.Length >= 3
+                        && char.IsLetter(normalizedRoot[0])
+                        && normalizedRoot[1] == ':'
+                        && (normalizedRoot[2] == '\\' || normalizedRoot[2] == '/');
+                    if (isDrivePath)
+                    {
+                        if (string.IsNullOrWhiteSpace(serverIp))
+                        {
+                            LogManager.Instance.LogWarning($"回源恢复跳过盘符路径: {normalizedRoot}（登录页服务器IP为空，无法转换为共享路径）");
+                            continue;
+                        }
+
+                        string driveLetter = char.ToUpperInvariant(normalizedRoot[0]).ToString();
+                        string tailPath = normalizedRoot.Length > 3 ? normalizedRoot.Substring(3).TrimStart('\\', '/') : string.Empty;
+                        string sharedRoot = string.IsNullOrWhiteSpace(tailPath)
+                            ? $@"\\{serverIp}\{char.ToLowerInvariant(driveLetter[0])}"
+                            : $@"\\{serverIp}\{driveLetter}$\{tailPath}";
+                        roots.Add(sharedRoot);
+                        continue;
+                    }
+
+                    roots.Add(normalizedRoot);
+                }
 
                 string categoryType = string.IsNullOrWhiteSpace(fileStorage.CategoryType) ? "sub" : fileStorage.CategoryType;
                 string categoryId = fileStorage.CategoryId.ToString();
@@ -5912,70 +5896,27 @@ namespace GB_NewCadPlus_IV
             if (string.IsNullOrWhiteSpace(localPath) || !System.IO.File.Exists(localPath))
                 return (false, "本地文件不存在或路径无效。");
 
+            var storage = storageObj as FileStorage;
+            if (storage == null)
+                return (false, "无法识别文件记录类型（需要 FileStorage）。");
+
+            if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
+                return (false, "数据库管理器未初始化或数据库不可用。");
+
+            if (_fileManager == null)
+                return (false, "文件管理服务未初始化。");
+
             try
             {
-                // 优先使用 FileManager（若存在）
-                if (_fileManager != null)
-                {
-                    try
-                    {
-                        // 调用扩展（扩展会优先反射到实际 API）
-                        _fileManager.ReplaceFileContent(storageObj, localPath);
-                        return (true, string.Empty);
-                    }
-                    catch (Exception ex)
-                    {
-                        // 若 FileManager 路径方式失败，继续尝试 DatabaseManager
-                        var msg = $"FileManager 替换失败: {ex.Message}";
-                        // 继续向下尝试 DatabaseManager
-                    }
-                }
+                // 统一调用 FileManager 的服务器侧替换逻辑，避免回退到本地缓存路径
+                await _fileManager.ReplaceGraphicFileAsync(_databaseManager, storage, localPath);
 
-                // 尝试 DatabaseManager（以二进制替换为主）
-                if (_databaseManager != null)
-                {
-                    byte[] bytes = await Task.Run(() => System.IO.File.ReadAllBytes(localPath)).ConfigureAwait(false);
-                    try
-                    {
-                        _databaseManager.ReplaceFileBinary(storageObj, bytes);
-                        return (true, string.Empty);
-                    }
-                    catch (Exception ex)
-                    {
-                        return (false, $"DatabaseManager 替换失败: {ex.Message}");
-                    }
-                }
+                // 替换成功后统一回写数据库记录
+                bool dbOk = await _databaseManager.UpdateFileStorageAsync(storage);
+                if (!dbOk)
+                    return (false, "数据库更新失败（UpdateFileStorageAsync 返回 false）。");
 
-                // 退回：若 storageObj 本身实现替换方法则尝试调用
-                {
-                    var storageType = storageObj.GetType();
-                    var pathProp = storageType.GetProperty("FilePath", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase) ??
-                                   storageType.GetProperty("Path", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                    if (pathProp != null)
-                    {
-                        var dest = pathProp.GetValue(storageObj) as string;
-                        if (!string.IsNullOrWhiteSpace(dest))
-                        {
-                            try
-                            {
-                                // 备份与复制
-                                var dir = System.IO.Path.GetDirectoryName(dest);
-                                if (!string.IsNullOrWhiteSpace(dir) && !System.IO.Directory.Exists(dir))
-                                    System.IO.Directory.CreateDirectory(dir);
-                                if (System.IO.File.Exists(dest))
-                                    System.IO.File.Copy(dest, dest + ".bak", overwrite: true);
-                                System.IO.File.Copy(localPath, dest, overwrite: true);
-                                return (true, string.Empty);
-                            }
-                            catch (Exception ex)
-                            {
-                                return (false, $"直接写入 storage 路径失败: {ex.Message}");
-                            }
-                        }
-                    }
-                }
-
-                return (false, "未在 FileManager/DatabaseManager/storage 对象中找到可调用的替换方法。请在后端或 FileManager/DatabaseManager 中实现替换 API（例如：FileManager.ReplaceFileContent(FileStorage, string) 或 DatabaseManager.ReplaceFileBinary(FileStorage, byte[])）。");
+                return (true, string.Empty);
             }
             catch (Exception ex)
             {
@@ -15207,17 +15148,17 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show("当前数据库未连接，无法执行同步。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
+            // 设置本地同步根路径
             _syncLocalRoot = @"D:\GB_Tools\Cad_Sw_Library";
-            _syncSourceRoot = await GetSharedSourceRootAsync();
+            _syncSourceRoot = await GetSharedSourceRootAsync();// 这里尝试获取共享路径，如果失败则继续使用本地路径进行可访问性检查
             if (string.IsNullOrWhiteSpace(_syncSourceRoot))
             {
                 LogManager.Instance.LogInfo("未能确定共享根路径，将尝试直接使用数据库中的本地路径做可访问性检查。");
             }
-
+            // 构建同步清单
             var manifest = await BuildSyncManifestAsync();
-            _lastSyncManifest = manifest;
-
+            _lastSyncManifest = manifest;// 保存最后一次的清单，供后续检查和调试使用
+            // 在正式执行同步前，先检查所有源路径的可访问性，并提示用户确认
             var inaccessibleItems = BuildInaccessibleSourceMessages(manifest);
             if (inaccessibleItems.Count > 0)
             {
@@ -15231,43 +15172,43 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
             }
-
+            // 显示同步进度窗口并执行同步
             var progressWindow = new GB_NewCadPlus_IV.SyncProgressWindow();
-            var owner = System.Windows.Window.GetWindow(this);
-            if (owner != null && !ReferenceEquals(owner, progressWindow))
+            var owner = System.Windows.Window.GetWindow(this);// 尝试将当前窗口作为进度窗口的所有者，确保模态显示和界面聚焦
+            if (owner != null && !ReferenceEquals(owner, progressWindow))// 避免错误地将自己设置为所有者
             {
-                progressWindow.Owner = owner;
+                progressWindow.Owner = owner;// 设置所有者后，进度窗口将模态显示在当前窗口之上，并且在同步过程中保持界面响应和焦点正确
             }
-
+            // 定义同步过程中可能发生的异常和取消状态
             Exception? syncError = null;
-            bool syncCanceled = false;
-            using var syncCancellationSource = new CancellationTokenSource();
-            _syncCancellationSource = syncCancellationSource;
-            progressWindow.CancelRequested += (_, __) => syncCancellationSource.Cancel();
-
+            bool syncCanceled = false;// 创建同步取消令牌源，并在进度窗口请求取消时触发
+            using var syncCancellationSource = new CancellationTokenSource();// 将取消令牌源保存到字段，以便在其他地方（例如窗口关闭事件）也能触发取消
+            _syncCancellationSource = syncCancellationSource;// 订阅进度窗口的取消事件，当用户点击取消按钮时，触发同步取消
+            progressWindow.CancelRequested += (_, __) => syncCancellationSource.Cancel();// 执行同步任务，并在进度窗口加载完成后开始等待同步结果
+            // 注意：同步任务在这里启动，但实际执行是在进度窗口的 Loaded 事件中开始等待，这样可以确保进度窗口先显示出来，用户界面不会卡死，并且能够正确响应取消请求
             var syncTask = ExecuteSyncAsync(manifest, new Progress<SyncProgressInfo>(progressWindow.UpdateProgress), syncCancellationSource.Token);
-
+            // 在进度窗口加载完成后，开始等待同步任务的完成，并根据结果更新界面状态
             progressWindow.Loaded += async (_, __) =>
             {
                 try
                 {
-                    await syncTask;
+                    await syncTask;// 等待同步任务完成，如果过程中发生异常或取消，将在下面的 catch 块中处理
                 }
                 catch (OperationCanceledException)
                 {
-                    syncCanceled = true;
+                    syncCanceled = true;// 同步被取消，设置取消状态以便后续处理
                 }
                 catch (Exception ex)
                 {
-                    syncError = ex;
+                    syncError = ex;// 同步过程中发生异常，保存异常信息以便后续显示错误消息
                 }
                 finally
                 {
-                    _syncCancellationSource = null;
-                    progressWindow.Close();
+                    _syncCancellationSource = null;// 同步完成后清理取消令牌源，避免内存泄漏和错误触发
+                    progressWindow.Close();// 同步完成后关闭进度窗口，无论是成功、取消还是失败，都应该关闭窗口以恢复用户界面状态
                 }
             };
-
+            // 在显示进度窗口之前，先更新一次进度信息，提示用户正在准备同步，并显示不可访问的项（如果有的话），这样用户在看到进度窗口时就能立即了解当前状态和潜在问题，而不是看到一个空白的进度界面
             progressWindow.UpdateProgress(new SyncProgressInfo
             {
                 Stage = "准备同步...",
@@ -15432,16 +15373,16 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private async Task<SyncManifest> BuildSyncManifestAsync()
         {
-            var storageRoot = GetConfiguredStorageRoot();
-            var sourceRoot = _syncSourceRoot ?? await ResolveSyncSourceRootAsync();
-            var serverClientVersion = await _databaseManager!.GetServerClientVersionAsync();
-            var files = await _databaseManager.GetAllFileStorageAsync();
+            var storageRoot = GetConfiguredStorageRoot();// 获取配置的本地存储根路径
+            var sourceRoot = _syncSourceRoot ?? await ResolveSyncSourceRootAsync();// 解析同步源根路径，优先使用之前解析的共享路径，如果不可用则尝试其他方式解析
+            var serverClientVersion = await _databaseManager!.GetServerClientVersionAsync();// 获取服务器端客户端版本信息
+            var files = await _databaseManager.GetAllFileStorageAsync();// 从数据库获取所有文件存储信息
             var manifest = new SyncManifest
             {
-                StorageRoot = storageRoot,
-                SourceRoot = sourceRoot,
-                ServerClientVersion = serverClientVersion,
-                GeneratedAt = DateTime.Now
+                StorageRoot = storageRoot,// 本地存储根路径（镜像目标根路径）
+                SourceRoot = sourceRoot,// 同步源根路径（服务器共享路径）
+                ServerClientVersion = serverClientVersion,// 服务器端客户端版本
+                GeneratedAt = DateTime.Now// 同步清单生成时间
             };
 
             foreach (var file in files)

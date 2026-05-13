@@ -26,6 +26,10 @@ namespace GB_NewCadPlus_IV
             this.textBox_Scale_比例.KeyPress += textBox_Scale_比例_KeyPress;
             this.textBox_Scale_比例.TextChanged += textBox_Scale_比例_TextChanged;
             this.textBox_Scale_比例.Leave += textBox_Scale_比例_Leave;
+            // 获取程序集版本号 (AssemblyVersion)
+            VariableDictionary.version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            this.label_VER.Text = "版本号：" + VariableDictionary.version;
+            this.about_label_版本.Text = "版本号：" + VariableDictionary.version;
             //记录运行时间
             textBox_cmdShow.Text = DateTime.Now.ToString();
             // 注册到统一管理器
@@ -2998,10 +3002,6 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            //VariableDictionary.btnFileName = "DQTJ_EQUIP_单相插座";
-            //VariableDictionary.btnFileName_blockName = "HC002694005706";
-            ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            //VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相插座;
@@ -3015,15 +3015,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            //VariableDictionary.btnFileName = "DQTJ_EQUIP_三相380V插座";
-            //VariableDictionary.btnFileName_blockName = "HC002696005706";
-            ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            //VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三相380V插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3032,15 +3027,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            //VariableDictionary.btnFileName = "DQTJ_EQUIP_潮湿插座";
-            //VariableDictionary.btnFileName_blockName = "HC002695005706";
-            ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            //VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_潮湿插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3049,15 +3039,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            //VariableDictionary.btnFileName = "DQTJ_EQUIP_三相潮湿插座";
-            //VariableDictionary.btnFileName_blockName = "HC002697005706";
-            ////VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            //VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三相潮湿插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3066,15 +3051,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_空调插座";
-            VariableDictionary.btnFileName_blockName = "HC003131100042";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_空调插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3083,15 +3063,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_设备用电点位";
-            VariableDictionary.btnFileName_blockName = "HC002694005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_设备用电点位;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3100,15 +3075,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相夹层插座";
-            VariableDictionary.btnFileName_blockName = "HC002698005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相夹层插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3117,16 +3087,11 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_插座箱";
-            VariableDictionary.btnFileName_blockName = "DQTJ-插座箱";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.blockScale = 1;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_插座箱;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3135,15 +3100,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_应急插座";
-            VariableDictionary.btnFileName_blockName = "HC002997005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_应急插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3152,15 +3112,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_应急16A插座";
-            VariableDictionary.btnFileName_blockName = "DQTJ-UPS16A电源";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_应急16A插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3169,15 +3124,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_UPS插座";
-            VariableDictionary.btnFileName_blockName = "DQTJ-应急UPS电源";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_UPS插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3186,15 +3136,11 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_UPS16A插座";
-            VariableDictionary.btnFileName_blockName = "DQTJ-应急UPS16A电源";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_UPS16A插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3203,15 +3149,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_传递窗电源插座";
-            VariableDictionary.btnFileName_blockName = "HC003001006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_传递窗电源插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3220,15 +3161,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_门禁插座";
-            VariableDictionary.btnFileName_blockName = "A$C16EA1F35";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_门禁插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3237,15 +3173,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_红外感应门插座";
-            VariableDictionary.btnFileName_blockName = "DQTJ-红外感应门插座";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_红外感应门插座;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3265,16 +3196,11 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_三联插座";
-            VariableDictionary.btnFileName_blockName = "$equip$00001992";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.blockScale = 1.5;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三联插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3283,14 +3209,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_四联插座";
-            VariableDictionary.btnFileName_blockName = "$equip$00002163";
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_四联插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 500;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3299,14 +3221,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_互锁插座";
-            VariableDictionary.btnFileName_blockName = "HC002698005707";
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_互锁插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3315,15 +3233,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_两点互锁";
-            VariableDictionary.btnFileName_blockName = "DQTJ-两点互锁";
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
-            //VariableDictionary.blockScale = 0.8;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_两点互锁;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3332,15 +3245,11 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_三点互锁";
-            VariableDictionary.btnFileName_blockName = "A$C0664bbbd";
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.blockScale = 0.8;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三点互锁;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3349,14 +3258,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_立式空调插座";
-            VariableDictionary.btnFileName_blockName = "HC003131000042";
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_立式空调插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3365,15 +3270,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_壁挂空调插座";
-            VariableDictionary.btnFileName_blockName = "HC003130000042";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_壁挂空调插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3382,15 +3282,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_手消毒插座";
-            VariableDictionary.btnFileName_blockName = "HC003007006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_手消毒插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3399,15 +3294,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_视孔灯";
-            VariableDictionary.btnFileName_blockName = "$Equip$00003237";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_视孔灯;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 200;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3416,15 +3306,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_烘手器插座";
-            VariableDictionary.btnFileName_blockName = "A$C21791F4C";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_烘手器插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3433,15 +3318,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台功能柱插座";
-            VariableDictionary.btnFileName_blockName = "HC002694005706N";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名HC002694005706
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台功能柱插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3450,15 +3330,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台UPS功能柱电源";
-            VariableDictionary.btnFileName_blockName = "HC003210000042";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台UPS功能柱电源;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3467,15 +3342,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_电热水器安全型插座";
-            VariableDictionary.btnFileName_blockName = "HC003021006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_电热水器安全型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3484,15 +3354,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_厨宝安全型插座";
-            VariableDictionary.btnFileName_blockName = "A$C1E63194F";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_厨宝安全型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3501,15 +3366,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_烘手器";
-            VariableDictionary.btnFileName_blockName = "$Equip$00003233";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_烘手器;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 200;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3518,15 +3378,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_驱鼠器插座";
-            VariableDictionary.btnFileName_blockName = "HC003076006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_驱鼠器插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3535,15 +3390,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_灭蝇灯插座";
-            VariableDictionary.btnFileName_blockName = "HC003076006336";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_灭蝇灯插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3552,15 +3402,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_灭蝇灯插座_底边";
-            VariableDictionary.btnFileName_blockName = "HC002694005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_灭蝇灯插座_底边;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3569,15 +3414,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台UPS功能柱电源";
-            VariableDictionary.btnFileName_blockName = "HC003210000042";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台UPS功能柱电源;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3586,15 +3426,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台上方220V插座";
-            VariableDictionary.btnFileName_blockName = "HC003212000042";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台上方220V插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3612,8 +3447,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_380V用电设备点或配电柜;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            VariableDictionary.winForm_Status = true;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3648,14 +3481,11 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "220V用电设备点或配电柜";
             VariableDictionary.dimString = "设备名称\n" + "220V," + textBox_inputKW.Text + "kw";
             VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
-
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_220V用电设备点或配电柜;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
             VariableDictionary.blockScale = VariableDictionary.textBoxScale;
-            VariableDictionary.winForm_Status = true;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3665,15 +3495,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相插座";
-            VariableDictionary.btnFileName_blockName = "HC002694005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3682,15 +3507,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相地面插座";
-            VariableDictionary.btnFileName_blockName = "HC003202000042";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相地面插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3699,15 +3519,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相三孔插座";
-            VariableDictionary.btnFileName_blockName = "HC002696005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相三孔插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3716,15 +3531,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相空调插座";
-            VariableDictionary.btnFileName_blockName = "HC003130000042";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相空调插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3733,15 +3543,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相16A三孔插座";
-            VariableDictionary.btnFileName_blockName = "HC002805006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相16A三孔插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3750,15 +3555,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相20A三孔插座";
-            VariableDictionary.btnFileName_blockName = "HC002944006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相20A三孔插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3767,15 +3567,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相25A三孔插座";
-            VariableDictionary.btnFileName_blockName = "HC002806006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D2)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相25A三孔插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3784,15 +3579,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相32A三孔插座";
-            VariableDictionary.btnFileName_blockName = "HC002957006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相32A三孔插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3801,15 +3591,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相五孔岛型插座";
-            VariableDictionary.btnFileName_blockName = "$equip_U$00000168";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相五孔岛型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 500;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3818,15 +3603,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相三孔岛型插座";
-            VariableDictionary.btnFileName_blockName = "$equip_U$00000169";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相三孔岛型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 500;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3835,15 +3615,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_三相岛型插座";
-            VariableDictionary.btnFileName_blockName = "$equip_U$00000167";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三相岛型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 500;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3852,15 +3627,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_带保护极的单相防爆插座";
-            VariableDictionary.btnFileName_blockName = "HC002820006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_带保护极的单相防爆插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3869,15 +3639,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_带保护极的三相防爆插座";
-            VariableDictionary.btnFileName_blockName = "HC002821006335";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_带保护极的三相防爆插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3886,15 +3651,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相防爆岛型插座";
-            VariableDictionary.btnFileName_blockName = "$equip_U$00000170";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相防爆岛型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 500;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3903,15 +3663,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_带保护极的单相暗敷插座";
-            VariableDictionary.btnFileName_blockName = "DQTJ-带保护极的单相暗敷插座";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName; 
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_带保护极的单相暗敷插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3920,16 +3675,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_带保护极的单相密闭插座";
-            VariableDictionary.btnFileName_blockName = "HC002695005706";
-            //VariableDictionary.btnFileName_blockName = "HC002697005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_带保护极的单相密闭插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3938,15 +3687,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_带保护极的三相密闭插座";
-            VariableDictionary.btnFileName_blockName = "HC002697005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_带保护极的三相密闭插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -3955,15 +3699,10 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            VariableDictionary.btnFileName = "DQTJ_EQUIP_带保护极的三相暗敷插座";
-            VariableDictionary.btnFileName_blockName = "DQTJ-带保护极的三相暗敷插座";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_带保护极的三相暗敷插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);

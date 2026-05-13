@@ -3032,7 +3032,10 @@
                             <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="10,5,10,5">
                                     <!--  数据库设置  -->
-                                    <GroupBox x:Name="数据库设置" Margin="0,5,0,5" Header="数据库设置">
+                                    <GroupBox
+                                        x:Name="数据库设置"
+                                        Margin="0,5,0,5"
+                                        Header="数据库设置">
                                         <StackPanel Margin="5">
                                             <TextBlock Margin="0,5,0,2" Text="服务器IP地址：" />
                                             <TextBox
@@ -3090,7 +3093,10 @@
                                     </GroupBox>
 
                                     <!--  文件存储设置  -->
-                                    <GroupBox x:Name="文件存储设置" Margin="0,5,0,5" Header="文件存储设置">
+                                    <GroupBox
+                                        x:Name="文件存储设置"
+                                        Margin="0,5,0,5"
+                                        Header="文件存储设置">
                                         <StackPanel Margin="5">
                                             <TextBlock Margin="0,5,0,2" Text="首选存储路径：" />
                                             <TextBox
@@ -3102,7 +3108,7 @@
                                                 IsReadOnly="True"
                                                 Style="{StaticResource WatermarkTextBoxStyle}"
                                                 Tag="请输入文件存储路径"
-                                                Text="D:\GB_Tools\Cad_Sw_Library" />
+                                                Text="D\GB_Tools\Cad_Sw_Library" />
 
                                             <CheckBox
                                                 x:Name="CheckBoxUseDPath"
@@ -3114,7 +3120,10 @@
                                     </GroupBox>
 
                                     <!--  其他设置  -->
-                                    <GroupBox x:Name="其他设置" Margin="0,5,0,5" Header="其他设置">
+                                    <GroupBox
+                                        x:Name="其他设置"
+                                        Margin="0,5,0,5"
+                                        Header="其他设置">
                                         <StackPanel Margin="5">
                                             <CheckBox
                                                 x:Name="CheckBoxAutoSync"
@@ -3137,7 +3146,11 @@
                                                 Text="30" />
                                         </StackPanel>
                                     </GroupBox>
-                                    <GroupBox x:Name="应用按键"  Margin="0,1,0,1" Header="" Height="50">
+                                    <GroupBox
+                                        x:Name="应用按键"
+                                        Height="50"
+                                        Margin="0,1,0,1"
+                                        Header="">
                                         <Grid>
 
                                             <Button
@@ -3145,79 +3158,97 @@
                                                 Width="80"
                                                 Height="25"
                                                 Margin="0,0,0,0"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
                                                 Click="保存设置按钮_Click"
                                                 Content="保存设置"
-                                                Cursor="" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                Cursor="" />
                                             <Button
                                                 x:Name="测试连接按钮"
                                                 Width="80"
                                                 Height="25"
                                                 Margin="0,0,0,0"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top"
                                                 Click="测试连接按钮_Click"
-                                                Content="测试连接" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                                                Content="测试连接" />
                                             <Button
                                                 x:Name="应用设置按钮"
                                                 Width="80"
                                                 Height="25"
                                                 Margin="0,0,0,0"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Bottom"
                                                 Click="应用设置按钮_Click"
-                                                Content="应用设置" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                                                Content="应用设置" />
 
                                         </Grid>
                                     </GroupBox>
 
-                                    <GroupBox x:Name="版本插入管理" Margin="0,5,0,5" Header="插件" Height="107">
+                                    <GroupBox
+                                        x:Name="版本插入管理"
+                                        Height="107"
+                                        Margin="0,5,0,5"
+                                        Header="插件">
 
                                         <Grid>
                                             <TextBlock
                                                 Height="25"
                                                 Margin="5,7,0,0"
+                                                HorizontalAlignment="Left"
                                                 VerticalAlignment="Top"
-                                                Text="服务器版本：" HorizontalAlignment="Left" />
+                                                Text="服务器版本：" />
                                             <TextBox
                                                 x:Name="TextBox插件版本"
                                                 Width="180"
                                                 Height="20"
                                                 Margin="0,5,5,60"
+                                                HorizontalAlignment="Right"
                                                 AcceptsTab="True"
                                                 BorderThickness="1,2,1,1"
                                                 FontSize="8"
                                                 SelectionOpacity="0.5"
                                                 Style="{StaticResource WatermarkTextBoxStyle}"
                                                 Tag="版本："
-                                                TextWrapping="Wrap" HorizontalAlignment="Right" />
+                                                TextWrapping="Wrap" />
                                             <TextBlock
                                                 Height="25"
                                                 Margin="6,0,0,0"
+                                                HorizontalAlignment="Left"
                                                 VerticalAlignment="Center"
-                                                Text="客户端版本：" HorizontalAlignment="Left" />
+                                                Text="客户端版本：" />
                                             <TextBox
                                                 x:Name="TextBox客户端版本"
                                                 Width="180"
                                                 Height="20"
                                                 Margin="0,27,5,38"
+                                                HorizontalAlignment="Right"
                                                 AcceptsTab="True"
                                                 BorderThickness="1,2,1,1"
                                                 FontSize="8"
                                                 SelectionOpacity="0.5"
                                                 Style="{StaticResource WatermarkTextBoxStyle}"
                                                 Tag="版本："
-                                                TextWrapping="Wrap" HorizontalAlignment="Right" />
+                                                TextWrapping="Wrap" />
                                             <Button
                                                 x:Name="下载最新版客户端"
                                                 Width="120"
                                                 Height="25"
                                                 Margin="0,0,15,0"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Bottom"
                                                 Click="下载最新版客户端_Click"
-                                                Content="下载最新版客户端" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                                                Content="下载最新版客户端" />
 
                                             <Button
                                                 x:Name="同步图元"
                                                 Width="100"
                                                 Height="25"
                                                 Margin="15,0,0,0"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Bottom"
                                                 Click="同步图元_Click"
-                                                Content="同步图元" HorizontalAlignment="Left" VerticalAlignment="Bottom" />
+                                                Content="同步图元" />
 
                                         </Grid>
 

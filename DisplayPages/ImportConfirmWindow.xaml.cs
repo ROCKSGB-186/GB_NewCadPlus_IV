@@ -65,7 +65,7 @@ namespace GB_NewCadPlus_IV.Views
             };
 
             BtnConfirm.Click += BtnConfirm_Click;//确认按钮点击事件
-            BtnCancel.Click += (s, e) => this.DialogResult = false;//取消按钮点击事件
+            BtnCancel.Click += (s, e) => CloseDialogWithResult(false);//取消按钮点击事件
             BtnPastePreview.Click += BtnPastePreview_Click;//粘贴预览按钮点击事件
             BtnExportTemplate.Click += BtnExportTemplate_Click;//导出模板按钮点击事件
         }
@@ -331,6 +331,23 @@ namespace GB_NewCadPlus_IV.Views
         private bool _isConfirmProcessing = false;
 
         /// <summary>
+        /// 安全关闭对话框并返回结果。
+        /// </summary>
+        private void CloseDialogWithResult(bool result)
+        {
+            try
+            {
+                // 该窗口由 ShowDialog 打开时，直接设置 DialogResult 即可关闭并把结果返回给调用方
+                DialogResult = result;
+            }
+            catch (InvalidOperationException)
+            {
+                // 若不在模态上下文，降级为直接关闭，避免再次抛异常
+                Close();
+            }
+        }
+
+        /// <summary>
         /// 确认按钮点击事件
         /// </summary>
         /// <param name="sender"></param>
@@ -340,10 +357,10 @@ namespace GB_NewCadPlus_IV.Views
             if (_isConfirmProcessing) // 防止重复触发
                 return;
 
-            _isConfirmProcessing = true;// 设置正在处理标志，防止重复点击
-            BtnConfirm.IsEnabled = false;// 禁用按钮，避免重复点击
-            var prevCursor = Mouse.OverrideCursor;// 设置等待光标，提示用户正在处理
-            Mouse.OverrideCursor = Cursors.Wait;// 设置等待光标，提示用户正在处理
+            _isConfirmProcessing = true; // 设置正在处理标志，防止重复点击
+            BtnConfirm.IsEnabled = false; // 禁用按钮，避免重复点击
+            var prevCursor = Mouse.OverrideCursor; // 设置等待光标，提示用户正在处理
+            Mouse.OverrideCursor = Cursors.Wait; // 设置等待光标，提示用户正在处理
 
             try
             {
@@ -374,7 +391,7 @@ namespace GB_NewCadPlus_IV.Views
                     var giveUp = MessageBox.Show("是否放弃本次识别并退出？", "放弃识别", MessageBoxButton.YesNo, MessageBoxImage.Warning);
                     if (giveUp == MessageBoxResult.Yes)
                     {
-                        this.DialogResult = false;
+                        CloseDialogWithResult(false);
                     }
                     return;
                 }
@@ -388,13 +405,13 @@ namespace GB_NewCadPlus_IV.Views
                 try
                 {
                     await _mainWindow.UploadFileAndSaveToDatabase(_dto);
-                    // 5. 关闭窗口
-                    this.DialogResult = true;
+                    // 上传流程返回后，直接返回 true 并关闭窗口，确保主窗口拿到 true 后刷新分类列表
+                    CloseDialogWithResult(true);
                 }
                 catch (Exception exUp)
                 {
                     MessageBox.Show($"导入失败: {exUp.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    this.DialogResult = false;
+                    CloseDialogWithResult(false);
                 }
             }
             finally

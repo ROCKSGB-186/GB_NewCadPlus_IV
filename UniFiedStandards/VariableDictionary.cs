@@ -27,6 +27,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         public static string? _newConnectionString;//新的数据库连接字符串
         public static bool winForm_Status = false;//winForm状态
         public static bool radioButton = false;//二层传递窗单选按钮状态
+        public static string version = ""; //版本号
         #endregion
         #region 变量
         /// <summary>
