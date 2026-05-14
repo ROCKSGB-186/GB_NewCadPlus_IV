@@ -1,4 +1,4 @@
-﻿using GB_NewCadPlus_IV.DisplayPages;
+using GB_NewCadPlus_IV.DisplayPages;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
@@ -3883,11 +3883,23 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 获取文件属性（新架构：获取图元主对象与 JSON 属性字典）
+                // 获取文件属性（新架构：优先按哈希获取主对象+JSON属性）
                 var result = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileStorage.FileHash);
 
+                // 若按 hash 未取到 JSON 属性，则按 file_id 兜底（兼容历史/替换后 hash 不一致场景）
+                var attributes = result.Attributes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (attributes.Count == 0 && fileStorage.Id > 0)
+                {
+                    var fallbackById = await _databaseManager.GetAttributesJsonByFileIdAsync(fileStorage.Id, fileStorage.FileAttributeId);
+                    if (fallbackById.Count > 0)
+                    {
+                        attributes = fallbackById;
+                        LogManager.Instance.LogInfo($"按Hash未命中属性，已按FileId兜底加载属性: FileId={fileStorage.Id}, Count={attributes.Count}");
+                    }
+                }
+
                 // 准备显示数据: 直接传入 JSON 字典而不是旧属性对象
-                var displayData = PrepareFileDisplayData(fileStorage, result.Attributes);
+                var displayData = PrepareFileDisplayData(fileStorage, attributes);
                 PropertiesDataGrid.ItemsSource = displayData;
                 // 记录当前显示的属性快照，便于后续判断哪些字段被修改（用于插入后应用属性）
                 CapturePropertiesSnapshot(displayData);
@@ -6742,6 +6754,7 @@ namespace GB_NewCadPlus_IV
             try
             {
                 bool success = false;
+                bool isFilePropertyUpdate = false;
 
                 switch (_currentOperation)
                 {
@@ -6752,14 +6765,20 @@ namespace GB_NewCadPlus_IV
                         success = await _categoryManager.ApplySubcategoryPropertiesAsync(CategoryPropertiesDataGrid);
                         break;
                     case ManagementOperationType.None:
-                        // 如果没有明确的操作类型，可能是编辑操作
-                        if (_selectedCategoryNode != null)
+                        // 中文注释：编辑模式下，若当前选中了图元文件，则优先执行图元属性更新
+                        if (_selectedFileStorage != null && StroageFileDataGrid?.SelectedItem is FileStorage)
+                        {
+                            success = await ApplySelectedFilePropertiesAsync();
+                            isFilePropertyUpdate = true;
+                        }
+                        // 中文注释：否则按原有逻辑更新分类/子分类属性
+                        else if (_selectedCategoryNode != null)
                         {
                             success = await _categoryManager.UpdateCategoryPropertiesAsync(CategoryPropertiesDataGrid, _selectedCategoryNode);
                         }
                         else
                         {
-                            MessageBox.Show("请先选择要操作的分类或子分类", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            MessageBox.Show("请先选择要操作的分类、子分类或图元", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                             return;
                         }
                         break;
@@ -6770,14 +6789,19 @@ namespace GB_NewCadPlus_IV
 
                 if (success)
                 {
-                    // 重置操作状态
-                    _currentOperation = ManagementOperationType.None;
-                    InitializeCategoryPropertyGrid();
-
-                    // 刷新架构树显示
-                    await _categoryManager.RefreshCategoryTreeAsync(_selectedCategoryNode, CategoryTreeView, _categoryTreeNodes, _databaseManager);
-
-                    MessageBox.Show("操作成功，架构树已更新", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                    if (isFilePropertyUpdate)
+                    {
+                        // 中文注释：图元属性更新成功后，刷新当前分类下的图元列表，保证界面显示最新数据
+                        await RefreshFilesForCurrentCategoryAsync();
+                        MessageBox.Show("图元属性已更新到数据库，并已刷新当前分类", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        _currentOperation = ManagementOperationType.None;
+                        InitializeCategoryPropertyGrid();
+                        await _categoryManager.RefreshCategoryTreeAsync(_selectedCategoryNode, CategoryTreeView, _categoryTreeNodes, _databaseManager);
+                        MessageBox.Show("操作成功，架构树已更新", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
                 }
                 else
                 {
@@ -7568,14 +7592,23 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 获取文件属性 (新架构，走 JSON 查询)
+                // 获取文件属性（新架构：优先按哈希获取主对象+JSON属性）
                 var result = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileStorage.FileHash);
 
-                // 暂时将当前字典保存供以后编辑扩展（可选，如有此变量）
-                // _currentFileAttributesJson = result.Attributes;
+                // 若按 hash 未取到 JSON 属性，则按 file_id 兜底（兼容历史/替换后 hash 不一致场景）
+                var attributes = result.Attributes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (attributes.Count == 0 && fileStorage.Id > 0)
+                {
+                    var fallbackById = await _databaseManager.GetAttributesJsonByFileIdAsync(fileStorage.Id, fileStorage.FileAttributeId);
+                    if (fallbackById.Count > 0)
+                    {
+                        attributes = fallbackById;
+                        LogManager.Instance.LogInfo($"CategoryPropertiesDataGrid 按Hash未命中属性，已按FileId兜底加载属性: FileId={fileStorage.Id}, Count={attributes.Count}");
+                    }
+                }
 
                 // 准备显示数据
-                var displayData = PrepareFileDisplayData(fileStorage, result.Attributes);
+                var displayData = PrepareFileDisplayData(fileStorage, attributes);
                 CategoryPropertiesDataGrid.ItemsSource = displayData;
 
                 LogManager.Instance.LogInfo("文件属性加载完成");
@@ -7948,6 +7981,121 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
+        /// 应用当前图元属性编辑结果到数据库（主表字段 + JSON属性）。
+        /// </summary>
+        /// <returns>更新是否成功</returns>
+        private async Task<bool> ApplySelectedFilePropertiesAsync()
+        {
+            try
+            {
+                if (_databaseManager == null)
+                {
+                    MessageBox.Show("数据库管理器未初始化", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+
+                if (_selectedFileStorage == null || _selectedFileStorage.Id <= 0)
+                {
+                    MessageBox.Show("请先在图元列表中选择一个图元", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+
+                var gridRows = CategoryPropertiesDataGrid?.ItemsSource as List<CategoryPropertyEditModel>;
+                if (gridRows == null || gridRows.Count == 0)
+                {
+                    MessageBox.Show("没有可应用的属性数据", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+
+                var storage = await _databaseManager.GetFileByIdAsync(_selectedFileStorage.Id).ConfigureAwait(true) ?? _selectedFileStorage;
+                var existingAttributes = await _databaseManager.GetAttributesJsonByFileIdAsync(storage.Id, storage.FileAttributeId).ConfigureAwait(true);
+                var attributes = new Dictionary<string, string>(existingAttributes, StringComparer.OrdinalIgnoreCase);
+
+                void ApplyOne(string propertyDisplayName, string propertyValue)
+                {
+                    if (string.IsNullOrWhiteSpace(propertyDisplayName)) return;
+                    if (propertyValue == null) return;
+
+                    string key = ResolveInternalPropertyName(propertyDisplayName.Trim());
+                    string val = propertyValue.Trim();
+
+                    if (string.IsNullOrWhiteSpace(key)) return;
+
+                    // 中文注释：主表可识别字段同步到 FileStorage 对象
+                    SetFileStorageProperty(storage, propertyDisplayName.Trim(), val);
+
+                    // 中文注释：所有编辑项都回写到 JSON 属性字典，保证动态属性不丢失
+                    attributes[key] = val;
+                }
+
+                foreach (var row in gridRows)
+                {
+                    ApplyOne(row.PropertyName1, row.PropertyValue1);
+                    ApplyOne(row.PropertyName2, row.PropertyValue2);
+                }
+
+                storage.UpdatedBy = string.IsNullOrWhiteSpace(storage.UpdatedBy) ? Environment.UserName : storage.UpdatedBy;
+                storage.UpdatedAt = DateTime.Now;
+
+                var success = await _databaseManager
+                    .UpdateFileStorageAndAttributesJsonAsync(storage, attributes, storage.FileAttributeId)
+                    .ConfigureAwait(true);
+
+                if (!success)
+                {
+                    return false;
+                }
+
+                _selectedFileStorage = storage;
+                await LoadAndDisplayFileAttributesAsync(storage).ConfigureAwait(true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"应用图元属性到数据库时出错: {ex.Message}");
+                MessageBox.Show($"应用图元属性失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 将界面显示属性名反向映射为 JSON 内部属性键。
+        /// </summary>
+        /// <param name="displayName">界面显示名</param>
+        /// <returns>内部属性键</returns>
+        private string ResolveInternalPropertyName(string displayName)
+        {
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                return string.Empty;
+            }
+
+            switch (displayName.Trim())
+            {
+                case "文件名": return "FileName";
+                case "显示名称": return "DisplayName";
+                case "元素块名": return "ElementBlockName";
+                case "图层名称":
+                case "层名": return "LayerName";
+                case "颜色索引": return "ColorIndex";
+                case "比例": return "Scale";
+                case "标题": return "Title";
+                case "关键字": return "Keywords";
+                case "描述": return "Description";
+            }
+
+            foreach (var item in DictionaryHelper._propertyDisplayNameMap)
+            {
+                if (string.Equals(item.Value, displayName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return item.Key;
+                }
+            }
+
+            return displayName;
+        }
+
+        /// <summary>
         /// 清空DataGrid中的文件属性显示
         /// </summary>
         private void ClearFilePropertiesInDataGrid()
@@ -7964,6 +8112,7 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogError($"清空PropertiesDataGrid时出错: {ex.Message}");
             }
         }
+
 
         /// <summary>
         /// 刷新当前分类的显示
@@ -11832,23 +11981,32 @@ namespace GB_NewCadPlus_IV
             // 从 login 配置优先读取服务器/端口（与之前主界面约定一致）
             try
             {
-                /// 从 login 配置优先读取服务器/端口（与之前主界面约定一致）
                 var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "5236";
                 if (System.IO.File.Exists(cfgPath))
                 {
-                    var json = System.IO.File.ReadAllText(cfgPath);//读取配置文件读取配置文件
-                    var ser = new System.Web.Script.Serialization.JavaScriptSerializer();//创建JSON序列化器 创建序列化器
-                    var cfg = ser.Deserialize<LoginConfig>(json);//反序列化JSON反序列化为配置对象
+                    var json = System.IO.File.ReadAllText(cfgPath);
+                    var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
+                    var cfg = ser.Deserialize<LoginConfig>(json);
                     if (cfg != null)
                     {
-                        if (!string.IsNullOrWhiteSpace(cfg.ServerIP)) host = cfg.ServerIP;//设置服务器地址
-                        if (!string.IsNullOrWhiteSpace(cfg.ServerPort)) port = cfg.ServerPort;//设置端口设置服务器端口
+                        if (!string.IsNullOrWhiteSpace(cfg.ServerIP)) host = cfg.ServerIP;
+                        if (!string.IsNullOrWhiteSpace(cfg.ServerPort)) port = cfg.ServerPort;
                     }
                 }
 
-                _svc = new DMAuthService(host, port);
+                // 中文注释：部门/人员模块必须使用数据库物理连接账号，不能使用应用登录用户名。
+                var dbType = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant();
+                var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._dbUserName)
+                    ? (dbType == "MYSQL" ? "root" : "SYSDBA")
+                    : VariableDictionary._dbUserName.Trim();
+                var dbPwd = string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord)
+                    ? (dbType == "MYSQL" ? "123456" : "675756SGBsgb")
+                    : VariableDictionary._dbPassWord;
+
+                _svc = new DMAuthService(host, port, dbUser, dbPwd);
+                LogManager.Instance.LogInfo($"部门服务初始化: host={host}, port={port}, dbType={dbType}, dbUser={dbUser}");
                 RefreshDepartmentsAsync();
             }
             catch (Exception ex)
@@ -11896,7 +12054,6 @@ namespace GB_NewCadPlus_IV
             catch (Exception ex)
             {
                 TxtStatus.Text = "刷新部门失败：" + ex.Message;
-                //TxtStatus.Text = "刷新部门失败：" + ex.Message;
             }
         }
         /// <summary>
@@ -12162,7 +12319,7 @@ namespace GB_NewCadPlus_IV
             return false;
         }
         /// <summary>
-        /// 分配用户
+        /// 选定用户后分配用户所在部门
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -12188,22 +12345,12 @@ namespace GB_NewCadPlus_IV
         /// 刷新部门
         /// </summary>
         /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void BtnRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            RefreshDepartmentsAsync();
-        }
-        /// <summary>
-        /// 刷新用户
-        /// </summary>
-        /// <returns></returns>
         private bool EnsureSvcInitialized()
         {
             if (_svc != null) return true;
 
             try
             {
-                // 读取 login_config.json 或使用默认值初始化 _svc
                 var cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
                 string host = "127.0.0.1";
                 string port = "5236";
@@ -12223,12 +12370,20 @@ namespace GB_NewCadPlus_IV
                     }
                     catch
                     {
-                        // 忽略解析错误，使用默认 host/port
                     }
                 }
 
-                _svc = new DMAuthService(host, port);
-                LogManager.Instance.LogInfo($"DMAuthService 已初始化: {host}:{port}");
+                // 中文注释：兜底初始化同样使用数据库物理账号，避免默认账号密码不匹配导致认证失败。
+                var dbType = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant();
+                var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._dbUserName)
+                    ? (dbType == "MYSQL" ? "root" : "SYSDBA")
+                    : VariableDictionary._dbUserName.Trim();
+                var dbPwd = string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord)
+                    ? (dbType == "MYSQL" ? "123456" : "675756SGBsgb")
+                    : VariableDictionary._dbPassWord;
+
+                _svc = new DMAuthService(host, port, dbUser, dbPwd);
+                LogManager.Instance.LogInfo($"DMAuthService 已初始化: {host}:{port}, dbType={dbType}, dbUser={dbUser}");
                 return true;
             }
             catch (Exception ex)
@@ -15948,6 +16103,31 @@ namespace GB_NewCadPlus_IV
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// 刷新部门
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void BtnRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshDepartmentsAsync();
+        }
+
+        private void BtnAddUser_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void BtnEditUser_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void BtnDeleteUser_Click(object sender, RoutedEventArgs e)
+        {
+
         }
     }
     /// <summary>

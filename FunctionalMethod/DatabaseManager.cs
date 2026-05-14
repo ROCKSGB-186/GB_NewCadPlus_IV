@@ -1961,7 +1961,6 @@ ON UPDATE CASCADE;");
                                     file_stored_name AS FileStoredName,
                                     display_name AS DisplayName,
                                     file_type AS FileType,
-                                    is_tianzheng AS IsTianZheng,
                                     file_hash AS FileHash,
                                     block_name AS BlockName,
                                     layer_name AS LayerName,
@@ -2224,7 +2223,6 @@ WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.
             file_stored_name AS FileStoredName,
             display_name AS DisplayName,
             file_type AS FileType,
-            is_tianzheng AS IsTianZheng,
             file_hash AS FileHash,
             block_name AS BlockName,
             layer_name AS LayerName,
@@ -2488,6 +2486,7 @@ WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.
                 ord = reader.GetOrdinal("FileStoredName"); f.FileStoredName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
                 ord = reader.GetOrdinal("FileType"); f.FileType = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
                 ord = reader.GetOrdinal("FileHash"); f.FileHash = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("DisplayName"); f.DisplayName = reader.IsDBNull(ord) ? f.FileName : reader.GetString(ord);
                 ord = reader.GetOrdinal("BlockName"); f.BlockName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
                 ord = reader.GetOrdinal("LayerName"); f.LayerName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
                 ord = reader.GetOrdinal("ColorIndex"); f.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
@@ -3248,43 +3247,253 @@ LIMIT 1";
         #endregion
         #endregion
 
-        // 请继续只修复 `DatabaseManager` 的编译错误，并尽量不要破坏现有业务逻辑。
-        // 本次请做以下明确修复，所有新增/修改代码都添加中文注释：
-        //
-        // 一、在 `DatabaseManager` 类级别补充以下公开方法的“最小可编译兜底实现”。
-        // 说明：由于外部调用点已存在，但当前类缺失这些成员，先补齐以恢复编译；方法内部先返回安全默认值，并写中文注释说明后续可按真实业务补全。
-        // 请新增这些方法（如果已存在同名同签名成员则不要重复定义；若存在不同签名但外部仍报缺失，请新增 `params object[] args` 版本兜底）：
-        //
-        // // public async Task<dynamic> GetFileAttributeByGraphicIdAsync(params object[] args)
-        // public async Task<dynamic> DeleteCadGraphicCascadeAsync(params object[] args)
-        // public async Task<dynamic> GetConfigValueAsync(params object[] args)
-        // public async Task<dynamic> UpdateCategoryStatisticsAsync(params object[] args)
-        // public async Task<dynamic> AddCadSubcategoryAsync(params object[] args)
-        // public async Task<dynamic> UpdateParentSubcategoryListAsync(params object[] args)
-        // public async Task<dynamic> UpdateCadSubcategoryAsync(params object[] args)
-        // public async Task<dynamic> DeleteCadSubcategoryAsync(params object[] args)
-        //
-        // 这些方法的最小返回建议：
-        // - 查询类方法返回 `await Task.FromResult<dynamic>(null);`
-        // - 新增/更新/删除类方法返回 `await Task.FromResult<dynamic>(false);`
-        // 但要加中文注释说明“仅为恢复编译的兜底实现”。
-        //
-        // 二、请确保以下私有方法作为 `DatabaseManager` 类级别方法存在；若缺失则补最小可编译实现，不要嵌套在其他方法里：
-        // private Dictionary<string, object> BuildStorageInsertValues(FileStorage fileStorage, Dictionary<string, string> attributesJson, Dictionary<string, string> tableColumns, string source)
-        // private Dictionary<string, object> BuildAttributeInsertValues(FileStorage fileStorage, Dictionary<string, string> attributesJson, Dictionary<string, string> tableColumns, int storageId)
-        // private int ExecuteInsertAndReturnIdentity(System.Data.Common.DbConnection conn, System.Data.Common.DbTransaction tx, string tableName, Dictionary<string, object> values, params string[] primaryKeyCandidates)
-        // private Dictionary<string, string> ReadTableColumns(System.Data.Common.DbConnection conn, System.Data.Common.DbTransaction tx, string tableName)
-        // private string ResolveExistingTableName(System.Data.Common.DbConnection conn, System.Data.Common.DbTransaction tx, IEnumerable<string> candidates)
-        //
-        // 三、请全文件修复以下明确错误：
-        // 1. 删除或平衡不完整的 `#region` / `#endregion`；如果当前文件存在“应输入 #endregion 指令”，请补齐缺失的 `#endregion` 或删除多余 `#region`，保证最终 region 配对正确。
-        // 2. 删除所有游离残留代码片段，尤其是引用 `conn`、`attributes`、`fileStorage`、`attrColumns` 等未定义局部变量的碎片语句。
-        // 3. 把所有 `IDataReader` / `DbDataReader` / `reader` 上错误的 `IsNullOrWhiteSpace` 调用改成：先取字符串变量，再调用 `string.IsNullOrWhiteSpace(字符串变量)`。
-        // 4. 若有 `ExecuteScalar(..., tx: ...)`，请改成 `transaction: ...` 或位置参数，不要再使用 `tx:`。
-        // 5. 若有 `DynamicParameters.Remove(...)`，请删除该调用；如必须移除参数，请改为新建一个新的 `DynamicParameters` 并重新加入所需参数。
-        //
-        // 四、如果文件内仍有坏掉的方法体导致“当前上下文中不存在名称 BuildStorageInsertValues / BuildAttributeInsertValues / GetFileStorageAsync / conn / attributes”等报错，请优先删除坏掉的残留片段，再保留一套类级别最小实现。
-        //
-        // 五、本次不要追求业务正确，只追求这个文件可编译。
+        /// <summary>
+        /// 按文件主键读取最新 JSON 属性字典（可选优先配置名）。
+        /// </summary>
+        /// <param name="fileId">cad_file_storage.id</param>
+        /// <param name="preferredConfigName">可选：优先配置名</param>
+        /// <returns>属性字典；无记录时返回空字典</returns>
+        public async Task<Dictionary<string, string>> GetAttributesJsonByFileIdAsync(int fileId, string preferredConfigName = null)
+        {
+            var empty = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (fileId <= 0)
+            {
+                return empty;
+            }
+
+            const string attrByConfigSql = @"
+SELECT attributes_json AS AttributesJson
+FROM cad_block_attributes_json
+WHERE file_id = @FileId
+  AND config_name = @ConfigName
+ORDER BY attr_id DESC
+LIMIT 1;";
+
+            const string attrLatestSql = @"
+SELECT attributes_json AS AttributesJson
+FROM cad_block_attributes_json
+WHERE file_id = @FileId
+ORDER BY attr_id DESC
+LIMIT 1;";
+
+            try
+            {
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = _adapter.CreateConnection();
+                    conn.Open();
+
+                    string? json = null;
+                    if (!string.IsNullOrWhiteSpace(preferredConfigName))
+                    {
+                        json = await conn.QueryFirstOrDefaultAsync<string>(
+                            attrByConfigSql.Replace(":", "@"),
+                            new { FileId = fileId, ConfigName = preferredConfigName.Trim() }).ConfigureAwait(false);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(json))
+                    {
+                        json = await conn.QueryFirstOrDefaultAsync<string>(
+                            attrLatestSql.Replace(":", "@"),
+                            new { FileId = fileId }).ConfigureAwait(false);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(json))
+                    {
+                        return empty;
+                    }
+
+                    return Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(json)
+                           ?? empty;
+                }
+
+                using var dconn = GetConnection();
+                dconn.Open();
+
+                string? dmJson = null;
+                if (!string.IsNullOrWhiteSpace(preferredConfigName))
+                {
+                    using var cmd = dconn.CreateCommand();
+                    cmd.CommandText = _adapter.NormalizeSql(attrByConfigSql);
+                    AddDmParam(cmd, "FileId", fileId);
+                    AddDmParam(cmd, "ConfigName", preferredConfigName.Trim());
+                    var obj = cmd.ExecuteScalar();
+                    dmJson = obj == null || obj == DBNull.Value ? null : Convert.ToString(obj);
+                }
+
+                if (string.IsNullOrWhiteSpace(dmJson))
+                {
+                    using var cmd2 = dconn.CreateCommand();
+                    cmd2.CommandText = _adapter.NormalizeSql(attrLatestSql);
+                    AddDmParam(cmd2, "FileId", fileId);
+                    var obj2 = cmd2.ExecuteScalar();
+                    dmJson = obj2 == null || obj2 == DBNull.Value ? null : Convert.ToString(obj2);
+                }
+
+                if (string.IsNullOrWhiteSpace(dmJson))
+                {
+                    return empty;
+                }
+
+                return Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(dmJson)
+                       ?? empty;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAttributesJsonByFileIdAsync 出错: fileId={fileId}, {ex.Message}");
+                return empty;
+            }
+        }
+
+        /// <summary>
+        /// 更新图元主表字段与 JSON 属性表（事务）。
+        /// </summary>
+        /// <param name="storage">图元主表对象（必须包含 Id）</param>
+        /// <param name="attributes">JSON 属性字典</param>
+        /// <param name="preferredConfigName">可选配置名；为空则使用 storage.FileAttributeId 或 default</param>
+        /// <returns>是否更新成功</returns>
+        public async Task<bool> UpdateFileStorageAndAttributesJsonAsync(FileStorage storage, Dictionary<string, string> attributes, string preferredConfigName = null)
+        {
+            if (storage == null)
+            {
+                throw new ArgumentNullException(nameof(storage));
+            }
+
+            if (storage.Id <= 0)
+            {
+                throw new ArgumentException("storage.Id 必须大于 0", nameof(storage));
+            }
+
+            attributes = attributes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var configName = string.IsNullOrWhiteSpace(preferredConfigName)
+                ? (string.IsNullOrWhiteSpace(storage.FileAttributeId) ? "default" : storage.FileAttributeId.Trim())
+                : preferredConfigName.Trim();
+
+            var now = DateTime.Now;
+
+            using var connection = GetConnection();
+            if (connection.State != ConnectionState.Open)
+            {
+                await ((DbConnection)connection).OpenAsync().ConfigureAwait(false);
+            }
+
+            using var tx = connection.BeginTransaction();
+
+            try
+            {
+                const string updateStorageSql = @"
+UPDATE cad_file_storage
+SET file_name = @FileName,
+    display_name = @DisplayName,
+    block_name = @BlockName,
+    layer_name = @LayerName,
+    color_index = @ColorIndex,
+    scale = @Scale,
+    title = @Title,
+    keywords = @Keywords,
+    description = @Description,
+    updated_by = @UpdatedBy,
+    updated_at = @UpdatedAt
+WHERE id = @Id";
+
+                var updatedStorageRows = await ExecuteWriteAsync(connection, tx, updateStorageSql, new
+                {
+                    storage.Id,
+                    storage.FileName,
+                    storage.DisplayName,
+                    storage.BlockName,
+                    storage.LayerName,
+                    storage.ColorIndex,
+                    storage.Scale,
+                    storage.Title,
+                    storage.Keywords,
+                    storage.Description,
+                    storage.UpdatedBy,
+                    UpdatedAt = now
+                }).ConfigureAwait(false);
+
+                if (updatedStorageRows <= 0)
+                {
+                    tx.Rollback();
+                    return false;
+                }
+
+                var attributesJson = Newtonsoft.Json.JsonConvert.SerializeObject(attributes);
+
+                const string updateAttrSql = @"
+UPDATE cad_block_attributes_json
+SET attributes_json = @AttributesJson,
+    updated_at = @UpdatedAt
+WHERE file_id = @FileId
+  AND config_name = @ConfigName";
+
+                var updatedAttrRows = await ExecuteWriteAsync(connection, tx, updateAttrSql, new
+                {
+                    FileId = storage.Id,
+                    ConfigName = configName,
+                    AttributesJson = attributesJson,
+                    UpdatedAt = now
+                }).ConfigureAwait(false);
+
+                if (updatedAttrRows <= 0)
+                {
+                    const string insertAttrSql = @"
+INSERT INTO cad_block_attributes_json (file_id, config_name, attributes_json, created_at, updated_at)
+VALUES (@FileId, @ConfigName, @AttributesJson, @CreatedAt, @UpdatedAt)";
+
+                    var insertedRows = await ExecuteWriteAsync(connection, tx, insertAttrSql, new
+                    {
+                        FileId = storage.Id,
+                        ConfigName = configName,
+                        AttributesJson = attributesJson,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    }).ConfigureAwait(false);
+
+                    if (insertedRows <= 0)
+                    {
+                        tx.Rollback();
+                        return false;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(storage.FileAttributeId) || !string.Equals(storage.FileAttributeId, configName, StringComparison.OrdinalIgnoreCase))
+                {
+                    const string updateConfigSql = @"
+UPDATE cad_file_storage
+SET file_attribute_id = @FileAttributeId,
+    updated_at = @UpdatedAt
+WHERE id = @Id";
+
+                    await ExecuteWriteAsync(connection, tx, updateConfigSql, new
+                    {
+                        Id = storage.Id,
+                        FileAttributeId = configName,
+                        UpdatedAt = now
+                    }).ConfigureAwait(false);
+
+                    storage.FileAttributeId = configName;
+                }
+
+                storage.UpdatedAt = now;
+                tx.Commit();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    tx.Rollback();
+                }
+                catch
+                {
+                    // 忽略回滚异常
+                }
+
+                LogManager.Instance.LogInfo($"UpdateFileStorageAndAttributesJsonAsync 出错: FileId={storage.Id}, {ex.Message}");
+                return false;
+            }
+        }
     }
 }

@@ -991,6 +991,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
     {
         public int Id { get; set; }// 用户ID
         public string? Username { get; set; }// 用户名
+        public string? DisplayName { get; set; }// 真实姓名/显示名
+        public string? FullName { get; set; }// 姓名（兼容旧绑定）
         public string? Gender { get; set; }// 性别
         public string? Email { get; set; }// 邮箱
         public string? Phone { get; set; }// 手机

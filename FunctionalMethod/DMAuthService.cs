@@ -269,6 +269,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     PASSWORD_HASH VARCHAR(512) NOT NULL,
                     SALT VARCHAR(64) NOT NULL,
                     DISPLAY_NAME VARCHAR(200),
+                    GENDER VARCHAR(20),
+                    PHONE VARCHAR(50),
+                    EMAIL VARCHAR(200),
                     DEPARTMENT_ID INT DEFAULT 0,
                     DEPARTMENT_NAME VARCHAR(200),
                     ROLE VARCHAR(64),
@@ -276,183 +279,128 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     CREATED_AT DATETIME DEFAULT CURRENT_TIMESTAMP
                 )");
 
+            EnsureUsersColumnsExist();
             SyncTableComments();// 确保表注释同步，提升数据库自描述能力
         }
 
         /// <summary>
-        /// 通用表创建工具：避免使用 DECLARE 等达梦复合语句，采用更稳妥的 C# 原子操作以确保持久化
+        /// 对已存在的 USERS 表进行补列，保证老库也具备新增用户字段（幂等）。
+        /// </summary>
+        private void EnsureUsersColumnsExist()
+        {
+            using (var conn = CreateOpenConnection())
+            {
+                EnsureUserColumn(conn, "DISPLAY_NAME", "VARCHAR(200)");
+                EnsureUserColumn(conn, "GENDER", "VARCHAR(20)");
+                EnsureUserColumn(conn, "PHONE", "VARCHAR(50)");
+                EnsureUserColumn(conn, "EMAIL", "VARCHAR(200)");
+            }
+        }
+
+        /// <summary>
+        /// 若 USERS 表缺少指定列则自动添加。
+        /// </summary>
+        private void EnsureUserColumn(DmConnection conn, string columnName, string dataTypeSql)
+        {
+            try
+            {
+                using (var existsCmd = conn.CreateCommand())
+                {
+                    existsCmd.CommandText = "SELECT COUNT(1) FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = :c";
+                    AddParam(existsCmd, "c", columnName);
+                    var exists = Convert.ToInt32(existsCmd.ExecuteScalar() ?? 0) > 0;
+                    if (exists)
+                    {
+                        return;
+                    }
+                }
+
+                using (var alterCmd = conn.CreateCommand())
+                {
+                    alterCmd.CommandText = $"ALTER TABLE USERS ADD {columnName} {dataTypeSql}";
+                    alterCmd.ExecuteNonQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"EnsureUserColumn: 补列 {columnName} 失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 兼容调用入口：确保分类表存在。
+        /// </summary>
+        public void EnsureCategoriesTableExists()
+        {
+            EnsureAllTablesExist();
+        }
+
+        /// <summary>
+        /// 兼容调用入口：确保部门表存在。
+        /// </summary>
+        public void EnsureDepartmentsTableExists()
+        {
+            EnsureAllTablesExist();
+        }
+
+        /// <summary>
+        /// 通用建表：若表不存在则创建。
         /// </summary>
         private void EnsureTable(string tableName, string createSql)
         {
             using (var conn = CreateOpenConnection())
+            using (var cmd = conn.CreateCommand())
             {
-                bool tableExists = true;
-                try
+                cmd.CommandText = "SELECT COUNT(1) FROM USER_TABLES WHERE TABLE_NAME = :t";
+                AddParam(cmd, "t", (tableName ?? string.Empty).Trim().ToUpperInvariant());
+                var exists = Convert.ToInt32(cmd.ExecuteScalar() ?? 0) > 0;
+                if (exists)
                 {
-                    // [降维打击]：只要 Select 指令抛出任何奇奇怪怪的“找不到表”错误，就当作表没建好
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText = $"SELECT 1 FROM {tableName} WHERE 1=0";
-                        cmd.ExecuteNonQuery();
-                    }
+                    return;
                 }
-                catch
-                {
-                    tableExists = false;
-                }
+            }
 
-                if (!tableExists)
-                {
-                    try
-                    {
-                        using (var cmd = conn.CreateCommand())
-                        {
-                            cmd.CommandText = createSql;
-                            cmd.ExecuteNonQuery();
-                        }
-                        // 创建完毕后强行 COMMIT 提交，防止因异常关闭造成达梦数据库物理未落盘（回滚）
-                        using (var cmd = conn.CreateCommand())
-                        {
-                            cmd.CommandText = "COMMIT";
-                            cmd.ExecuteNonQuery();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogManager.Instance.LogError($"建表 {tableName} 失败：{ex.Message}");
-                    }
-                }
+            using (var conn = CreateOpenConnection())
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = createSql;
+                cmd.ExecuteNonQuery();
             }
         }
 
         /// <summary>
-        /// 同步表注释（兼容最终模式：无前缀，无双引号），并且增加了对工艺图元相关表的注释同步，确保所有核心表都有清晰的说明，提升数据库自描述能力
+        /// 同步核心表注释，失败不影响业务流程。
         /// </summary>
         private void SyncTableComments()
         {
-            using (var conn = CreateOpenConnection())
-            using (var cmd = conn.CreateCommand())
+            try
             {
-                cmd.CommandText = @"
-                BEGIN
-                    EXECUTE IMMEDIATE 'COMMENT ON TABLE CAD_CATEGORIES IS ''CAD分类信息表''';
-                    EXECUTE IMMEDIATE 'COMMENT ON TABLE DEPARTMENTS IS ''部门组织架构表''';
-                    EXECUTE IMMEDIATE 'COMMENT ON TABLE USERS IS ''系统用户信息表''';
-                END;";
-                try { cmd.ExecuteNonQuery(); } catch { }
+                using (var conn = CreateOpenConnection())
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"
+BEGIN
+    EXECUTE IMMEDIATE 'COMMENT ON TABLE CAD_CATEGORIES IS ''CAD分类信息表''';
+    EXECUTE IMMEDIATE 'COMMENT ON TABLE DEPARTMENTS IS ''部门组织架构表''';
+    EXECUTE IMMEDIATE 'COMMENT ON TABLE USERS IS ''系统用户信息表''';
+END;";
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"SyncTableComments: 注释同步失败: {ex.Message}");
             }
         }
 
-        /// <summary>
-        /// 确认 CAD_CATEGORIES 分类表存在，不存在则创建（兼容最终模式：无前缀，无双引号）
-        /// </summary>
-        public void EnsureCategoriesTableExists()
+        private static string NormalizeGender(string gender)
         {
-            using (var conn = CreateOpenConnection())
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $@"
-                DECLARE V_CNT INT;
-                BEGIN
-                    SELECT COUNT(*) INTO V_CNT FROM USER_TABLES WHERE TABLE_NAME = 'CAD_CATEGORIES';
-                    IF V_CNT = 0 THEN
-                        EXECUTE IMMEDIATE 'CREATE TABLE {_database}.CAD_CATEGORIES (
-                            ID INT IDENTITY(1,1) PRIMARY KEY,
-                            NAME VARCHAR(200) NOT NULL,
-                            DISPLAY_NAME VARCHAR(200),
-                            SORT_ORDER INT DEFAULT 0,
-                            CREATED_AT DATETIME DEFAULT CURRENT_TIMESTAMP
-                        )';
-                    END IF;
-                END;";
-                cmd.ExecuteNonQuery();
-            }
+            var g = (gender ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(g)) return "无信息";
+            if (string.Equals(g, "男", StringComparison.OrdinalIgnoreCase) || string.Equals(g, "male", StringComparison.OrdinalIgnoreCase) || g == "M") return "男";
+            if (string.Equals(g, "女", StringComparison.OrdinalIgnoreCase) || string.Equals(g, "female", StringComparison.OrdinalIgnoreCase) || g == "F") return "女";
+            return "无信息";
         }
-
-        /// <summary>
-        /// 确认部门表存在，不存在则创建（兼容最终模式：无前缀，无双引号）
-        /// </summary>
-
-        public void EnsureDepartmentsTableExists()
-        {
-            using (var conn = CreateOpenConnection())
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $@"
-                DECLARE V_CNT INT;
-                BEGIN
-                    SELECT COUNT(*) INTO V_CNT FROM USER_TABLES WHERE TABLE_NAME = 'DEPARTMENTS';
-                    IF V_CNT = 0 THEN
-                        EXECUTE IMMEDIATE 'CREATE TABLE {_database}.DEPARTMENTS (
-                            ID INT IDENTITY(1,1) PRIMARY KEY,
-                            CAD_CATEGORY_ID INT NULL,
-                            NAME VARCHAR(200) NOT NULL,
-                            DISPLAY_NAME VARCHAR(200),
-                            DESCRIPTION TEXT,
-                            MANAGER_USER_ID INT NULL,
-                            SORT_ORDER INT DEFAULT 0,
-                            IS_ACTIVE TINYINT DEFAULT 1,
-                            CREATED_AT DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            UPDATED_AT DATETIME
-                        )';
-                    END IF;
-                END;";
-                cmd.ExecuteNonQuery();
-            }
-        }
-        /// <summary>
-        /// 确认用户表存在，不存在则创建（兼容最终模式：无前缀，无双引号）
-        /// </summary>
-        public void EnsureUserTableExists()
-        {
-            using (var conn = CreateOpenConnection())
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $@"
-                DECLARE V_CNT INT;
-                BEGIN
-                    SELECT COUNT(*) INTO V_CNT FROM USER_TABLES WHERE TABLE_NAME = 'USERS';
-                    IF V_CNT = 0 THEN
-                        EXECUTE IMMEDIATE 'CREATE TABLE {_database}.USERS (
-                            ID INT IDENTITY(1,1) PRIMARY KEY,
-                            USERNAME VARCHAR(100) NOT NULL UNIQUE,
-                            PASSWORD_HASH VARCHAR(512) NOT NULL,
-                            SALT VARCHAR(64) NOT NULL,
-                            DISPLAY_NAME VARCHAR(200),
-                            DEPARTMENT_ID INT DEFAULT 0,
-                            DEPARTMENT_NAME VARCHAR(200),
-                            ROLE VARCHAR(64),
-                            IS_ACTIVE TINYINT DEFAULT 1,
-                            CREATED_AT DATETIME DEFAULT CURRENT_TIMESTAMP
-                        )';
-                        EXECUTE IMMEDIATE 'CREATE INDEX IDX_USERS_DEPT ON {_database}.USERS(DEPARTMENT_ID)';
-                    END IF;
-                END;";
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-        /// <summary>
-        /// 同步表注释（兼容最终模式：无前缀，无双引号）
-        /// </summary>
-        //private void SyncTableComments()
-        //{
-        //    using (var conn = CreateOpenConnection())
-        //    using (var cmd = conn.CreateCommand())
-        //    {
-        //        cmd.CommandText = @"
-        //        BEGIN
-        //            EXECUTE IMMEDIATE 'COMMENT ON TABLE SYSDBA.CAD_CATEGORIES IS ''CAD分类信息表''';
-        //            EXECUTE IMMEDIATE 'COMMENT ON TABLE SYSDBA.DEPARTMENTS IS ''部门组织架构表''';
-        //            EXECUTE IMMEDIATE 'COMMENT ON TABLE SYSDBA.USERS IS ''系统用户信息表''';
-
-        //            EXECUTE IMMEDIATE 'COMMENT ON TABLE SYSDBA.SW_CATEGORIES IS ''工艺图元分类表''';
-        //            EXECUTE IMMEDIATE 'COMMENT ON TABLE SYSDBA.SW_GRAPHICS IS ''工艺图元图形定义表''';
-        //            EXECUTE IMMEDIATE 'COMMENT ON TABLE SYSDBA.SW_SUBCATEGORIES IS ''工艺图元子分类表''';
-        //        END;";
-        //        try { cmd.ExecuteNonQuery(); } catch { /* 忽略个别环境注释失败 */ }
-        //    }
-        //}
 
         #endregion
 
@@ -512,6 +460,178 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// 新增用户（支持设置角色与启用状态，以及真实姓名/性别/电话/邮箱）
+        /// </summary>
+        public bool AddUser(string username, string password, int departmentId = 0, string departmentName = "", string role = "user", bool isActive = true, string displayName = null, string gender = null, string phone = null, string email = null)
+        {
+            EnsureAllTablesExist();
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            {
+                return false;
+            }
+
+            var userNameTrim = username.Trim();
+            var salt = GenerateSalt();
+            var hash = ComputeHash(password, salt);
+
+            try
+            {
+                using (var conn = CreateOpenConnection())
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"INSERT INTO USERS
+(USERNAME, PASSWORD_HASH, SALT, DISPLAY_NAME, GENDER, PHONE, EMAIL, DEPARTMENT_ID, DEPARTMENT_NAME, ROLE, IS_ACTIVE, CREATED_AT)
+VALUES (:u, :h, :s, :dn, :g, :p, :e, :d, :deptName, :r, :ia, SYSDATE)";
+
+                    AddParam(cmd, "u", userNameTrim);
+                    AddParam(cmd, "h", hash);
+                    AddParam(cmd, "s", salt);
+                    AddParam(cmd, "dn", string.IsNullOrWhiteSpace(displayName) ? userNameTrim : displayName.Trim());
+                    AddParam(cmd, "g", NormalizeGender(gender));
+                    AddParam(cmd, "p", string.IsNullOrWhiteSpace(phone) ? string.Empty : phone.Trim());
+                    AddParam(cmd, "e", string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim());
+                    AddParam(cmd, "d", departmentId);
+                    AddParam(cmd, "deptName", departmentName ?? string.Empty);
+                    AddParam(cmd, "r", string.IsNullOrWhiteSpace(role) ? "user" : role.Trim());
+                    AddParam(cmd, "ia", isActive ? 1 : 0);
+
+                    return cmd.ExecuteNonQuery() > 0;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 编辑用户（可选更新密码，支持更新真实姓名/性别/电话/邮箱）
+        /// </summary>
+        public bool UpdateUser(int userId, string username, string role, bool isActive, int? departmentId = null, string departmentName = null, string newPassword = null, string displayName = null, string gender = null, string phone = null, string email = null)
+        {
+            EnsureAllTablesExist();
+            if (userId <= 0 || string.IsNullOrWhiteSpace(username))
+            {
+                return false;
+            }
+
+            try
+            {
+                using (var conn = CreateOpenConnection())
+                {
+                    string finalDeptName = departmentName ?? string.Empty;
+                    if (departmentId.HasValue && departmentId.Value > 0 && string.IsNullOrWhiteSpace(finalDeptName))
+                    {
+                        using (var findDept = conn.CreateCommand())
+                        {
+                            findDept.CommandText = "SELECT NAME FROM DEPARTMENTS WHERE ID = :id";
+                            AddParam(findDept, "id", departmentId.Value);
+                            finalDeptName = Convert.ToString(findDept.ExecuteScalar()) ?? string.Empty;
+                        }
+                    }
+
+                    var finalDisplayName = string.IsNullOrWhiteSpace(displayName) ? username.Trim() : displayName.Trim();
+                    var finalGender = NormalizeGender(gender);
+                    var finalPhone = string.IsNullOrWhiteSpace(phone) ? string.Empty : phone.Trim();
+                    var finalEmail = string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim();
+
+                    if (string.IsNullOrWhiteSpace(newPassword))
+                    {
+                        using (var cmd = conn.CreateCommand())
+                        {
+                            cmd.CommandText = @"UPDATE USERS
+SET USERNAME = :u,
+    DISPLAY_NAME = :displayName,
+    GENDER = :gender,
+    PHONE = :phone,
+    EMAIL = :email,
+    ROLE = :r,
+    IS_ACTIVE = :ia,
+    DEPARTMENT_ID = :d,
+    DEPARTMENT_NAME = :dn
+WHERE ID = :id";
+                            AddParam(cmd, "u", username.Trim());
+                            AddParam(cmd, "displayName", finalDisplayName);
+                            AddParam(cmd, "gender", finalGender);
+                            AddParam(cmd, "phone", finalPhone);
+                            AddParam(cmd, "email", finalEmail);
+                            AddParam(cmd, "r", string.IsNullOrWhiteSpace(role) ? "user" : role.Trim());
+                            AddParam(cmd, "ia", isActive ? 1 : 0);
+                            AddParam(cmd, "d", departmentId ?? 0);
+                            AddParam(cmd, "dn", finalDeptName);
+                            AddParam(cmd, "id", userId);
+                            return cmd.ExecuteNonQuery() > 0;
+                        }
+                    }
+
+                    var salt = GenerateSalt();
+                    var hash = ComputeHash(newPassword, salt);
+
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"UPDATE USERS
+SET USERNAME = :u,
+    PASSWORD_HASH = :h,
+    SALT = :s,
+    DISPLAY_NAME = :displayName,
+    GENDER = :gender,
+    PHONE = :phone,
+    EMAIL = :email,
+    ROLE = :r,
+    IS_ACTIVE = :ia,
+    DEPARTMENT_ID = :d,
+    DEPARTMENT_NAME = :dn
+WHERE ID = :id";
+                        AddParam(cmd, "u", username.Trim());
+                        AddParam(cmd, "h", hash);
+                        AddParam(cmd, "s", salt);
+                        AddParam(cmd, "displayName", finalDisplayName);
+                        AddParam(cmd, "gender", finalGender);
+                        AddParam(cmd, "phone", finalPhone);
+                        AddParam(cmd, "email", finalEmail);
+                        AddParam(cmd, "r", string.IsNullOrWhiteSpace(role) ? "user" : role.Trim());
+                        AddParam(cmd, "ia", isActive ? 1 : 0);
+                        AddParam(cmd, "d", departmentId ?? 0);
+                        AddParam(cmd, "dn", finalDeptName);
+                        AddParam(cmd, "id", userId);
+                        return cmd.ExecuteNonQuery() > 0;
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 删除用户
+        /// </summary>
+        public bool DeleteUser(int userId)
+        {
+            EnsureAllTablesExist();
+            if (userId <= 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                using (var conn = CreateOpenConnection())
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "DELETE FROM USERS WHERE ID = :id";
+                    AddParam(cmd, "id", userId);
+                    return cmd.ExecuteNonQuery() > 0;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -724,18 +844,24 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             using (var conn = CreateOpenConnection())
             using (var cmd = conn.CreateCommand())
             {
-                cmd.CommandText = "SELECT ID, USERNAME, ROLE, IS_ACTIVE FROM USERS WHERE DEPARTMENT_ID = :d ORDER BY ID";
+                cmd.CommandText = "SELECT ID, USERNAME, DISPLAY_NAME, GENDER, EMAIL, PHONE, ROLE, IS_ACTIVE FROM USERS WHERE DEPARTMENT_ID = :d ORDER BY ID";
                 AddParam(cmd, "d", departmentId);
                 using (var r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
+                        var displayName = r.IsDBNull(2) ? string.Empty : r.GetString(2);
                         list.Add(new UserModel
                         {
                             Id = r.GetInt32(0),
                             Username = r.GetString(1),
-                            Role = r.IsDBNull(2) ? "" : r.GetString(2),
-                            IsActive = r.GetInt16(3) == 1
+                            DisplayName = displayName,
+                            FullName = displayName,
+                            Gender = r.IsDBNull(3) ? string.Empty : r.GetString(3),
+                            Email = r.IsDBNull(4) ? string.Empty : r.GetString(4),
+                            Phone = r.IsDBNull(5) ? string.Empty : r.GetString(5),
+                            Role = r.IsDBNull(6) ? string.Empty : r.GetString(6),
+                            IsActive = r.GetInt16(7) == 1
                         });
                     }
                 }
@@ -1006,7 +1132,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             chkByName.CommandText = $"SELECT ID FROM {departmentsTableName} WHERE NAME = :name";
                             // 兼容不同环境下可能存在的字段差异，增加严谨的 NULL 判断和显式转换，确保能正确处理数据，同时使用参数化查询避免 SQL 注入风险
                             AddParam(chkByName, "name", c.Name);
-                            // 直接获取匹配的部门ID，如果存在且不为 NULL，则说明找到了对应的部门，记录匹配的部门ID和匹配方式
+                            // 直接获取匹配的部门ID，如果存在且不为 NULL，则说明找到了对应的部门，记录匹配的部门ID和匹配方式为 NAME，便于后续日志分析和问题排查
                             var existingId = chkByName.ExecuteScalar();
                             // 如果查询结果不为 NULL，说明找到了匹配的部门，记录匹配的部门ID和匹配方式为 NAME，便于后续日志分析和问题排查
                             if (existingId != null && existingId != DBNull.Value)
@@ -1034,10 +1160,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             // 只有按分类ID和名称都未命中时，才执行插入，创建新部门记录，确保同步后的部门表能完整反映分类表的数据，同时避免重复插入触发唯一约束
                             cmd.CommandText = $"INSERT INTO {departmentsTableName} (CAD_CATEGORY_ID, NAME, DISPLAY_NAME, SORT_ORDER, IS_ACTIVE, CREATED_AT) VALUES (:cid, :n, :d, :s, 1, SYSDATE)";
                         }
-                        AddParam(cmd, "cid", c.Id);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
-                        AddParam(cmd, "n", c.Name);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
-                        AddParam(cmd, "d", string.IsNullOrEmpty(c.Display) ? c.Name : c.Display);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
-                        AddParam(cmd, "s", c.So);// 使用参数化查询避免 SQL 注入风险，同时确保数据类型正确传递
+                        AddParam(cmd, "cid", c.Id);// 使用参数化查询避免 SQL 注入风险
+                        AddParam(cmd, "n", c.Name);// 使用参数化查询避免 SQL 注入风险
+                        AddParam(cmd, "d", string.IsNullOrEmpty(c.Display) ? c.Name : c.Display);// 使用参数化查询避免 SQL 注入风险
+                        AddParam(cmd, "s", c.So);// 使用参数化查询避免 SQL 注入风险
                         affectedRows += cmd.ExecuteNonQuery();// 执行更新或插入操作，并累加受影响的行数，便于后续日志记录和分析
                     }
 

@@ -56,8 +56,8 @@ namespace GB_NewCadPlus_IV
 
                 // 否则从服务读取部门
                 var svc = new DMAuthService(_host, _port.ToString(),
-                    string.IsNullOrWhiteSpace(VariableDictionary._userName) ? "SYSDBA" : VariableDictionary._userName,
-                    string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? "SYSDBA" : VariableDictionary._passWord);
+                    string.IsNullOrWhiteSpace(VariableDictionary._dbUserName) ? "SYSDBA" : VariableDictionary._dbUserName,
+                    string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord) ? "675756SGBsgb" : VariableDictionary._dbPassWord);
                 svc.EnsureAllTablesExist();
                 // 先尝试同步分类到部门（幂等）
                 try { svc.SyncDepartmentsFromCadCategories(); } catch { /* 忽略同步异常 */ }
@@ -126,8 +126,8 @@ namespace GB_NewCadPlus_IV
             TxtStatus.Text = "正在注册...";
 
             var svc = new DMAuthService(_host, _port.ToString(),
-                string.IsNullOrWhiteSpace(VariableDictionary._userName) ? "SYSDBA" : VariableDictionary._userName,
-                string.IsNullOrWhiteSpace(VariableDictionary._passWord) ? "SYSDBA" : VariableDictionary._passWord);
+                string.IsNullOrWhiteSpace(VariableDictionary._dbUserName) ? "SYSDBA" : VariableDictionary._dbUserName,
+                string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord) ? "675756SGBsgb" : VariableDictionary._dbPassWord);
             svc.EnsureAllTablesExist();
             try { svc.SyncDepartmentsFromCadCategories(); } catch { }
 
