@@ -404,6 +404,7 @@ namespace GB_NewCadPlus_IV.Views
 
                 try
                 {
+                    // 调用主窗口的上传方法，执行完整的上传和数据库保存流程
                     await _mainWindow.UploadFileAndSaveToDatabase(_dto);
                     // 上传流程返回后，直接返回 true 并关闭窗口，确保主窗口拿到 true 后刷新分类列表
                     CloseDialogWithResult(true);
