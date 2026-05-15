@@ -3954,9 +3954,10 @@
                         Background="#FFECECEC">
                         <TextBlock
                             Margin="0,5,0,5"
+                            Background="{DynamicResource {x:Static SystemColors.ControlDarkDarkBrushKey}}"
                             FontSize="15"
                             FontWeight="Bold"
-                            Text=" 部门管理" Background="{DynamicResource {x:Static SystemColors.ControlDarkDarkBrushKey}}" />
+                            Text=" 部门管理" />
                         <StackPanel
                             Margin="0,0,0,3"
                             HorizontalAlignment="Left"
@@ -4026,9 +4027,10 @@
                         Background="#FFECECEC">
                         <TextBlock
                             Margin="0,5,0,5"
+                            Background="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
                             FontSize="14"
                             FontWeight="Bold"
-                            Text=" 部门用户 / 分配" Background="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
+                            Text=" 部门用户 / 分配" />
                         <StackPanel
                             Margin="0,0,0,0"
                             HorizontalAlignment="Left"
@@ -4037,15 +4039,17 @@
                                 x:Name="BtnRefresh"
                                 Width="80"
                                 Height="25"
+                                Margin="1,1,5,1"
                                 Click="BtnRefresh_Click"
-                                Content="刷新" Margin="1,1,5,1" />
+                                Content="刷新" />
                             <Button
                                 x:Name="BtnAddUserManaged"
                                 Width="80"
                                 Height="25"
+                                Margin="1,1,5,1"
                                 HorizontalContentAlignment="Left"
                                 Click="BtnAddUserManaged_Click"
-                                Content="增加人员" Margin="1,1,5,1" />
+                                Content="增加人员" />
                             <Button
                                 x:Name="BtnEditUserManaged"
                                 Width="80"
@@ -4057,8 +4061,9 @@
                                 x:Name="BtnDeleteUserManaged"
                                 Width="80"
                                 Height="25"
+                                Margin="1,1,0,1"
                                 Click="BtnDeleteUserManaged_Click"
-                                Content="删除人员" Margin="1,1,0,1" />
+                                Content="删除人员" />
                         </StackPanel>
 
                         <StackPanel
@@ -4069,19 +4074,24 @@
                                 x:Name="TxtSearchUser"
                                 Width="180"
                                 Margin="5,0,5,0"
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Text="输入用户名搜索/分配" HorizontalAlignment="Center" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" FontWeight="Normal" />
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                FontWeight="Normal"
+                                Text="输入用户名搜索/分配" />
                             <Button
                                 x:Name="BtnAssignUser"
                                 Width="150"
                                 Height="20"
+                                Margin="2,1,1,1"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
                                 HorizontalContentAlignment="Center"
                                 Click="BtnAssignUser_Click"
-                                Content="将用户分配到选中部门" Margin="2,1,1,1" />
+                                Content="将用户分配到选中部门" />
                         </StackPanel>
-                       
+
                         <DataGrid
                             x:Name="UsersGrid"
                             AutoGenerateColumns="False"
@@ -4107,7 +4117,7 @@
                             </DataGrid.Columns>
                         </DataGrid>
 
-                        
+
                     </StackPanel>
                     <StackPanel
                         Grid.Row="2"
@@ -4116,7 +4126,7 @@
                         Margin="10,0,0,58"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Bottom" />
-                    
+
                     <StackPanel
                         Grid.Row="2"
                         Height="50"
