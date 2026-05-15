@@ -137,17 +137,145 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         }
 
         /// <summary>
+        /// 检查路径是否更像“文件路径”而不是“目录路径”。
+        /// </summary>
+        private static bool LooksLikeFilePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            var fileName = Path.GetFileName(path.Trim());
+            return !string.IsNullOrWhiteSpace(fileName) && fileName.Contains(".");
+        }
+
+        /// <summary>
+        /// 若传入的是文件路径，则自动转换为目录路径。
+        /// </summary>
+        private static string EnsureDirectoryPath(string path, string operationName)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return string.Empty;
+            }
+
+            var normalized = path.Trim();
+            if (!LooksLikeFilePath(normalized))
+            {
+                return normalized;
+            }
+
+            var dir = Path.GetDirectoryName(normalized);
+            if (string.IsNullOrWhiteSpace(dir))
+            {
+                return normalized;
+            }
+
+            LogManager.Instance.LogWarning($"[{operationName}] 检测到配置值疑似文件路径，自动回退到目录路径: {dir}");
+            return dir;
+        }
+
+        /// <summary>
+        /// 解析 UNC 路径中的服务器名与共享名。
+        /// </summary>
+        private static bool TryParseUncPath(string uncPath, out string server, out string share, out string tail)
+        {
+            server = string.Empty;
+            share = string.Empty;
+            tail = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(uncPath) || !uncPath.StartsWith("\\\\", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var body = uncPath.TrimStart('\\');
+            var parts = body.Split(new[] { '\\' }, StringSplitOptions.None);
+            if (parts.Length < 2)
+            {
+                return false;
+            }
+
+            server = parts[0];
+            share = parts[1];
+            tail = parts.Length > 2 ? string.Join("\\", parts.Skip(2)) : string.Empty;
+            return !string.IsNullOrWhiteSpace(server) && !string.IsNullOrWhiteSpace(share);
+        }
+
+        /// <summary>
+        /// 仅探测共享根是否可访问。
+        /// </summary>
+        private static bool IsShareReachable(string server, string share)
+        {
+            try
+            {
+                var shareRoot = $"\\\\{server}\\{share}";
+                return Directory.Exists(shareRoot);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 将 UNC 路径在 share 与 share$ 之间自动切换，优先返回可访问路径。
+        /// </summary>
+        private static string ResolveReachableUncPath(string uncPath, string operationName)
+        {
+            if (!TryParseUncPath(uncPath, out var server, out var share, out var tail))
+            {
+                return uncPath;
+            }
+
+            var candidates = new List<string>();
+            candidates.Add(share);
+
+            if (share.EndsWith("$", StringComparison.Ordinal))
+            {
+                candidates.Add(share.TrimEnd('$'));
+            }
+            else if (share.Length == 1 && char.IsLetter(share[0]))
+            {
+                candidates.Add(share + "$");
+            }
+
+            foreach (var candidateShare in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!IsShareReachable(server, candidateShare))
+                {
+                    continue;
+                }
+
+                var resolved = string.IsNullOrWhiteSpace(tail)
+                    ? $"\\\\{server}\\{candidateShare}"
+                    : $"\\\\{server}\\{candidateShare}\\{tail}";
+
+                if (!string.Equals(resolved, uncPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    LogManager.Instance.LogInfo($"[{operationName}] UNC 共享自动切换成功: {uncPath} -> {resolved}");
+                }
+
+                return resolved;
+            }
+
+            return uncPath;
+        }
+
+        /// <summary>
         /// 将配置路径解析为“服务器可访问路径”。
         /// 规则：
-        /// 1) UNC 路径（\\server\share）保持不变；
-        /// 2) 盘符路径（D:\\...）会结合服务器 IP 转为 \\IP\d\...（使用普通共享名，不使用 D$）；
+        /// 1) UNC 路径优先直接使用，并在 share/share$ 间自动尝试；
+        /// 2) 盘符路径（D:\\...）结合服务器 IP 转为 \\IP\\d\\... 并自动尝试 \\IP\\d$\\...;
         /// 3) 其余路径原样返回。
         /// </summary>
         /// <param name="configuredPath">配置中的路径</param>
         /// <param name="serverIp">登录页服务器 IP</param>
+        /// <param name="operationName">操作名（用于日志）</param>
         /// <returns>服务器可访问路径</returns>
         /// <exception cref="InvalidOperationException">盘符路径但服务器 IP 为空时抛出</exception>
-        private static string ResolveServerStoragePath(string configuredPath, string serverIp)
+        private static string ResolveServerStoragePath(string configuredPath, string serverIp, string operationName)
         {
             // 先做规范化，统一处理空白、引号、环境变量
             string normalized = NormalizeConfiguredPath(configuredPath);
@@ -156,10 +284,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return string.Empty;
             }
 
-            // 已是 UNC 路径，直接返回
+            // 已是 UNC 路径：尝试 share/share$ 自动切换
             if (normalized.StartsWith("\\\\", StringComparison.Ordinal))
             {
-                return normalized;
+                return ResolveReachableUncPath(normalized, operationName);
             }
 
             // 盘符路径按“服务器共享目录”规则转换
@@ -176,13 +304,12 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 去掉 "D:\\" 前缀，保留剩余子路径
                 string tailPath = normalized.Length > 3 ? normalized.Substring(3) : string.Empty;
 
-                // 组合为普通共享 UNC：\\IP\\d\\...
-                if (string.IsNullOrWhiteSpace(tailPath))
-                {
-                    return $"\\\\{ip}\\{driveShareName}";
-                }
+                // 先按普通共享拼接，再交给 share/share$ 自动切换
+                var unc = string.IsNullOrWhiteSpace(tailPath)
+                    ? $"\\\\{ip}\\{driveShareName}"
+                    : $"\\\\{ip}\\{driveShareName}\\{tailPath}";
 
-                return $"\\\\{ip}\\{driveShareName}\\{tailPath}";
+                return ResolveReachableUncPath(unc, operationName);
             }
 
             // 非 UNC/非盘符路径原样返回
@@ -203,16 +330,19 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             // 读取当前登录服务器 IP（用于将 D:\\... 转换为 \\IP\\D$\\...）
             string serverIp = NormalizeConfiguredPath(VariableDictionary._serverIP);
 
+            LogManager.Instance.LogInfo($"[{operationName}] 开始解析存储根路径。serverIp={serverIp}, fallbackPath={fallbackPath}");
+
             // 数据库不可用时，保留旧行为：允许回退本地路径
             if (databaseManager == null || !databaseManager.IsDatabaseAvailable)
             {
                 LogManager.Instance.LogWarning($"[{operationName}] 数据库不可用，使用本地回退路径: {fallbackPath}");
-                return fallbackPath;
+                return EnsureDirectoryPath(fallbackPath, operationName);
             }
 
             // 1) 优先读取系统配置 SourceRoot
             string sourceRootRaw = await databaseManager.GetSystemConfigValueAsync("SourceRoot").ConfigureAwait(false);
-            string sourceRoot = ResolveServerStoragePath(sourceRootRaw, serverIp);
+            LogManager.Instance.LogInfo($"[{operationName}] 读取 SourceRoot 原始值: {sourceRootRaw}");
+            string sourceRoot = EnsureDirectoryPath(ResolveServerStoragePath(sourceRootRaw, serverIp, operationName), operationName);
             if (!string.IsNullOrWhiteSpace(sourceRoot))
             {
                 LogManager.Instance.LogInfo($"[{operationName}] 解析到 SourceRoot(服务器路径): {sourceRoot}");
@@ -220,7 +350,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
 
             // 2) 兼容旧链路：读取运行时变量中的存储路径（即 TextBoxSetStoragePath）
-            string runtimeStoragePath = ResolveServerStoragePath(VariableDictionary._storagePath, serverIp);
+            LogManager.Instance.LogInfo($"[{operationName}] SourceRoot 为空，读取运行时存储路径 VariableDictionary._storagePath: {VariableDictionary._storagePath}");
+            string runtimeStoragePath = EnsureDirectoryPath(ResolveServerStoragePath(VariableDictionary._storagePath, serverIp, operationName), operationName);
             if (!string.IsNullOrWhiteSpace(runtimeStoragePath))
             {
                 LogManager.Instance.LogInfo($"[{operationName}] SourceRoot 为空，回退到运行时存储路径(服务器路径): {runtimeStoragePath}");
@@ -228,7 +359,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
 
             // 3) 继续兜底：读取本地设置文件中的 StoragePath（避免运行时变量尚未同步）
-            string settingsStoragePath = ResolveServerStoragePath(Properties.Settings.Default.StoragePath, serverIp);
+            LogManager.Instance.LogInfo($"[{operationName}] 运行时路径为空，读取 Settings.StoragePath: {Properties.Settings.Default.StoragePath}");
+            string settingsStoragePath = EnsureDirectoryPath(ResolveServerStoragePath(Properties.Settings.Default.StoragePath, serverIp, operationName), operationName);
             if (!string.IsNullOrWhiteSpace(settingsStoragePath))
             {
                 LogManager.Instance.LogInfo($"[{operationName}] 运行时存储路径为空，回退到设置 StoragePath(服务器路径): {settingsStoragePath}");
@@ -236,7 +368,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
 
             // 4) 最后兜底：使用约定默认路径并转换为服务器共享路径（不是本地写入）
-            string defaultServerStoragePath = ResolveServerStoragePath(@"D:\GB_Tools\Cad_Sw_Library", serverIp);
+            string defaultServerStoragePath = EnsureDirectoryPath(ResolveServerStoragePath(@"D:\GB_Tools\Cad_Sw_Library", serverIp, operationName), operationName);
             if (!string.IsNullOrWhiteSpace(defaultServerStoragePath))
             {
                 LogManager.Instance.LogWarning($"[{operationName}] SourceRoot/运行时路径/设置路径均为空，使用默认服务器路径: {defaultServerStoragePath}");

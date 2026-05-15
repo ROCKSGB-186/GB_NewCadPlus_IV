@@ -1,4 +1,4 @@
-using GB_NewCadPlus_IV.DisplayPages;
+﻿using GB_NewCadPlus_IV.DisplayPages;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
@@ -6866,6 +6866,7 @@ namespace GB_NewCadPlus_IV
             // 从 UI 状态构造 DTO，然后委托到核心方法
             try
             {
+                LogManager.Instance.LogInfo("[UploadFlow:UI] 开始组装上传DTO。");
                 // 校验分类是否已选择
                 if (_selectedCategoryNode == null)
                 {
@@ -7007,7 +7008,7 @@ namespace GB_NewCadPlus_IV
                     if (!string.IsNullOrWhiteSpace(dto.FileStorage.FilePath))
                         uploadedFiles.Add(dto.FileStorage.FilePath);
 
-                    LogManager.Instance.LogInfo($"记录上传文件路径成功: {dto.FileStorage.FilePath}");
+                    LogManager.Instance.LogInfo($"[UploadFlow] Step2-主文件上传成功: path={dto.FileStorage.FilePath}, hash={dto.FileStorage.FileHash}, size={dto.FileStorage.FileSize}");
                 }
 
                 // 2) 复制预览图（若存在）
@@ -7027,12 +7028,12 @@ namespace GB_NewCadPlus_IV
                         // 记录预览图路径（回滚用）
                         uploadedFiles.Add(previewStoredPath);
 
-                        LogManager.Instance.LogInfo($"预览图片复制成功: {previewStoredPath}");
+                        LogManager.Instance.LogInfo($"[UploadFlow] Step3-预览图复制成功: {previewStoredPath}");
                     }
                     catch (Exception exPreview)
                     {
                         // 预览图失败不阻断主流程
-                        LogManager.Instance.LogWarning($"复制预览图片失败（继续）：{exPreview.Message}");
+                        LogManager.Instance.LogWarning($"[UploadFlow] Step3-复制预览图片失败（继续）：{exPreview.Message}");
                     }
                 }
 
@@ -7060,10 +7061,11 @@ namespace GB_NewCadPlus_IV
                 try
                 {
                     await _databaseManager.UpdateCategoryStatisticsAsync(dto.FileStorage.CategoryId, dto.FileStorage.CategoryType ?? "sub").ConfigureAwait(false);
+                    LogManager.Instance.LogInfo("[UploadFlow] Step6-分类统计刷新成功。");
                 }
                 catch (Exception exStat)
                 {
-                    LogManager.Instance.LogWarning($"更新分类统计失败（非致命）：{exStat.Message}");
+                    LogManager.Instance.LogWarning($"[UploadFlow] Step6-更新分类统计失败（非致命）：{exStat.Message}");
                 }
 
                 // 6) 刷新UI
@@ -7086,6 +7088,7 @@ namespace GB_NewCadPlus_IV
             catch (Exception ex)
             {
                 LogManager.Instance.LogError($"UploadFileAndSaveToDatabase(dto) 失败: {ex.Message}");
+                LogManager.Instance.LogError($"[UploadFlow] 失败快照: source={dto?.FileStorage?.FilePath}, uploadedFilesCount={uploadedFiles.Count}, savedStorageId={savedStorageId}");
 
                 // 优先数据库级联回滚（已落库时）
                 if (savedStorageId > 0)
@@ -15248,24 +15251,11 @@ namespace GB_NewCadPlus_IV
 
         private void 管道设备表开关_Btn_Click(object sender, RoutedEventArgs e)
         {
-            var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-
+            // 直接调用统一命令入口，避免编译期依赖额外提取方法
             var generator = new UnifiedTableGenerator();
-            // 调用新提取的方法
-            var data = generator.ExtractPipeDataFromSelection(doc.Editor, doc.Database);
-
-            if (data != null && data.Count > 0)
-            {
-                var window = new PipeDriver_Tabel_WpfWindows();
-                window.InitializeWithData(data, "管道明细表");
-                window.Show();
-            }
-            else
-            {
-                MessageBox.Show("未选择有效图元或提取数据失败。", "提示");
-            }
+            generator.GeneratePipeTableFromSelection();
         }
+
 
 
         #endregion

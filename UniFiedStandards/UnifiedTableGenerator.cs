@@ -2408,7 +2408,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             DrawPipeByClicks(isOutlet: false);
         }
 
-     
+
         /// <summary>
         /// 完成版——手选示例块 + 端点相交继承参数 + 同名标签同步（增强：读取到0不覆盖，字段标准化）
         /// </summary>
@@ -3220,7 +3220,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             if (sampleInfo == null || verticesWorld == null || verticesWorld.Count < 2) return overlay;
 
             // 优先使用用户在TextBox_绘图比例中设置的比例值
-            var scaleFactor = VariableDictionary.textBoxScale;
+            var scaleFactor = AutoCadHelper.GetScale();
             if (scaleFactor <= 0) // 如果获取失败，使用原有逻辑
             {
                 //AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
@@ -3344,7 +3344,8 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                     // 文字偏移：箭头上方 + 与文字高度相关的间距（按比例调整）
                     //double offset = (arrowHalfHeight + finalTitleHeight * 0.8) * scaleFactor; // 应用比例
-                    double offset = (400 + finalTitleHeight * 0.75); // 应用比例
+                    double offset = (4 * scaleFactor + finalTitleHeight * 0.75); // 应用比例
+                    //offset = Math.Max(finalTitleHeight * 0.75, arrowHalfHeight + finalTitleHeight * 0.25);
                     var worldTextPos = mid + perp * offset;// 文字放在箭头上方一定距离处
                     // 计算文字的局部坐标位置（相对于 midPointWorld）
                     var localTextPos = new Point3d(worldTextPos.X - midPointWorld.X, worldTextPos.Y - midPointWorld.Y, worldTextPos.Z - midPointWorld.Z);
@@ -4755,7 +4756,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             {
                 // 基础固定列（0..9）
                 // 管道标题：第0列（索引0），跨2行
-                
+
 
                 // 管段号：第1列（索引1），跨2行 管道号
                 table.MergeCells(CellRange.Create(table, 1, 0, 2, 0));
@@ -5019,7 +5020,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                                     // 2. 移除常见的 MText 格式控制语法，如 {\fArial|b0|i0|c0|p34;文字} -> 文字
                                     // 以及移除括号控制符 {} (例如 {D371J...})
-                                    cleanTxt = System.Text.RegularExpressions.Regex.Replace(cleanTxt, @"\{[^{}]*;\}", ""); 
+                                    cleanTxt = System.Text.RegularExpressions.Regex.Replace(cleanTxt, @"\{[^{}]*;\}", "");
                                     cleanTxt = System.Text.RegularExpressions.Regex.Replace(cleanTxt, @"[{}]", "");
 
                                     // 3. 替换分号（CAD 中常作为属性分段符）和标准换行符
@@ -5043,7 +5044,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 excelCell.Value = rowTexts[c];
 
                                 // 强制数据行不换行，且水平居中
-                                excelCell.Style.WrapText = false; 
+                                excelCell.Style.WrapText = false;
                                 excelCell.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
                                 excelCell.Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Center;
 
