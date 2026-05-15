@@ -381,7 +381,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                      `username` VARCHAR(100) NOT NULL UNIQUE,
                      `password_hash` VARCHAR(512) NOT NULL,
                      `salt` VARCHAR(64) NOT NULL,
-                     `display_name` VARCHAR(200),
+                     `real_name` VARCHAR(200),
                      `gender` ENUM('男','女','无信息') DEFAULT '无信息',
                      `phone` VARCHAR(50),
                      `email` VARCHAR(200),
@@ -453,7 +453,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             {
                 { "password_hash", "VARCHAR(512) NOT NULL" },
                 { "salt", "VARCHAR(64) NOT NULL" },
-                { "display_name", "VARCHAR(200) NULL" },
+                { "real_name", "VARCHAR(200) NULL" },
                 { "gender", "ENUM('男','女','无信息') DEFAULT '无信息'" },
                 { "phone", "VARCHAR(50) NULL" },
                 { "email", "VARCHAR(200) NULL" },
@@ -532,6 +532,23 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             {
                 LogManager.Instance.LogInfo($"确保 users.idx_department_id 索引时出错: {ex.Message}");
             }
+
+            // 中文注释：兼容旧库，把 display_name 数据迁移到 real_name。
+            try
+            {
+                if (existing.Contains("display_name") && existing.Contains("real_name"))
+                {
+                    using (var migrate = conn.CreateCommand())
+                    {
+                        migrate.CommandText = "UPDATE `users` SET `real_name` = `display_name` WHERE (`real_name` IS NULL OR `real_name` = '') AND `display_name` IS NOT NULL;";
+                        migrate.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"users real_name 迁移失败: {ex.Message}");
+            }
         }
         /// <summary>
         /// 注册用户
@@ -547,7 +564,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="createdBy">创建人</param>
         /// <returns></returns>
         public bool RegisterUser(string username, string password, int departmentId = 0, string departmentName = "",
-             string? displayname = null, string? gender = null, string? email = null, string? phone = null, string? role = null, string? createdBy = null)
+             string? realName = null, string? gender = null, string? email = null, string? phone = null, string? role = null, string? createdBy = null)
         {
 
 
@@ -564,13 +581,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 cmd.Transaction = tx;
                 cmd.CommandText = @"
                     INSERT INTO users
-                        (username, password_hash, salt, display_name, gender, email, phone, role, department_id, department_name, is_active, created_by)
+                        (username, password_hash, salt, real_name, gender, email, phone, role, department_id, department_name, is_active, created_by)
                     VALUES
-                        (@u, @h, @s, @dn, @gender, @em, @ph, @rl, @d, @dname, 1, @cb);";
+                        (@u, @h, @s, @rn, @gender, @em, @ph, @rl, @d, @dname, 1, @cb);";
                 cmd.Parameters.AddWithValue("@u", username);
                 cmd.Parameters.AddWithValue("@h", hash);
                 cmd.Parameters.AddWithValue("@s", salt);
-                cmd.Parameters.AddWithValue("@dn", (object?)displayname ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@rn", (object?)realName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@gender", (object?)gender ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@em", (object?)email ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@ph", (object?)phone ?? DBNull.Value);
@@ -898,7 +915,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     Id = reader.GetInt32("id"),
                     CadCategoryId = reader.IsDBNull(reader.GetOrdinal("cad_category_id")) ? (int?)null : reader.GetInt32("cad_category_id"),
                     Name = reader.GetString("name"),
-                    DisplayName = reader.IsDBNull(reader.GetOrdinal("display_name")) ? reader.GetString("name") : reader.GetString("display_name"),
+                    RealName = reader.IsDBNull(reader.GetOrdinal("display_name")) ? reader.GetString("name") : reader.GetString("display_name"),
                     Description = reader.IsDBNull(reader.GetOrdinal("description")) ? "" : reader.GetString("description"),
                     ManagerUserId = reader.IsDBNull(reader.GetOrdinal("manager_user_id")) ? (int?)null : reader.GetInt32("manager_user_id"),
                     SortOrder = reader.IsDBNull(reader.GetOrdinal("sort_order")) ? 0 : reader.GetInt32("sort_order"),
@@ -919,19 +936,24 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             using var conn = CreateMySqlConnection();
             conn.Open();
             var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT id, username, gender, email, phone, role, is_active FROM users WHERE department_id=@d;";
+            cmd.CommandText = "SELECT id, username, real_name, gender, email, phone, role, department_name, is_active FROM users WHERE department_id=@d;";
             cmd.Parameters.AddWithValue("@d", departmentId);
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
+                var realName = reader.IsDBNull(reader.GetOrdinal("real_name")) ? "" : reader.GetString("real_name");
                 list.Add(new UserModel
                 {
                     Id = reader.GetInt32("id"),
                     Username = reader.GetString("username"),
+                    RealName = realName,
+                    DisplayName = realName,
+                    FullName = realName,
                     Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? "" : reader.GetString("gender"),
                     Email = reader.IsDBNull(reader.GetOrdinal("email")) ? "" : reader.GetString("email"),
                     Phone = reader.IsDBNull(reader.GetOrdinal("phone")) ? "" : reader.GetString("phone"),
                     Role = reader.IsDBNull(reader.GetOrdinal("role")) ? "" : reader.GetString("role"),
+                    DepartmentName = reader.IsDBNull(reader.GetOrdinal("department_name")) ? "" : reader.GetString("department_name"),
                     IsActive = reader.IsDBNull(reader.GetOrdinal("is_active")) ? true : (reader.GetInt32("is_active") == 1)
                 });
             }
@@ -977,7 +999,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public int Id { get; set; }
         public int? CadCategoryId { get; set; }
         public string? Name { get; set; }
-        public string? DisplayName { get; set; }
+        public string? RealName { get; set; }
         public string? Description { get; set; }
         public int? ManagerUserId { get; set; }
         public int SortOrder { get; set; }
@@ -991,8 +1013,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
     {
         public int Id { get; set; }// 用户ID
         public string? Username { get; set; }// 用户名
-        public string? DisplayName { get; set; }// 真实姓名/显示名
+        public string? RealName { get; set; }// 真实姓名
+        public string? DisplayName { get; set; }// 真实姓名/显示名（兼容旧命名）
         public string? FullName { get; set; }// 姓名（兼容旧绑定）
+        public string? DepartmentName { get; set; }// 所属部门
         public string? Gender { get; set; }// 性别
         public string? Email { get; set; }// 邮箱
         public string? Phone { get; set; }// 手机

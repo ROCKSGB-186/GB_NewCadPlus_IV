@@ -31,7 +31,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 var deptName = string.IsNullOrWhiteSpace(selDept.Name)
-                    ? (selDept.DisplayName ?? string.Empty)
+                    ? (selDept.RealName ?? string.Empty)
                     : selDept.Name;
 
                 var ok = _svc.AddUser(
@@ -41,7 +41,7 @@ namespace GB_NewCadPlus_IV
                     deptName,
                     editorResult.Role,
                     editorResult.IsActive,
-                    editorResult.DisplayName,
+                    editorResult.RealName,
                     editorResult.Gender,
                     editorResult.Phone,
                     editorResult.Email);
@@ -90,7 +90,7 @@ namespace GB_NewCadPlus_IV
                 var deptId = selDept?.Id;
                 var deptName = selDept == null
                     ? string.Empty
-                    : (string.IsNullOrWhiteSpace(selDept.Name) ? (selDept.DisplayName ?? string.Empty) : selDept.Name);
+                    : (string.IsNullOrWhiteSpace(selDept.Name) ? (selDept.RealName ?? string.Empty) : selDept.Name);
 
                 var ok = _svc.UpdateUser(
                     selUser.Id,
@@ -100,7 +100,7 @@ namespace GB_NewCadPlus_IV
                     deptId,
                     deptName,
                     string.IsNullOrWhiteSpace(editorResult.Password) ? null : editorResult.Password,
-                    editorResult.DisplayName,
+                    editorResult.RealName,
                     editorResult.Gender,
                     editorResult.Phone,
                     editorResult.Email);
@@ -178,7 +178,7 @@ namespace GB_NewCadPlus_IV
         {
             public string Username { get; set; }
             public string Password { get; set; }
-            public string DisplayName { get; set; }
+            public string RealName { get; set; }
             public string Gender { get; set; }
             public string Phone { get; set; }
             public string Email { get; set; }
@@ -224,15 +224,15 @@ namespace GB_NewCadPlus_IV
             grid.Children.Add(tbUser);
             row++;
 
-            var lblDisplayName = new System.Windows.Controls.TextBlock { Text = "真实姓名:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblDisplayName, row);
-            System.Windows.Controls.Grid.SetColumn(lblDisplayName, 0);
-            grid.Children.Add(lblDisplayName);
+            var lblRealName = new System.Windows.Controls.TextBlock { Text = "真实姓名:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
+            System.Windows.Controls.Grid.SetRow(lblRealName, row);
+            System.Windows.Controls.Grid.SetColumn(lblRealName, 0);
+            grid.Children.Add(lblRealName);
 
-            var tbDisplayName = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(4), Text = initial?.DisplayName ?? initial?.FullName ?? string.Empty };
-            System.Windows.Controls.Grid.SetRow(tbDisplayName, row);
-            System.Windows.Controls.Grid.SetColumn(tbDisplayName, 1);
-            grid.Children.Add(tbDisplayName);
+            var tbRealName = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(4), Text = initial?.RealName ?? string.Empty };
+            System.Windows.Controls.Grid.SetRow(tbRealName, row);
+            System.Windows.Controls.Grid.SetColumn(tbRealName, 1);
+            grid.Children.Add(tbRealName);
             row++;
 
             var lblGender = new System.Windows.Controls.TextBlock { Text = "性别:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
@@ -340,7 +340,7 @@ namespace GB_NewCadPlus_IV
             btnOk.Click += (s, e) =>
             {
                 var username = (tbUser.Text ?? string.Empty).Trim();
-                var displayName = (tbDisplayName.Text ?? string.Empty).Trim();
+                var realName = (tbRealName.Text ?? string.Empty).Trim();
                 var gender = (cmbGender.SelectedItem as string) ?? "无信息";
                 var phone = (tbPhone.Text ?? string.Empty).Trim();
                 var email = (tbEmail.Text ?? string.Empty).Trim();
@@ -355,10 +355,10 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(displayName))
+                if (string.IsNullOrWhiteSpace(realName))
                 {
                     System.Windows.MessageBox.Show("请输入真实姓名。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    tbDisplayName.Focus();
+                    tbRealName.Focus();
                     return;
                 }
 
@@ -385,7 +385,7 @@ namespace GB_NewCadPlus_IV
                 {
                     Username = username,
                     Password = pwd,
-                    DisplayName = displayName,
+                    RealName = realName,
                     Gender = gender,
                     Phone = phone,
                     Email = email,

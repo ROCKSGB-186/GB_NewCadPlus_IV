@@ -12095,7 +12095,7 @@ namespace GB_NewCadPlus_IV
                         ? result.ManagerUserId
                         : null;
 
-                    var id = _svc.AddDepartment(result.Name, result.DisplayName, result.Description, mgrId, result.SortOrder);
+                    var id = _svc.AddDepartment(result.Name, result.RealName, result.Description, mgrId, result.SortOrder);
                     if (id > 0)
                     {
                         RefreshDepartmentsAsync();
@@ -12134,7 +12134,7 @@ namespace GB_NewCadPlus_IV
                         ? edited.ManagerUserId
                         : null;
 
-                    var ok = _svc.UpdateDepartment(sel.Id, edited.Name, edited.DisplayName, edited.Description, edited.SortOrder, mgrId, edited.IsActive);
+                    var ok = _svc.UpdateDepartment(sel.Id, edited.Name, edited.RealName, edited.Description, edited.SortOrder, mgrId, edited.IsActive);
                     if (ok)
                     {
                         RefreshDepartmentsAsync();
@@ -12160,7 +12160,7 @@ namespace GB_NewCadPlus_IV
         {
             var sel = DepartmentsGrid.SelectedItem as DepartmentModel;
             if (sel == null) { MessageBox.Show("请先选择一个部门", "提示", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-            if (MessageBox.Show($"确认删除部门：{sel.DisplayName} ?\n删除后该部门下用户将被置为未分配。", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            if (MessageBox.Show($"确认删除部门：{sel.RealName} ?\n删除后该部门下用户将被置为未分配。", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             var ok = _svc.DeleteDepartment(sel.Id);
             if (ok)
             {
@@ -12211,7 +12211,7 @@ namespace GB_NewCadPlus_IV
             {
                 Id = initial?.Id ?? 0,
                 Name = initial?.Name ?? string.Empty,
-                DisplayName = initial?.DisplayName ?? string.Empty,
+                RealName = initial?.RealName ?? string.Empty,
                 Description = initial?.Description ?? string.Empty,
                 SortOrder = initial?.SortOrder ?? 0,
                 ManagerUserId = initial?.ManagerUserId,
@@ -12245,7 +12245,7 @@ namespace GB_NewCadPlus_IV
 
             var lblDisplay = new System.Windows.Controls.TextBlock { Text = "显示名称:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
             Grid.SetRow(lblDisplay, r); Grid.SetColumn(lblDisplay, 0); grid.Children.Add(lblDisplay);
-            var tbDisplay = new System.Windows.Controls.TextBox { Text = model.DisplayName, Margin = new System.Windows.Thickness(4) };
+            var tbDisplay = new System.Windows.Controls.TextBox { Text = model.RealName, Margin = new System.Windows.Thickness(4) };
             Grid.SetRow(tbDisplay, r); Grid.SetColumn(tbDisplay, 1); grid.Children.Add(tbDisplay);
             r++;
 
@@ -12300,7 +12300,7 @@ namespace GB_NewCadPlus_IV
                 if (int.TryParse(tbMgr.Text.Trim(), out var mid) && mid > 0) mgr = mid;
 
                 model.Name = tbName.Text.Trim();
-                model.DisplayName = tbDisplay.Text.Trim();
+                model.RealName = tbDisplay.Text.Trim();
                 model.Description = tbDesc.Text;
                 model.SortOrder = sort;
                 model.ManagerUserId = mgr;
@@ -12334,7 +12334,7 @@ namespace GB_NewCadPlus_IV
             if (ok)
             {
                 LoadUsersForDepartment(sel.Id);
-                MessageBox.Show($"用户 {username} 已分配到 {sel.DisplayName}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"用户 {username} 已分配到 {sel.RealName}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {

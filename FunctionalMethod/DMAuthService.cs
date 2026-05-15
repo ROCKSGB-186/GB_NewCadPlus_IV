@@ -268,7 +268,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     USERNAME VARCHAR(100) NOT NULL UNIQUE,
                     PASSWORD_HASH VARCHAR(512) NOT NULL,
                     SALT VARCHAR(64) NOT NULL,
-                    DISPLAY_NAME VARCHAR(200),
+                    REAL_NAME VARCHAR(200),
                     GENDER VARCHAR(20),
                     PHONE VARCHAR(50),
                     EMAIL VARCHAR(200),
@@ -280,6 +280,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 )");
 
             EnsureUsersColumnsExist();
+            BackfillUsersNullFields();
             SyncTableComments();// 确保表注释同步，提升数据库自描述能力
         }
 
@@ -290,7 +291,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             using (var conn = CreateOpenConnection())
             {
-                EnsureUserColumn(conn, "DISPLAY_NAME", "VARCHAR(200)");
+                // 中文注释：用户真实名字段统一为 REAL_NAME
+                EnsureUserColumn(conn, "REAL_NAME", "VARCHAR(200)");
                 EnsureUserColumn(conn, "GENDER", "VARCHAR(20)");
                 EnsureUserColumn(conn, "PHONE", "VARCHAR(50)");
                 EnsureUserColumn(conn, "EMAIL", "VARCHAR(200)");
@@ -402,6 +404,98 @@ END;";
             return "无信息";
         }
 
+        private static string NormalizeRole(string role)
+        {
+            return string.IsNullOrWhiteSpace(role) ? "user" : role.Trim();
+        }
+
+        private static string NormalizeDepartmentName(string departmentName)
+        {
+            var value = (departmentName ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(value) ? "未分配" : value;
+        }
+
+        private static string NormalizeRealName(string realName, string username)
+        {
+            var value = (realName ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+
+            var user = (username ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(user) ? "未命名用户" : user;
+        }
+
+        private static string NormalizePhone(string phone)
+        {
+            var value = (phone ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(value) ? "未填写" : value;
+        }
+
+        private static string NormalizeEmail(string email)
+        {
+            var value = (email ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(value) ? "未填写" : value;
+        }
+
+        /// <summary>
+        /// 对历史数据中的空值进行回填，避免界面读取时出现大量 NULL。
+        /// </summary>
+        private void BackfillUsersNullFields()
+        {
+            try
+            {
+                using (var conn = CreateOpenConnection())
+                {
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET REAL_NAME = DISPLAY_NAME WHERE REAL_NAME IS NULL AND DISPLAY_NAME IS NOT NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET REAL_NAME = USERNAME WHERE REAL_NAME IS NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET GENDER = '无信息' WHERE GENDER IS NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET PHONE = '未填写' WHERE PHONE IS NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET EMAIL = '未填写' WHERE EMAIL IS NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET ROLE = 'user' WHERE ROLE IS NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET DEPARTMENT_NAME = '未分配' WHERE DEPARTMENT_NAME IS NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE USERS SET IS_ACTIVE = 1 WHERE IS_ACTIVE IS NULL";
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"BackfillUsersNullFields: 回填用户空值失败: {ex.Message}");
+            }
+        }
+
         #endregion
 
         #region 健壮版业务逻辑 （去除 MERGE / TOP 等易异常语法）
@@ -448,14 +542,28 @@ END;";
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) return false;
             var salt = GenerateSalt();
             var hash = ComputeHash(password, salt);
+            var userNameTrim = username.Trim();
             try
             {
                 using (var conn = CreateOpenConnection())
                 using (var cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "INSERT INTO USERS (USERNAME, PASSWORD_HASH, SALT, DEPARTMENT_ID, DEPARTMENT_NAME) VALUES (:u, :h, :s, :d, :dn)";
-                    AddParam(cmd, "u", username); AddParam(cmd, "h", hash); AddParam(cmd, "s", salt);
-                    AddParam(cmd, "d", departmentId); AddParam(cmd, "dn", departmentName);
+                    cmd.CommandText = @"INSERT INTO USERS
+(USERNAME, PASSWORD_HASH, SALT, REAL_NAME, GENDER, PHONE, EMAIL, DEPARTMENT_ID, DEPARTMENT_NAME, ROLE, IS_ACTIVE, CREATED_AT)
+VALUES (:u, :h, :s, :realName, :g, :p, :e, :d, :deptName, :r, :ia, SYSDATE)";
+
+                    AddParam(cmd, "u", userNameTrim);
+                    AddParam(cmd, "h", hash);
+                    AddParam(cmd, "s", salt);
+                    AddParam(cmd, "realName", NormalizeRealName(null, userNameTrim));
+                    AddParam(cmd, "g", NormalizeGender(null));
+                    AddParam(cmd, "p", NormalizePhone(null));
+                    AddParam(cmd, "e", NormalizeEmail(null));
+                    AddParam(cmd, "d", departmentId);
+                    AddParam(cmd, "deptName", NormalizeDepartmentName(departmentName));
+                    AddParam(cmd, "r", NormalizeRole(null));
+                    AddParam(cmd, "ia", 1);
+
                     return cmd.ExecuteNonQuery() > 0;
                 }
             }
@@ -465,7 +573,7 @@ END;";
         /// <summary>
         /// 新增用户（支持设置角色与启用状态，以及真实姓名/性别/电话/邮箱）
         /// </summary>
-        public bool AddUser(string username, string password, int departmentId = 0, string departmentName = "", string role = "user", bool isActive = true, string displayName = null, string gender = null, string phone = null, string email = null)
+        public bool AddUser(string username, string password, int departmentId = 0, string departmentName = "", string role = "user", bool isActive = true, string realName = null, string gender = null, string phone = null, string email = null)
         {
             EnsureAllTablesExist();
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
@@ -483,19 +591,19 @@ END;";
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO USERS
-(USERNAME, PASSWORD_HASH, SALT, DISPLAY_NAME, GENDER, PHONE, EMAIL, DEPARTMENT_ID, DEPARTMENT_NAME, ROLE, IS_ACTIVE, CREATED_AT)
-VALUES (:u, :h, :s, :dn, :g, :p, :e, :d, :deptName, :r, :ia, SYSDATE)";
+(USERNAME, PASSWORD_HASH, SALT, REAL_NAME, GENDER, PHONE, EMAIL, DEPARTMENT_ID, DEPARTMENT_NAME, ROLE, IS_ACTIVE, CREATED_AT)
+VALUES (:u, :h, :s, :realName, :g, :p, :e, :d, :deptName, :r, :ia, SYSDATE)";
 
                     AddParam(cmd, "u", userNameTrim);
                     AddParam(cmd, "h", hash);
                     AddParam(cmd, "s", salt);
-                    AddParam(cmd, "dn", string.IsNullOrWhiteSpace(displayName) ? userNameTrim : displayName.Trim());
+                    AddParam(cmd, "realName", NormalizeRealName(realName, userNameTrim));
                     AddParam(cmd, "g", NormalizeGender(gender));
-                    AddParam(cmd, "p", string.IsNullOrWhiteSpace(phone) ? string.Empty : phone.Trim());
-                    AddParam(cmd, "e", string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim());
+                    AddParam(cmd, "p", NormalizePhone(phone));
+                    AddParam(cmd, "e", NormalizeEmail(email));
                     AddParam(cmd, "d", departmentId);
-                    AddParam(cmd, "deptName", departmentName ?? string.Empty);
-                    AddParam(cmd, "r", string.IsNullOrWhiteSpace(role) ? "user" : role.Trim());
+                    AddParam(cmd, "deptName", NormalizeDepartmentName(departmentName));
+                    AddParam(cmd, "r", NormalizeRole(role));
                     AddParam(cmd, "ia", isActive ? 1 : 0);
 
                     return cmd.ExecuteNonQuery() > 0;
@@ -510,7 +618,7 @@ VALUES (:u, :h, :s, :dn, :g, :p, :e, :d, :deptName, :r, :ia, SYSDATE)";
         /// <summary>
         /// 编辑用户（可选更新密码，支持更新真实姓名/性别/电话/邮箱）
         /// </summary>
-        public bool UpdateUser(int userId, string username, string role, bool isActive, int? departmentId = null, string departmentName = null, string newPassword = null, string displayName = null, string gender = null, string phone = null, string email = null)
+        public bool UpdateUser(int userId, string username, string role, bool isActive, int? departmentId = null, string departmentName = null, string newPassword = null, string realName = null, string gender = null, string phone = null, string email = null)
         {
             EnsureAllTablesExist();
             if (userId <= 0 || string.IsNullOrWhiteSpace(username))
@@ -522,21 +630,21 @@ VALUES (:u, :h, :s, :dn, :g, :p, :e, :d, :deptName, :r, :ia, SYSDATE)";
             {
                 using (var conn = CreateOpenConnection())
                 {
-                    string finalDeptName = departmentName ?? string.Empty;
-                    if (departmentId.HasValue && departmentId.Value > 0 && string.IsNullOrWhiteSpace(finalDeptName))
+                    string finalDeptName = NormalizeDepartmentName(departmentName);
+                    if (departmentId.HasValue && departmentId.Value > 0 && string.IsNullOrWhiteSpace((departmentName ?? string.Empty).Trim()))
                     {
                         using (var findDept = conn.CreateCommand())
                         {
                             findDept.CommandText = "SELECT NAME FROM DEPARTMENTS WHERE ID = :id";
                             AddParam(findDept, "id", departmentId.Value);
-                            finalDeptName = Convert.ToString(findDept.ExecuteScalar()) ?? string.Empty;
+                            finalDeptName = NormalizeDepartmentName(Convert.ToString(findDept.ExecuteScalar()));
                         }
                     }
 
-                    var finalDisplayName = string.IsNullOrWhiteSpace(displayName) ? username.Trim() : displayName.Trim();
+                    var finalRealName = NormalizeRealName(realName, username);
                     var finalGender = NormalizeGender(gender);
-                    var finalPhone = string.IsNullOrWhiteSpace(phone) ? string.Empty : phone.Trim();
-                    var finalEmail = string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim();
+                    var finalPhone = NormalizePhone(phone);
+                    var finalEmail = NormalizeEmail(email);
 
                     if (string.IsNullOrWhiteSpace(newPassword))
                     {
@@ -544,7 +652,7 @@ VALUES (:u, :h, :s, :dn, :g, :p, :e, :d, :deptName, :r, :ia, SYSDATE)";
                         {
                             cmd.CommandText = @"UPDATE USERS
 SET USERNAME = :u,
-    DISPLAY_NAME = :displayName,
+    REAL_NAME = :realName,
     GENDER = :gender,
     PHONE = :phone,
     EMAIL = :email,
@@ -554,11 +662,11 @@ SET USERNAME = :u,
     DEPARTMENT_NAME = :dn
 WHERE ID = :id";
                             AddParam(cmd, "u", username.Trim());
-                            AddParam(cmd, "displayName", finalDisplayName);
+                            AddParam(cmd, "realName", finalRealName);
                             AddParam(cmd, "gender", finalGender);
                             AddParam(cmd, "phone", finalPhone);
                             AddParam(cmd, "email", finalEmail);
-                            AddParam(cmd, "r", string.IsNullOrWhiteSpace(role) ? "user" : role.Trim());
+                            AddParam(cmd, "r", NormalizeRole(role));
                             AddParam(cmd, "ia", isActive ? 1 : 0);
                             AddParam(cmd, "d", departmentId ?? 0);
                             AddParam(cmd, "dn", finalDeptName);
@@ -576,7 +684,7 @@ WHERE ID = :id";
 SET USERNAME = :u,
     PASSWORD_HASH = :h,
     SALT = :s,
-    DISPLAY_NAME = :displayName,
+    REAL_NAME = :realName,
     GENDER = :gender,
     PHONE = :phone,
     EMAIL = :email,
@@ -588,11 +696,11 @@ WHERE ID = :id";
                         AddParam(cmd, "u", username.Trim());
                         AddParam(cmd, "h", hash);
                         AddParam(cmd, "s", salt);
-                        AddParam(cmd, "displayName", finalDisplayName);
+                        AddParam(cmd, "realName", finalRealName);
                         AddParam(cmd, "gender", finalGender);
                         AddParam(cmd, "phone", finalPhone);
                         AddParam(cmd, "email", finalEmail);
-                        AddParam(cmd, "r", string.IsNullOrWhiteSpace(role) ? "user" : role.Trim());
+                        AddParam(cmd, "r", NormalizeRole(role));
                         AddParam(cmd, "ia", isActive ? 1 : 0);
                         AddParam(cmd, "d", departmentId ?? 0);
                         AddParam(cmd, "dn", finalDeptName);
@@ -692,7 +800,7 @@ WHERE ID = :id";
                                 Id = Convert.ToInt32(r.GetValue(0)),
                                 CadCategoryId = r.IsDBNull(1) ? null : (int?)Convert.ToInt32(r.GetValue(1)),
                                 Name = r.IsDBNull(2) ? string.Empty : Convert.ToString(r.GetValue(2)),
-                                DisplayName = r.IsDBNull(3) ? (r.IsDBNull(2) ? string.Empty : Convert.ToString(r.GetValue(2))) : Convert.ToString(r.GetValue(3)),
+                                RealName = r.IsDBNull(3) ? (r.IsDBNull(2) ? string.Empty : Convert.ToString(r.GetValue(2))) : Convert.ToString(r.GetValue(3)),
                                 Description = r.IsDBNull(4) ? string.Empty : Convert.ToString(r.GetValue(4)),
                                 SortOrder = r.IsDBNull(5) ? 0 : Convert.ToInt32(r.GetValue(5)),
                                 IsActive = !r.IsDBNull(6) && Convert.ToInt32(r.GetValue(6)) == 1,
@@ -733,7 +841,7 @@ WHERE ID = :id";
                             Id = id,
                             CadCategoryId = id,
                             Name = name,
-                            DisplayName = displayName,
+                            RealName = displayName,
                             Description = string.Empty,
                             SortOrder = sortOrder,
                             IsActive = true,
@@ -844,24 +952,26 @@ WHERE ID = :id";
             using (var conn = CreateOpenConnection())
             using (var cmd = conn.CreateCommand())
             {
-                cmd.CommandText = "SELECT ID, USERNAME, DISPLAY_NAME, GENDER, EMAIL, PHONE, ROLE, IS_ACTIVE FROM USERS WHERE DEPARTMENT_ID = :d ORDER BY ID";
+                cmd.CommandText = "SELECT ID, USERNAME, REAL_NAME, GENDER, EMAIL, PHONE, ROLE, DEPARTMENT_NAME, IS_ACTIVE FROM USERS WHERE DEPARTMENT_ID = :d ORDER BY ID";
                 AddParam(cmd, "d", departmentId);
                 using (var r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
-                        var displayName = r.IsDBNull(2) ? string.Empty : r.GetString(2);
+                        var realName = r.IsDBNull(2) ? string.Empty : r.GetString(2);
                         list.Add(new UserModel
                         {
                             Id = r.GetInt32(0),
                             Username = r.GetString(1),
-                            DisplayName = displayName,
-                            FullName = displayName,
+                            RealName = realName,
+                            DisplayName = realName,
+                            FullName = realName,
                             Gender = r.IsDBNull(3) ? string.Empty : r.GetString(3),
                             Email = r.IsDBNull(4) ? string.Empty : r.GetString(4),
                             Phone = r.IsDBNull(5) ? string.Empty : r.GetString(5),
                             Role = r.IsDBNull(6) ? string.Empty : r.GetString(6),
-                            IsActive = r.GetInt16(7) == 1
+                            DepartmentName = r.IsDBNull(7) ? string.Empty : r.GetString(7),
+                            IsActive = r.GetInt16(8) == 1
                         });
                     }
                 }

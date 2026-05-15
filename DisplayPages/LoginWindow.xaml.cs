@@ -227,7 +227,7 @@ namespace GB_NewCadPlus_IV
 
                             if (CmbDepartments.SelectedItem is DepartmentModel selectedDept)
                             {
-                                LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: 当前选中部门 Id={selectedDept.Id}, Name={selectedDept.Name}, DisplayName={selectedDept.DisplayName}");
+                                LogManager.Instance.LogInfo($"TryLoadDepartmentsAsync: 当前选中部门 Id={selectedDept.Id}, Name={selectedDept.Name}, RealName={selectedDept.RealName}");
                             }
                             else
                             {
