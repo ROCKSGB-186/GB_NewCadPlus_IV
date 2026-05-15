@@ -54,15 +54,23 @@
 	  <Compile Remove="FakesAssemblies\**" />
 	  <Compile Remove="Fakes\**" />
 	  <Compile Remove="packages\**" />
+	  <!-- 排除服务端工程目录，避免 net8 WebAPI 源码/obj 被 net48 主工程误编译 -->
+	  <Compile Remove="GB_NewCadPlus_IV_Server\**" />
 	  <EmbeddedResource Remove="FakesAssemblies\**" />
 	  <EmbeddedResource Remove="Fakes\**" />
 	  <EmbeddedResource Remove="packages\**" />
+	  <!-- 同步排除服务端目录下的资源项，避免被主工程作为资源收集 -->
+	  <EmbeddedResource Remove="GB_NewCadPlus_IV_Server\**" />
 	  <None Remove="FakesAssemblies\**" />
 	  <None Remove="Fakes\**" />
 	  <None Remove="packages\**" />
+	  <!-- 同步排除服务端目录下的 None 文件（如 appsettings/json/http） -->
+	  <None Remove="GB_NewCadPlus_IV_Server\**" />
 	  <Page Remove="FakesAssemblies\**" />
 	  <Page Remove="Fakes\**" />
 	  <Page Remove="packages\**" />
+	  <!-- 同步排除服务端目录下可能出现的 XAML 页面项 -->
+	  <Page Remove="GB_NewCadPlus_IV_Server\**" />
 	</ItemGroup>
 
 	<ItemGroup>
