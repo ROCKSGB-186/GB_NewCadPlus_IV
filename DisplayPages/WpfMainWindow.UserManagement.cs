@@ -1,176 +1,159 @@
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using System;
+using System.Windows;
+using System.Windows.Controls;
+using Button = System.Windows.Controls.Button;
+using CheckBox = System.Windows.Controls.CheckBox;
+using ComboBox = System.Windows.Controls.ComboBox;
+using HorizontalAlignment = System.Windows.HorizontalAlignment;
+using MessageBox = System.Windows.MessageBox;
+using Orientation = System.Windows.Controls.Orientation;
+using TextBox = System.Windows.Controls.TextBox;
 
 namespace GB_NewCadPlus_IV
 {
     public partial class WpfMainWindow
     {
-        private void BtnAddUserManaged_Click(object sender, System.Windows.RoutedEventArgs e)
+        string host = VariableDictionary._serverIP; // 或者从配置读取
+        int port = VariableDictionary._serverPort;  // 或者从配置读取
+        string dbType = VariableDictionary._databaseType; // "MYSQL" 或 "DM"
+        string user = VariableDictionary._dbUserName;
+        string pwd = VariableDictionary._dbPassWord;
+
+        /// <summary>
+        /// 新增用户按钮点击处理（界面事件绑定）
+        /// 逻辑：检查部门选择 -> 调用用户编辑对话 -> 调用 _svc.AddUser -> 刷新用户列表
+        /// </summary>
+        private void BtnAddUserManaged_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // 中文注释：新增用户前必须先选中部门，确保用户归属明确。
-                var selDept = DepartmentsGrid.SelectedItem as DepartmentModel;
-                if (selDept == null)
+                // 确认已选择部门
+                if (!(DepartmentsGrid?.SelectedItem is DepartmentModel selectedDept))
                 {
-                    System.Windows.MessageBox.Show("请先选择一个部门。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                    MessageBox.Show("请先选择一个部门。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                     return;
                 }
 
-                if (!EnsureSvcInitialized())
-                {
-                    System.Windows.MessageBox.Show("用户服务未初始化，请先检查数据库连接。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    return;
-                }
+                // 确保用户服务已初始化
+                if (!EnsureSvcInitialized(host, port, dbType, user, pwd)) return;
 
-                // 中文注释：新增时传入 null，弹窗要求填写密码。
-                if (!ShowUserEditorDialog(null, "新增用户", out var editorResult))
-                {
-                    return;
-                }
+                // 打开用户编辑对话（新增）
+                if (!ShowUserEditorDialog(null, "新增用户", out var result)) return;
 
-                var deptName = string.IsNullOrWhiteSpace(selDept.Name)
-                    ? (selDept.RealName ?? string.Empty)
-                    : selDept.Name;
-
-                var ok = _svc.AddUser(
-                    editorResult.Username,
-                    editorResult.Password,
-                    selDept.Id,
-                    deptName,
-                    editorResult.Role,
-                    editorResult.IsActive,
-                    editorResult.RealName,
-                    editorResult.Gender,
-                    editorResult.Phone,
-                    editorResult.Email);
-
+                // 执行新增
+                string deptName = string.IsNullOrWhiteSpace(selectedDept.Name) ? (selectedDept.RealName ?? string.Empty) : selectedDept.Name;
+                bool ok = _svc.AddUser(result.Username, result.Password, selectedDept.Id, deptName, result.Role, result.IsActive, result.RealName, result.Gender, result.Phone, result.Email);
                 if (!ok)
                 {
-                    System.Windows.MessageBox.Show("新增用户失败，可能是用户名已存在。", "失败", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    MessageBox.Show("新增用户失败，可能是用户名已存在。", "失败", MessageBoxButton.OK, MessageBoxImage.Hand);
                     return;
                 }
 
-                LoadUsersForDepartment(selDept.Id);
-                RefreshDepartmentsAsync();
-                TxtSearchUser.Text = editorResult.Username;
-                TxtStatus.Text = $"已新增用户：{editorResult.Username}";
+                // 刷新用户列表与部门
+                LoadUsersForDepartment(selectedDept.Id);
+                _ = RefreshDepartmentsAsync();
+                TxtSearchUser.Text = result.Username;
+                TxtStatus.Text = "已新增用户：" + result.Username;
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show("新增用户异常：" + ex.Message, "错误", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show("新增用户异常：" + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
             }
         }
-
-        private void BtnEditUserManaged_Click(object sender, System.Windows.RoutedEventArgs e)
+        /// <summary>
+        /// 编辑用户按钮点击处理（界面事件绑定）
+        /// 逻辑：检查选中用户 -> 打开编辑对话 -> 调用 _svc.UpdateUser -> 刷新用户列表
+        /// </summary>
+        private void BtnEditUserManaged_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var selUser = UsersGrid.SelectedItem as UserModel;
-                if (selUser == null)
+                // 检查是否有选中的用户
+                if (!(UsersGrid?.SelectedItem is UserModel selectedUser))
                 {
-                    System.Windows.MessageBox.Show("请先选择要编辑的用户。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                    MessageBox.Show("请先选择要编辑的用户。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                     return;
                 }
 
-                if (!EnsureSvcInitialized())
-                {
-                    System.Windows.MessageBox.Show("用户服务未初始化，请先检查数据库连接。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    return;
-                }
+                // 确保服务已初始化
+                if (!EnsureSvcInitialized(host, port, dbType, user, pwd)) return;
 
-                // 中文注释：编辑时允许密码留空，留空表示不修改密码。
-                if (!ShowUserEditorDialog(selUser, "编辑用户", out var editorResult))
-                {
-                    return;
-                }
+                // 打开编辑对话并获取结果
+                if (!ShowUserEditorDialog(selectedUser, "编辑用户", out var result)) return;
 
-                var selDept = DepartmentsGrid.SelectedItem as DepartmentModel;
-                var deptId = selDept?.Id;
-                var deptName = selDept == null
-                    ? string.Empty
-                    : (string.IsNullOrWhiteSpace(selDept.Name) ? (selDept.RealName ?? string.Empty) : selDept.Name);
+                // 先显式声明并赋值 selDept，以避免使用未赋值的局部变量（修复 CS0165）
+                DepartmentModel selDept = DepartmentsGrid?.SelectedItem as DepartmentModel; // 尝试从部门列表取出选中项并转换
+                // 计算部门 ID（如果未选中则为 null）
+                int? deptId = selDept != null ? selDept.Id : (int?)null;
+                // 计算部门显示名（优先 Name，Name 为空则用 RealName，否则为空字符串）
+                string deptName = selDept == null ? string.Empty : (string.IsNullOrWhiteSpace(selDept.Name) ? selDept.RealName ?? string.Empty : selDept.Name);
 
-                var ok = _svc.UpdateUser(
-                    selUser.Id,
-                    editorResult.Username,
-                    editorResult.Role,
-                    editorResult.IsActive,
+                // 调用服务更新用户（如果密码为空则不修改密码）
+                bool ok = _svc.UpdateUser(
+                    selectedUser.Id,
+                    result.Username,
+                    result.Role,
+                    result.IsActive,
                     deptId,
                     deptName,
-                    string.IsNullOrWhiteSpace(editorResult.Password) ? null : editorResult.Password,
-                    editorResult.RealName,
-                    editorResult.Gender,
-                    editorResult.Phone,
-                    editorResult.Email);
+                    string.IsNullOrWhiteSpace(result.Password) ? null : result.Password,
+                    result.RealName,
+                    result.Gender,
+                    result.Phone,
+                    result.Email);
 
                 if (!ok)
                 {
-                    System.Windows.MessageBox.Show("编辑用户失败。", "失败", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    MessageBox.Show("编辑用户失败。", "失败", MessageBoxButton.OK, MessageBoxImage.Hand);
                     return;
                 }
 
-                if (selDept != null)
-                {
-                    LoadUsersForDepartment(selDept.Id);
-                }
-
-                TxtSearchUser.Text = editorResult.Username;
-                TxtStatus.Text = $"已更新用户：{editorResult.Username}";
+                // 刷新当前部门的用户列表（如果存在已选部门）
+                if (selDept != null) LoadUsersForDepartment(selDept.Id);
+                // 更新搜索框与状态栏
+                TxtSearchUser.Text = result.Username;
+                TxtStatus.Text = "已更新用户：" + result.Username;
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show("编辑用户异常：" + ex.Message, "错误", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show("编辑用户异常：" + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
             }
         }
 
-        private void BtnDeleteUserManaged_Click(object sender, System.Windows.RoutedEventArgs e)
+        /// <summary>
+        /// 删除用户按钮点击处理
+        /// 逻辑：确认 -> 调用 _svc.DeleteUser -> 刷新列表与部门
+        /// </summary>
+        private void BtnDeleteUserManaged_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var selUser = UsersGrid.SelectedItem as UserModel;
-                if (selUser == null)
+                if (!(UsersGrid?.SelectedItem is UserModel selectedUser))
                 {
-                    System.Windows.MessageBox.Show("请先选择要删除的用户。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                    System.Windows.MessageBox.Show("请先选择要删除的用户。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                     return;
                 }
 
-                var confirm = System.Windows.MessageBox.Show(
-                    $"确认删除用户：{selUser.Username} ?",
-                    "确认删除",
-                    System.Windows.MessageBoxButton.YesNo,
-                    System.Windows.MessageBoxImage.Warning);
-                if (confirm != System.Windows.MessageBoxResult.Yes)
+                if (MessageBox.Show($"确认删除用户：{selectedUser.Username} ?", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Exclamation) != MessageBoxResult.Yes)
+                    return;
+
+                if (!EnsureSvcInitialized(host, port, dbType, user, pwd)) return;
+
+                if (!_svc.DeleteUser(selectedUser.Id))
                 {
+                    MessageBox.Show("删除用户失败。", "失败", MessageBoxButton.OK, MessageBoxImage.Hand);
                     return;
                 }
 
-                if (!EnsureSvcInitialized())
-                {
-                    System.Windows.MessageBox.Show("用户服务未初始化，请先检查数据库连接。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    return;
-                }
-
-                var ok = _svc.DeleteUser(selUser.Id);
-                if (!ok)
-                {
-                    System.Windows.MessageBox.Show("删除用户失败。", "失败", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-                    return;
-                }
-
-                var selDept = DepartmentsGrid.SelectedItem as DepartmentModel;
-                if (selDept != null)
-                {
-                    LoadUsersForDepartment(selDept.Id);
-                }
-
-                RefreshDepartmentsAsync();
-                TxtStatus.Text = $"已删除用户：{selUser.Username}";
+                if (DepartmentsGrid?.SelectedItem is DepartmentModel dept) LoadUsersForDepartment(dept.Id);
+                _ = RefreshDepartmentsAsync();
+                TxtStatus.Text = "已删除用户：" + selectedUser.Username;
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show("删除用户异常：" + ex.Message, "错误", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show("删除用户异常：" + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
             }
         }
 
@@ -186,206 +169,162 @@ namespace GB_NewCadPlus_IV
             public bool IsActive { get; set; }
         }
 
+        /// <summary>
+        /// 显示用户编辑对话（通用方法，既用于新增也用于编辑）
+        /// 参数：
+        ///   initial - 传入非 null 则为编辑模式，null 为新增
+        ///   title - 对话框标题
+        /// out result - 返回用户输入的数据结构
+        /// 返回：true 表示用户点击确定并通过校验
+        /// </summary>
         private bool ShowUserEditorDialog(UserModel initial, string title, out UserEditorDialogResult result)
         {
-            result = null;
-            var isEdit = initial != null;
+            // 1. 初始化 out 参数
+            var tempResult = new UserEditorDialogResult();
+            bool isEdit = initial != null;
 
-            var win = new System.Windows.Window
+            // 2. 构造对话窗口
+            var win = new Window
             {
                 Title = title,
-                Owner = System.Windows.Window.GetWindow(this),
-                WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
-                SizeToContent = System.Windows.SizeToContent.WidthAndHeight,
-                ResizeMode = System.Windows.ResizeMode.NoResize,
-                WindowStyle = System.Windows.WindowStyle.ToolWindow,
+                Owner = Window.GetWindow(this),
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.ToolWindow,
                 MinWidth = 480
             };
 
-            var grid = new System.Windows.Controls.Grid { Margin = new System.Windows.Thickness(10) };
-            for (int i = 0; i < 10; i++)
-            {
-                grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = System.Windows.GridLength.Auto });
-            }
+            // 3. 创建布局 Grid
+            var grid = new Grid { Margin = new Thickness(10) };
+            for (int i = 0; i < 10; i++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(140) });
-            grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new System.Windows.GridLength(1, System.Windows.GridUnitType.Star) });
+            int row = 0;
 
-            var row = 0;
-
-            var lblUser = new System.Windows.Controls.TextBlock { Text = "用户名:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblUser, row);
-            System.Windows.Controls.Grid.SetColumn(lblUser, 0);
-            grid.Children.Add(lblUser);
-
-            var tbUser = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(4), Text = initial?.Username ?? (TxtSearchUser.Text ?? string.Empty).Trim() };
-            System.Windows.Controls.Grid.SetRow(tbUser, row);
-            System.Windows.Controls.Grid.SetColumn(tbUser, 1);
-            grid.Children.Add(tbUser);
+            // --- 用户名 ---
+            var lblUser = new TextBlock { Text = "用户名:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblUser, row); Grid.SetColumn(lblUser, 0); grid.Children.Add(lblUser);
+            var tbUser = new TextBox { Margin = new Thickness(4), Text = initial?.Username ?? (TxtSearchUser?.Text ?? string.Empty).Trim() };
+            Grid.SetRow(tbUser, row); Grid.SetColumn(tbUser, 1); grid.Children.Add(tbUser);
             row++;
 
-            var lblRealName = new System.Windows.Controls.TextBlock { Text = "真实姓名:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblRealName, row);
-            System.Windows.Controls.Grid.SetColumn(lblRealName, 0);
-            grid.Children.Add(lblRealName);
-
-            var tbRealName = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(4), Text = initial?.RealName ?? string.Empty };
-            System.Windows.Controls.Grid.SetRow(tbRealName, row);
-            System.Windows.Controls.Grid.SetColumn(tbRealName, 1);
-            grid.Children.Add(tbRealName);
+            // --- 真实姓名 ---
+            var lblReal = new TextBlock { Text = "真实姓名:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblReal, row); Grid.SetColumn(lblReal, 0); grid.Children.Add(lblReal);
+            var tbReal = new TextBox { Margin = new Thickness(4), Text = initial?.RealName ?? string.Empty };
+            Grid.SetRow(tbReal, row); Grid.SetColumn(tbReal, 1); grid.Children.Add(tbReal);
             row++;
 
-            var lblGender = new System.Windows.Controls.TextBlock { Text = "性别:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblGender, row);
-            System.Windows.Controls.Grid.SetColumn(lblGender, 0);
-            grid.Children.Add(lblGender);
-
-            var cmbGender = new System.Windows.Controls.ComboBox { Margin = new System.Windows.Thickness(4), IsEditable = false };
-            cmbGender.Items.Add("无信息");
-            cmbGender.Items.Add("男");
-            cmbGender.Items.Add("女");
-            var initialGender = string.IsNullOrWhiteSpace(initial?.Gender) ? "无信息" : initial.Gender.Trim();
-            cmbGender.SelectedItem = initialGender == "男" || initialGender == "女" ? initialGender : "无信息";
-            System.Windows.Controls.Grid.SetRow(cmbGender, row);
-            System.Windows.Controls.Grid.SetColumn(cmbGender, 1);
-            grid.Children.Add(cmbGender);
+            // --- 性别 ---
+            var lblGender = new TextBlock { Text = "性别:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblGender, row); Grid.SetColumn(lblGender, 0); grid.Children.Add(lblGender);
+            var cmbGender = new ComboBox { Margin = new Thickness(4), IsEditable = false };
+            cmbGender.Items.Add("无信息"); cmbGender.Items.Add("男"); cmbGender.Items.Add("女");
+            string g = string.IsNullOrWhiteSpace(initial?.Gender) ? "无信息" : initial.Gender.Trim();
+            cmbGender.SelectedItem = (g == "男" || g == "女") ? (object)g : "无信息";
+            Grid.SetRow(cmbGender, row); Grid.SetColumn(cmbGender, 1); grid.Children.Add(cmbGender);
             row++;
 
-            var lblPhone = new System.Windows.Controls.TextBlock { Text = "电话:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblPhone, row);
-            System.Windows.Controls.Grid.SetColumn(lblPhone, 0);
-            grid.Children.Add(lblPhone);
-
-            var tbPhone = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(4), Text = initial?.Phone ?? string.Empty };
-            System.Windows.Controls.Grid.SetRow(tbPhone, row);
-            System.Windows.Controls.Grid.SetColumn(tbPhone, 1);
-            grid.Children.Add(tbPhone);
+            // --- 电话 ---
+            var lblPhone = new TextBlock { Text = "电话:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblPhone, row); Grid.SetColumn(lblPhone, 0); grid.Children.Add(lblPhone);
+            var tbPhone = new TextBox { Margin = new Thickness(4), Text = initial?.Phone ?? string.Empty };
+            Grid.SetRow(tbPhone, row); Grid.SetColumn(tbPhone, 1); grid.Children.Add(tbPhone);
             row++;
 
-            var lblEmail = new System.Windows.Controls.TextBlock { Text = "Email:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblEmail, row);
-            System.Windows.Controls.Grid.SetColumn(lblEmail, 0);
-            grid.Children.Add(lblEmail);
-
-            var tbEmail = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(4), Text = initial?.Email ?? string.Empty };
-            System.Windows.Controls.Grid.SetRow(tbEmail, row);
-            System.Windows.Controls.Grid.SetColumn(tbEmail, 1);
-            grid.Children.Add(tbEmail);
+            // --- Email ---
+            var lblEmail = new TextBlock { Text = "Email:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblEmail, row); Grid.SetColumn(lblEmail, 0); grid.Children.Add(lblEmail);
+            var tbEmail = new TextBox { Margin = new Thickness(4), Text = initial?.Email ?? string.Empty };
+            Grid.SetRow(tbEmail, row); Grid.SetColumn(tbEmail, 1); grid.Children.Add(tbEmail);
             row++;
 
-            var lblPwd = new System.Windows.Controls.TextBlock { Text = isEdit ? "新密码(留空不修改):" : "密码:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblPwd, row);
-            System.Windows.Controls.Grid.SetColumn(lblPwd, 0);
-            grid.Children.Add(lblPwd);
-
-            var pbPwd = new System.Windows.Controls.PasswordBox { Margin = new System.Windows.Thickness(4) };
-            System.Windows.Controls.Grid.SetRow(pbPwd, row);
-            System.Windows.Controls.Grid.SetColumn(pbPwd, 1);
-            grid.Children.Add(pbPwd);
+            // --- 密码 ---
+            var lblPwd = new TextBlock { Text = isEdit ? "新密码(留空不修改):" : "密码:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblPwd, row); Grid.SetColumn(lblPwd, 0); grid.Children.Add(lblPwd);
+            var pbPwd = new PasswordBox { Margin = new Thickness(4) };
+            Grid.SetRow(pbPwd, row); Grid.SetColumn(pbPwd, 1); grid.Children.Add(pbPwd);
             row++;
 
-            var lblConfirm = new System.Windows.Controls.TextBlock { Text = isEdit ? "确认新密码:" : "确认密码:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblConfirm, row);
-            System.Windows.Controls.Grid.SetColumn(lblConfirm, 0);
-            grid.Children.Add(lblConfirm);
-
-            var pbConfirm = new System.Windows.Controls.PasswordBox { Margin = new System.Windows.Thickness(4) };
-            System.Windows.Controls.Grid.SetRow(pbConfirm, row);
-            System.Windows.Controls.Grid.SetColumn(pbConfirm, 1);
-            grid.Children.Add(pbConfirm);
+            // --- 确认密码 ---
+            var lblConfirm = new TextBlock { Text = isEdit ? "确认新密码:" : "确认密码:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblConfirm, row); Grid.SetColumn(lblConfirm, 0); grid.Children.Add(lblConfirm);
+            var pbConfirm = new PasswordBox { Margin = new Thickness(4) };
+            Grid.SetRow(pbConfirm, row); Grid.SetColumn(pbConfirm, 1); grid.Children.Add(pbConfirm);
             row++;
 
-            var lblRole = new System.Windows.Controls.TextBlock { Text = "角色:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblRole, row);
-            System.Windows.Controls.Grid.SetColumn(lblRole, 0);
-            grid.Children.Add(lblRole);
-
-            var tbRole = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(4), Text = string.IsNullOrWhiteSpace(initial?.Role) ? "user" : initial.Role };
-            System.Windows.Controls.Grid.SetRow(tbRole, row);
-            System.Windows.Controls.Grid.SetColumn(tbRole, 1);
-            grid.Children.Add(tbRole);
+            // --- 角色 ---
+            var lblRole = new TextBlock { Text = "角色:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblRole, row); Grid.SetColumn(lblRole, 0); grid.Children.Add(lblRole);
+            var tbRole = new TextBox { Margin = new Thickness(4), Text = string.IsNullOrWhiteSpace(initial?.Role) ? "user" : initial.Role };
+            Grid.SetRow(tbRole, row); Grid.SetColumn(tbRole, 1); grid.Children.Add(tbRole);
             row++;
 
-            var lblActive = new System.Windows.Controls.TextBlock { Text = "是否启用:", VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new System.Windows.Thickness(0, 6, 0, 6) };
-            System.Windows.Controls.Grid.SetRow(lblActive, row);
-            System.Windows.Controls.Grid.SetColumn(lblActive, 0);
-            grid.Children.Add(lblActive);
-
-            var cbActive = new System.Windows.Controls.CheckBox { Margin = new System.Windows.Thickness(4), IsChecked = initial?.IsActive ?? true, VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            System.Windows.Controls.Grid.SetRow(cbActive, row);
-            System.Windows.Controls.Grid.SetColumn(cbActive, 1);
-            grid.Children.Add(cbActive);
+            // --- 是否启用 ---
+            var lblActive = new TextBlock { Text = "是否启用:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(lblActive, row); Grid.SetColumn(lblActive, 0); grid.Children.Add(lblActive);
+            var cbActive = new CheckBox { Margin = new Thickness(4), IsChecked = initial == null || initial.IsActive, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetRow(cbActive, row); Grid.SetColumn(cbActive, 1); grid.Children.Add(cbActive);
             row++;
 
-            var panelBtns = new System.Windows.Controls.StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Horizontal,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-                Margin = new System.Windows.Thickness(0, 10, 0, 0)
-            };
-            var btnOk = new System.Windows.Controls.Button { Content = "确定", Width = 80, Margin = new System.Windows.Thickness(4) };
-            var btnCancel = new System.Windows.Controls.Button { Content = "取消", Width = 80, Margin = new System.Windows.Thickness(4) };
-            panelBtns.Children.Add(btnOk);
-            panelBtns.Children.Add(btnCancel);
-            System.Windows.Controls.Grid.SetRow(panelBtns, row);
-            System.Windows.Controls.Grid.SetColumn(panelBtns, 0);
-            System.Windows.Controls.Grid.SetColumnSpan(panelBtns, 2);
-            grid.Children.Add(panelBtns);
+            // --- 确认/取消按钮 ---
+            var spButtons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
+            var btnOk = new Button { Content = "确定", Width = 80, Margin = new Thickness(4) };
+            var btnCancel = new Button { Content = "取消", Width = 80, Margin = new Thickness(4) };
+            spButtons.Children.Add(btnOk); spButtons.Children.Add(btnCancel);
+            Grid.SetRow(spButtons, row); Grid.SetColumn(spButtons, 0); Grid.SetColumnSpan(spButtons, 2);
+            grid.Children.Add(spButtons);
 
-            win.Content = grid;
-
-            UserEditorDialogResult localResult = null;
-
+            // 4. 事件绑定
             btnCancel.Click += (s, e) => win.DialogResult = false;
+
             btnOk.Click += (s, e) =>
             {
+                // 获取输入值
                 var username = (tbUser.Text ?? string.Empty).Trim();
-                var realName = (tbRealName.Text ?? string.Empty).Trim();
-                var gender = (cmbGender.SelectedItem as string) ?? "无信息";
+                var real = (tbReal.Text ?? string.Empty).Trim();
+                var gender = cmbGender.SelectedItem as string ?? "无信息";
                 var phone = (tbPhone.Text ?? string.Empty).Trim();
                 var email = (tbEmail.Text ?? string.Empty).Trim();
                 var pwd = pbPwd.Password ?? string.Empty;
-                var confirmPwd = pbConfirm.Password ?? string.Empty;
+                var confirm = pbConfirm.Password ?? string.Empty;
                 var role = (tbRole.Text ?? string.Empty).Trim();
 
+                // 校验逻辑
                 if (string.IsNullOrWhiteSpace(username))
                 {
-                    System.Windows.MessageBox.Show("请输入用户名。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    tbUser.Focus();
-                    return;
+                    MessageBox.Show("请输入用户名。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+                    tbUser.Focus(); return;
                 }
-
-                if (string.IsNullOrWhiteSpace(realName))
+                if (string.IsNullOrWhiteSpace(real))
                 {
-                    System.Windows.MessageBox.Show("请输入真实姓名。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    tbRealName.Focus();
-                    return;
+                    MessageBox.Show("请输入真实姓名。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+                    tbReal.Focus(); return;
                 }
-
                 if (!string.IsNullOrWhiteSpace(email) && !email.Contains("@"))
                 {
-                    System.Windows.MessageBox.Show("Email 格式不正确。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    tbEmail.Focus();
-                    return;
+                    MessageBox.Show("Email 格式不正确。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+                    tbEmail.Focus(); return;
                 }
-
                 if (!isEdit && string.IsNullOrWhiteSpace(pwd))
                 {
-                    System.Windows.MessageBox.Show("请输入密码。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                    MessageBox.Show("请输入密码。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                     return;
                 }
-
-                if (!string.IsNullOrEmpty(pwd) && pwd != confirmPwd)
+                if (!string.IsNullOrEmpty(pwd) && pwd != confirm)
                 {
-                    System.Windows.MessageBox.Show("两次密码不一致。", "提示", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                    MessageBox.Show("两次密码不一致。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                     return;
                 }
 
-                localResult = new UserEditorDialogResult
+                // ✅ 修复核心：使用局部变量构建结果对象
+                tempResult = new UserEditorDialogResult
                 {
                     Username = username,
                     Password = pwd,
-                    RealName = realName,
+                    RealName = real,
                     Gender = gender,
                     Phone = phone,
                     Email = email,
@@ -393,17 +332,24 @@ namespace GB_NewCadPlus_IV
                     IsActive = cbActive.IsChecked ?? true
                 };
 
+                // 关闭对话框
                 win.DialogResult = true;
             };
 
-            var dialogOk = win.ShowDialog() == true;
-            if (!dialogOk || localResult == null)
+            win.Content = grid;
+            result= tempResult;
+            // 显示对话框
+            bool? dialogResult = win.ShowDialog();
+
+            // 如果用户点击了确定 (true) 且 result 不为 null，则返回 true
+            if (dialogResult == true && tempResult != null)
             {
-                return false;
+                return true;
             }
 
-            result = localResult;
-            return true;
+            // 否则返回 false，并确保 result 是一个空对象（避免调用方拿到未初始化的对象）
+            result = new UserEditorDialogResult();
+            return false;
         }
     }
 }

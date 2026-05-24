@@ -17,42 +17,6 @@ using FileStorage = GB_NewCadPlus_IV.FunctionalMethod.FileStorage;
 namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>
-    /// 用于从CAD选择导入时传输数据的DTO
-    /// </summary>
-    public class ImportEntityDto
-    {
-        /// <summary>
-        /// 文件存储信息（对应 cad_file_storage 表）
-        /// </summary>
-        public FileStorage FileStorage { get; set; } = new FileStorage();
-
-        /// <summary>
-        /// (弃用)文件属性信息
-        /// </summary>
-        // public FileAttribute FileAttribute { get; set; } = new FileAttribute();
-
-        /// <summary>
-        /// 属性业务ID（兼容字段）
-        /// </summary>
-        public string? FileAttributeId { get; set; }
-
-        /// <summary>
-        /// 预览图路径
-        /// </summary>
-        public string? PreviewImagePath { get; set; }
-
-        /// <summary>
-        /// 预览图文件名
-        /// </summary>
-        public string? PreviewImageName { get; set; }
-
-        /// <summary>
-        /// JSON属性字典（新上传入口使用）
-        /// </summary>
-        public Dictionary<string, string> AttributesJson { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
     /// 负责从当前CAD图形中选择实体并提取信息的辅助类
     /// </summary>
     public static class SelectionImportHelper

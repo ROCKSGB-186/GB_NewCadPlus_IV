@@ -22,7 +22,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// 数据库管理器
         /// </summary>
         private readonly DatabaseManager _databaseManager;
-
+        /// <summary>
+        /// 当前选中的文件字节数组（用于上传或插入时使用）
+        /// </summary>
+        public byte[]? FileBytes { get; set; }
         /// <summary>
         /// 基础存储路径
         /// </summary>

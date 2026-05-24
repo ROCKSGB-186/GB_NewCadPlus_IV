@@ -1,8 +1,14 @@
+using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
+using Microsoft.Win32;
+using OfficeOpenXml;
+using OfficeOpenXml.Style;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -13,20 +19,16 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using Microsoft.Win32;
-using OfficeOpenXml;
-using OfficeOpenXml.Style;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
+using System.Windows.Threading;
+using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Clipboard = System.Windows.Clipboard;
-using Path = System.IO.Path;
-using MessageBox = System.Windows.MessageBox;
-using DataTable = Autodesk.AutoCAD.DatabaseServices.DataTable;
+using Cursor = System.Windows.Input.Cursor;
 using Cursors = System.Windows.Input.Cursors;
-using GB_NewCadPlus_IV.FunctionalMethod;
-using GB_NewCadPlus_IV.FunctionalMethod;
+using DataTable = Autodesk.AutoCAD.DatabaseServices.DataTable;
+using MessageBox = System.Windows.MessageBox;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using Path = System.IO.Path;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace GB_NewCadPlus_IV.Views
 {
@@ -64,10 +66,10 @@ namespace GB_NewCadPlus_IV.Views
                 BindPropertiesToGrid();
             };
 
-            BtnConfirm.Click += BtnConfirm_Click;//确认按钮点击事件
-            BtnCancel.Click += (s, e) => CloseDialogWithResult(false);//取消按钮点击事件
-            BtnPastePreview.Click += BtnPastePreview_Click;//粘贴预览按钮点击事件
-            BtnExportTemplate.Click += BtnExportTemplate_Click;//导出模板按钮点击事件
+            this.BtnConfirm.Click += new RoutedEventHandler(this.BtnConfirm_Click); // 确认按钮点击事件
+            this.BtnCancel.Click += (RoutedEventHandler)((s, e) => this.CloseDialogWithResult(false)); // 取消按钮直接关闭窗口并返回 false
+            this.BtnPastePreview.Click += new RoutedEventHandler(this.BtnPastePreview_Click); // 粘贴预览按钮点击事件
+            this.BtnExportTemplate.Click += new RoutedEventHandler(this.BtnExportTemplate_Click); // 导出模板按钮点击事件
         }
 
         /// <summary>
@@ -149,30 +151,14 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private static string BuildPreviewPathFromFileStorage(FileStorage fileStorage)
         {
-            if (fileStorage == null)
-            {
+            if (fileStorage == null || string.IsNullOrWhiteSpace(fileStorage.PreviewImageName)) // 没有预览图文件名，无法构建路径
                 return string.Empty;
-            }
-
-            if (string.IsNullOrWhiteSpace(fileStorage.PreviewImageName))
-            {
-                return string.Empty;
-            }
-
-            var baseDir = string.Empty;
-            if (!string.IsNullOrWhiteSpace(fileStorage.PreviewImagePath))
-            {
-                baseDir = Path.GetDirectoryName(fileStorage.PreviewImagePath) ?? string.Empty;
-            }
-
-            if (string.IsNullOrWhiteSpace(baseDir) && !string.IsNullOrWhiteSpace(fileStorage.FilePath))
-            {
-                baseDir = Path.GetDirectoryName(fileStorage.FilePath) ?? string.Empty;
-            }
-
-            return string.IsNullOrWhiteSpace(baseDir)
-                ? string.Empty
-                : Path.Combine(baseDir, fileStorage.PreviewImageName);
+            string path1 = string.Empty; // 优先使用预览图路径的目录部分，如果没有再使用主文件路径的目录部分
+            if (!string.IsNullOrWhiteSpace(fileStorage.PreviewImagePath)) // 如果预览图路径存在，使用其目录部分
+                path1 = Path.GetDirectoryName(fileStorage.PreviewImagePath) ?? string.Empty; // 如果预览图路径没有目录部分，则尝试使用主文件路径的目录部分
+            if (string.IsNullOrWhiteSpace(path1) && !string.IsNullOrWhiteSpace(fileStorage.FilePath)) // 如果预览图路径没有目录部分且主文件路径存在，使用主文件路径的目录部分
+                path1 = Path.GetDirectoryName(fileStorage.FilePath) ?? string.Empty; // 最终如果 path1 仍然为空，则无法构建预览图路径，返回空字符串
+            return string.IsNullOrWhiteSpace(path1) ? string.Empty : Path.Combine(path1, fileStorage.PreviewImageName); // 拼接目录部分和预览图文件名，得到完整的预览图路径
         }
 
         /// <summary>
@@ -181,8 +167,7 @@ namespace GB_NewCadPlus_IV.Views
         private void BindPropertiesToGrid()
         {
             // 优先使用 DTO 中的 JSON 属性字典来生成展示数据
-            var displayData = _mainWindow.PrepareFileDisplayData(_dto.FileStorage, _dto.AttributesJson);
-            PropertiesGrid.ItemsSource = displayData;
+            this.PropertiesGrid.ItemsSource = (IEnumerable)this._mainWindow.PrepareFileDisplayData(this._dto.FileStorage, this._dto.AttributesJson);
         }
 
         /// <summary>
@@ -194,51 +179,43 @@ namespace GB_NewCadPlus_IV.Views
         {
             try
             {
-                var dlg = new Microsoft.Win32.OpenFileDialog
-                {
-                    Title = "选择预览图片",
-                    Filter = "图片文件 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件|*.*",
-                    Multiselect = false
-                };
-
-                if (dlg.ShowDialog() != true)
-                {
+                OpenFileDialog openFileDialog1 = new OpenFileDialog();// 创建文件选择对话框
+                openFileDialog1.Title = "选择预览图片"; // 设置对话框标题
+                openFileDialog1.Filter = "图片文件 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件|*.*"; // 设置文件过滤器，限制只能选择图片文件
+                openFileDialog1.Multiselect = false; // 禁止多选，确保一次只能选择一个文件
+                OpenFileDialog openFileDialog2 = openFileDialog1; // 复制一份对话框实例，避免直接使用 openFileDialog1 导致潜在的状态问题
+                if (!openFileDialog2.ShowDialog().GetValueOrDefault()) // 显示对话框并检查用户是否选择了文件，如果没有选择则直接返回
                     return;
-                }
-
-                string selectedFile = dlg.FileName;
-                if (!File.Exists(selectedFile))
+                string fileName = openFileDialog2.FileName; // 获取用户选择的文件路径
+                if (!File.Exists(fileName)) // 再次验证文件是否存在，避免用户选择后文件被删除或移动导致的错误
                 {
-                    MessageBox.Show("选定的文件不存在。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
+                    // 文件不存在，显示错误消息并记录日志
+                    int num1 = (int)MessageBox.Show("选定的文件不存在。", "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
                 }
-
-                try
+                else
                 {
-                    string tempDir = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV_Previews");
-                    Directory.CreateDirectory(tempDir);
-                    string ext = Path.GetExtension(selectedFile);
-                    string newPreviewPath = Path.Combine(tempDir, $"preview_uploaded_{Guid.NewGuid()}{ext}");
-
-                    // 复制文件到临时位置，避免后续文件被移动/删除导致丢失
-                    File.Copy(selectedFile, newPreviewPath);
-
-                    _dto.PreviewImagePath = newPreviewPath;
-                    LogManager.Instance.LogInfo($"预览图已从文件选择保存到: {newPreviewPath}");
-
-                    // 使用已存在的安全加载方法刷新预览
-                    Dispatcher.BeginInvoke((Action)(() => LoadPreviewImage()), System.Windows.Threading.DispatcherPriority.Render);
-                }
-                catch (Exception exSave)
-                {
-                    LogManager.Instance.LogError($"保存上传预览图失败: {exSave.Message}");
-                    MessageBox.Show($"保存预览图片失败: {exSave.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    try
+                    {
+                        string str1 = Path.Combine(Path.GetTempPath(), "GB_NewCadPlus_IV_Previews"); // 构建临时目录路径，专门用于存放预览图，避免与其他临时文件混淆
+                        Directory.CreateDirectory(str1); // 确保临时目录存在，如果已存在则不会覆盖，避免潜在的权限问题或数据丢失
+                        string str2 = Path.GetExtension(fileName); // 获取原文件的扩展名，保持预览图的格式一致，避免因格式不支持导致无法显示
+                        string destFileName = Path.Combine(str1, $"preview_uploaded_{Guid.NewGuid()}{str2}"); // 构建目标文件路径，使用 GUID 确保文件名唯一，避免多次上传导致的文件覆盖问题
+                        File.Copy(fileName, destFileName); // 复制文件到目标路径，使用 File.Copy 而非 File.Move 保持原文件不变，避免用户误操作导致数据丢失
+                        this._dto.PreviewImagePath = destFileName; // 更新 DTO 中的预览图路径，确保后续加载预览图时能正确找到新文件
+                        LogManager.Instance.LogInfo("预览图已从文件选择保存到: " + destFileName); // 成功保存预览图后，立即加载显示新预览图，提供即时反馈
+                        this.Dispatcher.BeginInvoke((Delegate)(() => this.LoadPreviewImage()), DispatcherPriority.Render); // 使用 Dispatcher 调度加载预览图，确保 UI 线程安全地更新图片显示，避免因直接调用 LoadPreviewImage 导致的线程问题
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Instance.LogError("保存上传预览图失败: " + ex.Message);
+                        int num2 = (int)MessageBox.Show("保存预览图片失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogError($"上传预览图处理失败: {ex.Message}");
-                MessageBox.Show($"操作失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogManager.Instance.LogError("上传预览图处理失败: " + ex.Message);
+                int num = (int)MessageBox.Show("操作失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
             }
         }
 
@@ -251,62 +228,39 @@ namespace GB_NewCadPlus_IV.Views
         {
             try
             {
-                // 先把界面编辑值回写到 DTO
-                UpdateDtoFromGrid();
-
-                // 生成模板表
-                var dt = _mainWindow.CreateTemplateDataTable();
-                dt.Rows.Clear();
-                DataRow newRow = dt.NewRow();
-
-                // 先填充 FileStorage 固定字段
-                foreach (PropertyInfo prop in typeof(FileStorage).GetProperties())
+                this.UpdateDtoFromGrid(); // 确保先保存用户在表格中修改的属性，避免导出模板时数据不完整
+                var templateDataTable = this._mainWindow.CreateTemplateDataTable(); // 从主窗口获取预定义的模板 DataTable 结构，确保列定义一致
+                templateDataTable.Rows.Clear(); // 清空任何现有数据，确保导出时只有当前图元的数据，避免混入旧数据
+                DataRow row = templateDataTable.NewRow(); // 创建新行用于填充当前图元的数据
+                foreach (PropertyInfo property in typeof(FileStorage).GetProperties()) // 反射获取 FileStorage 类的所有属性，动态填充数据，避免硬编码字段导致的维护问题
                 {
-                    if (dt.Columns.Contains(prop.Name))
-                    {
-                        newRow[prop.Name] = prop.GetValue(_dto.FileStorage) ?? DBNull.Value;
+                    if (templateDataTable.Columns.Contains(property.Name)) // 仅填充模板中定义的列，避免因 DTO 中新增字段导致的列不匹配问题
+                        row[property.Name] = property.GetValue((object)this._dto.FileStorage) ?? (object)DBNull.Value; // 获取属性值，如果为 null 则使用 DBNull.Value 填充，确保 Excel 中显示为空而非 "null" 字符串
+                }
+                // 额外添加 DTO 中 JSON 属性字典的键值对，允许用户在模板中看到并修改这些动态属性，增强模板的灵活性和适用性
+                foreach (KeyValuePair<string, string> exportAttributes in this.BuildExportAttributesDictionary())
+                {
+                    if (!string.IsNullOrWhiteSpace(exportAttributes.Key)) // 仅添加键非空的属性，避免因空键导致的列名问题
+                    {   
+                        if (!templateDataTable.Columns.Contains(exportAttributes.Key)) // 如果模板中没有定义该列，则动态添加列，允许用户在模板中看到并修改这些动态属性，增强模板的灵活性和适用性
+                            templateDataTable.Columns.Add(exportAttributes.Key, typeof(string)); // 添加新列时默认类型为 string，确保 Excel 中显示正确，避免因类型不匹配导致的显示问题
+                        row[exportAttributes.Key] = (object)(exportAttributes.Value ?? string.Empty); // 填充属性值，如果为 null 则使用空字符串填充，确保 Excel 中显示为空而非 "null" 字符串
                     }
                 }
-
-                // 构建 JSON 属性字典（优先 DTO 里的 Attributes 字典；没有则从旧 FileAttribute 桥接）
-                var attrDict = BuildExportAttributesDictionary();
-
-                // 动态列导出——模板里没有的字段自动补列
-                foreach (var kv in attrDict)
-                {
-                    if (string.IsNullOrWhiteSpace(kv.Key)) continue;
-
-                    // 如果模板不存在该列，则动态新增
-                    if (!dt.Columns.Contains(kv.Key))
-                    {
-                        dt.Columns.Add(kv.Key, typeof(string));
-                    }
-
-                    // 写入字段值
-                    newRow[kv.Key] = kv.Value ?? string.Empty;
-                }
-
-                // 加入一行
-                dt.Rows.Add(newRow);
-
-                // 导出文件
-                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
-                {
-                    Filter = "Excel 文件 (*.xlsx)|*.xlsx",
-                    FileName = $"图元_{_dto.FileStorage.DisplayName}.xlsx"
-                };
-
-                if (saveFileDialog.ShowDialog() == true)
-                {
-                    if (_mainWindow.ExportDataTableToExcel(dt, saveFileDialog.FileName))
-                    {
-                        MessageBox.Show("模板导出成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                }
+                // 将填充好的行添加到模板 DataTable 中，准备导出，确保导出的 Excel 文件包含当前图元的完整数据，满足用户的定制化需求
+                templateDataTable.Rows.Add(row);
+                // 创建并配置保存文件对话框，允许用户选择导出文件的保存位置和名称，增强用户体验，确保导出的文件符合用户的期望
+                SaveFileDialog saveFileDialog1 = new SaveFileDialog();
+                saveFileDialog1.Filter = "Excel 文件 (*.xlsx)|*.xlsx";
+                saveFileDialog1.FileName = $"图元_{this._dto.FileStorage.DisplayName}.xlsx";
+                SaveFileDialog saveFileDialog2 = saveFileDialog1; // 复制一份对话框实例，避免直接使用 saveFileDialog1 导致潜在的状态问题
+                if (!saveFileDialog2.ShowDialog().GetValueOrDefault() || !this._mainWindow.ExportDataTableToExcel(templateDataTable, saveFileDialog2.FileName))
+                    return;
+                int num = (int)MessageBox.Show("模板导出成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Asterisk);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"导出模板失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                int num = (int)MessageBox.Show("导出模板失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
             }
         }
 
@@ -315,14 +269,9 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private Dictionary<string, string> BuildExportAttributesDictionary()
         {
-            // 优先返回 DTO 中最新的 JSON 属性字典副本
-            if (_dto != null && _dto.AttributesJson != null && _dto.AttributesJson.Count > 0)
-            {
-                return new Dictionary<string, string>(_dto.AttributesJson, StringComparer.OrdinalIgnoreCase);
-            }
+            // 构建一个新的字典，优先使用 DTO 中的 JSON 属性字典，如果 DTO 中没有则返回一个空字典，确保导出模板时有一个稳定的数据来源，避免因 DTO 中缺失属性导致的导出失败问题
+            return this._dto != null && this._dto.AttributesJson != null && this._dto.AttributesJson.Count > 0 ? new Dictionary<string, string>((IDictionary<string, string>)this._dto.AttributesJson, (IEqualityComparer<string>)StringComparer.OrdinalIgnoreCase) : new Dictionary<string, string>((IEqualityComparer<string>)StringComparer.OrdinalIgnoreCase);
 
-            // 兜底返回空字典，避免空引用
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -337,13 +286,11 @@ namespace GB_NewCadPlus_IV.Views
         {
             try
             {
-                // 该窗口由 ShowDialog 打开时，直接设置 DialogResult 即可关闭并把结果返回给调用方
-                DialogResult = result;
+                this.DialogResult = new bool?(result);// 设置 DialogResult 以便主窗口能正确接收结果
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
-                // 若不在模态上下文，降级为直接关闭，避免再次抛异常
-                Close();
+                this.Close(); // 如果设置 DialogResult 失败（如窗口未以 ShowDialog 方式打开），则直接关闭窗口，确保用户操作得到响应
             }
         }
 
@@ -354,72 +301,80 @@ namespace GB_NewCadPlus_IV.Views
         /// <param name="e"></param>
         private async void BtnConfirm_Click(object sender, RoutedEventArgs e)
         {
-            if (_isConfirmProcessing) // 防止重复触发
-                return;
-
-            _isConfirmProcessing = true; // 设置正在处理标志，防止重复点击
-            BtnConfirm.IsEnabled = false; // 禁用按钮，避免重复点击
-            var prevCursor = Mouse.OverrideCursor; // 设置等待光标，提示用户正在处理
-            Mouse.OverrideCursor = Cursors.Wait; // 设置等待光标，提示用户正在处理
-
-            try
+            Cursor prevCursor; // 保存先前光标，操作完成后恢复
+            if (this._isConfirmProcessing)
             {
-                // 1. 从UI更新DTO
-                UpdateDtoFromGrid(); // 确保先保存用户在表格中修改的属性
-
-                // 2. 提示用户是否关闭当前文件
-                var result = MessageBox.Show("是否关闭当前文件？\n关闭后可正常上传，不关闭可能导致文件被占用。", "关闭文件提示", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (result == MessageBoxResult.Yes)
-                {
-                    try
-                    {
-                        var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-                        if (doc != null)
-                        {
-                            // 调用 AutoCAD API 需小心：捕获可能的异常
-                            doc.CloseAndSave(doc.Name);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"关闭文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        // 失败也可以继续，让用户决定
-                    }
-                }
-                else
-                {
-                    var giveUp = MessageBox.Show("是否放弃本次识别并退出？", "放弃识别", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                    if (giveUp == MessageBoxResult.Yes)
-                    {
-                        CloseDialogWithResult(false);
-                    }
-                    return;
-                }
-
-                // 3. 再次从UI更新DTO，确保所有更改都已保存
-                UpdateDtoFromGrid(); // 确保先保存用户在表格中修改的属性
-
-                // 4. 执行导入（将 DTO 注册到主窗口并执行上传）
-                _mainWindow.SetSelectedFileForImport(_dto);
-
+                prevCursor = (Cursor)null; // 如果正在处理，则避免重复执行
+            }
+            else
+            {
+                this._isConfirmProcessing = true; // 标记正在处理，防止重复点击
+                this.BtnConfirm.IsEnabled = false; // 禁用按钮以防多次触发
+                prevCursor = Mouse.OverrideCursor; // 记录当前光标
+                Mouse.OverrideCursor = Cursors.Wait; // 显示等待光标，提示用户操作中
                 try
                 {
-                    // 调用主窗口的上传方法，执行完整的上传和数据库保存流程
-                    await _mainWindow.UploadFileAndSaveToDatabase(_dto);
-                    // 上传流程返回后，直接返回 true 并关闭窗口，确保主窗口拿到 true 后刷新分类列表
-                    CloseDialogWithResult(true);
+                    this.UpdateDtoFromGrid(); // 先把 UI 修改回写到 DTO
+                    MessageBoxResult result = MessageBox.Show("是否关闭当前文件？\n关闭后可正常上传，不关闭可能导致文件被占用。", "关闭文件提示", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        try
+                        {
+                            // 获取当前活动文档
+                            Document doc = Application.DocumentManager.MdiActiveDocument;
+                            // 直接使用 null 检查，避免显式调用 operator 方法导致编译错误
+                            if (doc != null)
+                            {
+                                // 关闭并保存当前文档，确保上传时文件不被占用
+                                DocumentExtension.CloseAndSave(doc, doc.Name);
+                            }
+                            // 将引用置空，避免后续误用已关闭的文档对象
+                            doc = (Document)null;
+                        }
+                        catch (Exception ex)
+                        {
+                            // 关闭失败也要给出明确提示
+                            int num = (int)MessageBox.Show("关闭文件失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
+                        }
+                        this.UpdateDtoFromGrid(); // 关闭后再次同步 UI 到 DTO，保证上传数据一致
+                        this._mainWindow.SetSelectedFileForImport(this._dto); // 设置要导入的文件信息到主窗口
+                        try
+                        {
+                            // 执行上传与保存到数据库的操作
+                            await this._mainWindow.UploadFileAndSaveToDatabase(this._dto);
+                            this.CloseDialogWithResult(true); // 成功则关闭对话并返回 true
+                            prevCursor = (Cursor)null;
+                        }
+                        catch (Exception ex)
+                        {
+                            // 上传失败提示并返回 false
+                            int num = (int)MessageBox.Show("导入失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
+                            this.CloseDialogWithResult(false);
+                            prevCursor = (Cursor)null;
+                        }
+                    }
+                    else
+                    {
+                        // 用户选择不关闭当前文件，则询问是否放弃识别
+                        MessageBoxResult giveUp = MessageBox.Show("是否放弃本次识别并退出？", "放弃识别", MessageBoxButton.YesNo, MessageBoxImage.Exclamation);
+                        if (giveUp != MessageBoxResult.Yes)
+                        {
+                            prevCursor = (Cursor)null;
+                        }
+                        else
+                        {
+                            this.CloseDialogWithResult(false);
+                            prevCursor = (Cursor)null;
+                        }
+                    }
                 }
-                catch (Exception exUp)
+                finally
                 {
-                    MessageBox.Show($"导入失败: {exUp.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    CloseDialogWithResult(false);
+                    // 无论如何都要恢复状态
+                    this._isConfirmProcessing = false;
+                    this.BtnConfirm.IsEnabled = true;
+                    Mouse.OverrideCursor = prevCursor;
                 }
-            }
-            finally
-            {
-                _isConfirmProcessing = false;
-                BtnConfirm.IsEnabled = true;
-                Mouse.OverrideCursor = prevCursor;
             }
         }
 
