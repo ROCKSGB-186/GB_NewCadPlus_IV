@@ -20,6 +20,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
+using Org.BouncyCastle.Asn1.Cms;
 using System;
 using System.CodeDom.Compiler;
 using System.Collections;
@@ -148,6 +149,14 @@ namespace GB_NewCadPlus_IV
         private ObservableCollection<LayerInfo>? _layerData;
         // 标识主窗口是否打开
         public static bool wpfMainWindowsIsOpenClose = false;
+
+
+        private static readonly HttpClient _downloadHttpClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromMinutes(5)   // 下载大文件需要较长时间
+        };
+
+      
         #endregion
 
         #region 公开静态实例（方便外部访问）
@@ -182,11 +191,21 @@ namespace GB_NewCadPlus_IV
             Loaded += WpfMainWindow_Loaded;
 
             // 初始化预览缓存目录（LocalAppData\GB_CADPLUS\PreviewCache）
-            _previewCachePath = Path.Combine(AppPath, "PreviewCache");
+            // 确保本地预览图缓存目录存在
+            string previewCachePath = VariableDictionary.PreviewCachePath;
+            if (!Directory.Exists(previewCachePath))
+                Directory.CreateDirectory(previewCachePath);
+
+            // 确保本地 DWG 文件缓存目录存在
+            string dwgCachePath = VariableDictionary.DwgCachePath;
+            if (!Directory.Exists(dwgCachePath))
+                Directory.CreateDirectory(dwgCachePath);
+
+            // 如果后续仍需要 _previewCachePath 实例字段，可赋值
+            _previewCachePath = previewCachePath;
+
             _fileManager = null;
             _categoryManager = null;
-            if (!Directory.Exists(_previewCachePath))
-                Directory.CreateDirectory(_previewCachePath);
 
             // 层管理器与层数据源初始化（仅对象创建，实际数据在 InitializeLayerDataGrid 中绑定）
             _layerManager = new LayerManager();
@@ -282,6 +301,10 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                if (!Directory.Exists(VariableDictionary.PreviewCachePath))
+                    Directory.CreateDirectory(VariableDictionary.PreviewCachePath);
+                if (!Directory.Exists(VariableDictionary.DwgCachePath))
+                    Directory.CreateDirectory(VariableDictionary.DwgCachePath);
                 // 显示客户端版本（EntryAssembly 可能为 null，如果为插件则使用执行程序集版本）
                 var entryAsm = System.Reflection.Assembly.GetEntryAssembly();
                 var execAsm = System.Reflection.Assembly.GetExecutingAssembly();
@@ -550,7 +573,24 @@ namespace GB_NewCadPlus_IV
                 {
                     try
                     {
-                        var cfg = JsonConvert.DeserializeObject<DrawingConfig>(File.ReadAllText(DrawingConfigPath));
+                        DrawingConfig cfg = null;
+                        try
+                        {
+                            if (!File.Exists(DrawingConfigPath)) return;
+
+                            string json = File.ReadAllText(DrawingConfigPath);
+                            var settings = new JsonSerializerSettings
+                            {
+                                MissingMemberHandling = MissingMemberHandling.Ignore
+                            };
+                            cfg = JsonConvert.DeserializeObject<DrawingConfig>(json, settings);
+                            if (cfg != null && cfg.DrawingScale > 0.0)
+                                d = cfg.DrawingScale;
+                        }
+                        catch (Exception ex)
+                        {
+                            LogManager.Instance.LogWarning("加载绘图配置出错：" + ex.Message);
+                        }
                         if (cfg != null && cfg.DrawingScale > 0.0) d = cfg.DrawingScale;
                     }
                     catch (Exception ex)
@@ -677,7 +717,7 @@ namespace GB_NewCadPlus_IV
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (TextBoxSetServiceIP != null) TextBoxSetServiceIP.Text = VariableDictionary._serverIP;
-                    if (TextBoxSetServicePort != null) TextBoxSetServicePort.Text = VariableDictionary._serverPort.ToString();
+                    if (TextBoxSetServicePort != null) TextBoxSetServicePort.Text = VariableDictionary._dataBaseServerPort.ToString();
                 });
             }
             LogManager.Instance.LogInfo("WpfMainWindow: 已从外部注入数据库管理器并锁定联机状态。");
@@ -697,7 +737,7 @@ namespace GB_NewCadPlus_IV
 
                 string dbUser = string.IsNullOrWhiteSpace(VariableDictionary._dbUserName) ? defaultUser : VariableDictionary._dbUserName.Trim();
                 string dbPassword = string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord) ? defaultPwd : VariableDictionary._dbPassWord;
-                int dbPort = VariableDictionary._serverPort > 0 ? VariableDictionary._serverPort : defaultPort;
+                int dbPort = VariableDictionary._dataBaseServerPort > 0 ? VariableDictionary._dataBaseServerPort : defaultPort;
                 string schemaName = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? "CAD_SW_LIBRARY" : VariableDictionary._dataBaseName.Trim();
 
                 if (string.IsNullOrEmpty(VariableDictionary._serverIP)) return false;
@@ -998,78 +1038,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private async Task<string?> EnsureLocalPreviewCacheAsync(FileStorage fileStorage)
         {
-            if (fileStorage == null) return string.Empty;
-
-            try
-            {
-                // 首先尝试解析已有可访问路径
-                var resolved = await ResolvePreviewImagePathAsync(fileStorage).ConfigureAwait(true);
-                if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
-                {
-                    // 如果已位于预览缓存目录，直接返回
-                    if (resolved.StartsWith(_previewCachePath, StringComparison.OrdinalIgnoreCase))
-                        return resolved;
-
-                    // 否则复制到预览缓存目录，文件名使用 {Id}_{原名} 来避免冲突
-                    var name = Path.GetFileName(resolved);
-                    var targetName = $"{fileStorage.Id}_{name}";
-                    var targetPath = Path.Combine(_previewCachePath, targetName);
-                    try
-                    {
-                        // 复制到缓存（覆盖旧文件）
-                        File.Copy(resolved, targetPath, true);
-                        return targetPath;
-                    }
-                    catch
-                    {
-                        // 复制失败则尝试软链接/直接返回原始路径（非缓存）
-                        if (File.Exists(resolved)) return resolved;
-                    }
-                }
-
-                // 若未找到文件，尝试从数据库回源（获取最新 FileStorage）
-                if (_databaseManager != null && fileStorage.Id > 0)
-                {
-                    try
-                    {
-                        var latest = await _databaseManager.GetFileByIdAsync(fileStorage.Id).ConfigureAwait(true);
-                        if (latest != null)
-                        {
-                            // 优先用最新的 preview path/name 再次解析
-                            fileStorage.PreviewImagePath = string.IsNullOrWhiteSpace(latest.PreviewImagePath) ? fileStorage.PreviewImagePath : latest.PreviewImagePath;
-                            fileStorage.PreviewImageName = string.IsNullOrWhiteSpace(latest.PreviewImageName) ? fileStorage.PreviewImageName : latest.PreviewImageName;
-                            fileStorage.FilePath = string.IsNullOrWhiteSpace(latest.FilePath) ? fileStorage.FilePath : latest.FilePath;
-
-                            var resolved2 = await ResolvePreviewImagePathAsync(fileStorage).ConfigureAwait(true);
-                            if (!string.IsNullOrWhiteSpace(resolved2) && File.Exists(resolved2))
-                            {
-                                var name = Path.GetFileName(resolved2);
-                                var targetName = $"{fileStorage.Id}_{name}";
-                                var targetPath = Path.Combine(_previewCachePath, targetName);
-                                try
-                                {
-                                    File.Copy(resolved2, targetPath, true);
-                                    return targetPath;
-                                }
-                                catch
-                                {
-                                    if (File.Exists(resolved2)) return resolved2;
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception exDb)
-                    {
-                        LogManager.Instance.LogInfo($"EnsureLocalPreviewCacheAsync: 回源读取 FileStorage 失败: {exDb.Message}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"EnsureLocalPreviewCacheAsync 异常: {ex.Message}");
-            }
-
-            return string.Empty;
+            return await ServerFileService.EnsurePreviewCacheAsync(fileStorage, VariableDictionary.PreviewCachePath);
         }
 
         /// <summary>
@@ -1261,54 +1230,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private async Task<string> EnsureLocalCachedFilePathAsync(FileStorage fileStorage)
         {
-            if (fileStorage == null) return string.Empty;
-
-            try
-            {
-                // 1) 优先使用已有的可访问文件路径
-                if (!string.IsNullOrWhiteSpace(fileStorage.FilePath) && File.Exists(fileStorage.FilePath))
-                    return fileStorage.FilePath;
-
-                // 2) 如果对象包含字节数组，则写入临时文件
-                var bytes = fileStorage.FileBytes;
-                if (bytes != null && bytes.Length > 0)
-                {
-                    var temp = Path.Combine(Path.GetTempPath(), $"{fileStorage.GetType().Name}_{Guid.NewGuid():N}.dwg");
-                    try
-                    {
-                        File.WriteAllBytes(temp, bytes);
-                        return temp;
-                    }
-                    catch (Exception ex)
-                    {
-                        LogManager.Instance.LogInfo($"EnsureLocalCachedFilePathAsync: 写入临时文件失败: {ex.Message}");
-                    }
-                }
-
-                // 3) 从数据库回源（如果可用）
-                if (_databaseManager != null && fileStorage.Id > 0)
-                {
-                    try
-                    {
-                        var latest = await _databaseManager.GetFileByIdAsync(fileStorage.Id).ConfigureAwait(true);
-                        if (latest != null)
-                        {
-                            // 递归调用但以最新对象为准
-                            return await EnsureLocalCachedFilePathAsync(latest).ConfigureAwait(true);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogManager.Instance.LogInfo($"EnsureLocalCachedFilePathAsync: 从数据库回源失败: {ex.Message}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"EnsureLocalCachedFilePathAsync 异常: {ex.Message}");
-            }
-
-            return string.Empty;
+            return await ServerFileService.EnsureDwgCacheAsync(fileStorage, VariableDictionary.DwgCachePath);
         }
 
         #endregion
@@ -1602,7 +1524,7 @@ namespace GB_NewCadPlus_IV
                 if (_databaseManager != null && _databaseManager.IsDatabaseAvailable)
                 {
                     LogManager.Instance.LogInfo("使用数据库模式加载 " + categoryName);
-                    _ = Task.Run(async () => await LoadButtonsFromDatabaseForCategory(categoryName, panel));
+                    _ = LoadButtonsFromDatabaseForCategory(categoryName, panel);
                 }
                 else
                 {
@@ -2211,8 +2133,12 @@ namespace GB_NewCadPlus_IV
                 Tag = fileInfo,
                 FontFamily = new FontFamily("Microsoft YaHei UI"),
                 FontWeight = FontWeights.Normal,
-                Style = (Style)FindResource("ButtonStyle")
             };
+            try
+            {
+                btn.Style = (Style)FindResource("ButtonStyle");
+            }
+            catch { /* 资源缺失时使用默认样式 */ }
             btn.Click += ConditionButton_Click;
             return btn;
         }
@@ -2379,12 +2305,13 @@ namespace GB_NewCadPlus_IV
                     // 如果 _svc 还没初始化，尝试初始化它
                     // 注意：这里需要你有 host, port 等变量，或者从 VariableDictionary 读取
                     string host = VariableDictionary._serverIP;
-                    int port = VariableDictionary._serverPort;
+                    int dataBaseServerPort = VariableDictionary._dataBaseServerPort;
+                    int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
                     string dbType = VariableDictionary._databaseType;
                     string user = VariableDictionary._dbUserName;
                     string pwd = VariableDictionary._dbPassWord;
 
-                    if (!EnsureSvcInitialized(host, port, dbType, user, pwd))
+                    if (!EnsureSvcInitialized(host, dataBaseServerPort, dbType, user, pwd))
                     {
                         LogManager.Instance.LogInfo("RefreshDepartmentsAsync: 服务初始化失败");
                         return;
@@ -2436,48 +2363,103 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                LogManager.Instance.LogInfo($"在PropertiesDataGrid中显示文件 {fileStorage?.DisplayName} 的属性");
+                // ---- 前置校验 ----
+                if (fileStorage == null)
+                {
+                    LogManager.Instance.LogWarning("DisplayFilePropertiesInDataGridAsync: fileStorage 为空");
+                    if (PropertiesDataGrid != null) PropertiesDataGrid.ItemsSource = null;
+                    return;
+                }
 
-                if (this.PropertiesDataGrid == null)
+                LogManager.Instance.LogInfo($"在PropertiesDataGrid中显示文件 {fileStorage.DisplayName} 的属性 (FileId={fileStorage.Id}, FileHash={fileStorage.FileHash ?? "空"})");
+
+                if (PropertiesDataGrid == null)
                 {
                     LogManager.Instance.LogWarning("PropertiesDataGrid 控件为空");
                     return;
                 }
 
-                if (_databaseManager == null)
+                if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
                 {
-                    LogManager.Instance.LogWarning("数据库管理器为空");
-                    this.PropertiesDataGrid.ItemsSource = null;
+                    LogManager.Instance.LogWarning("数据库管理器不可用");
+                    PropertiesDataGrid.ItemsSource = null;
                     return;
                 }
 
-                // 通过 Hash 快速定位存储与属性
-                var tuple = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileStorage.FileHash);
-                var attributes = tuple.Item2 ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, string> attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // 若按 Hash 未命中属性且 FileId 可用，则按 FileId 回退
+                // ---- 1. 优先按 FileHash 查询 ----
+                if (!string.IsNullOrWhiteSpace(fileStorage.FileHash))
+                {
+                    try
+                    {
+                        // GetFileStorageWithAttributesByHashAsync 返回一个 Tuple<FileStorage, Dictionary<string, string>>，我们取其中的属性字典
+                        var fileStorageWithAttributes = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileStorage.FileHash);
+                        if (fileStorageWithAttributes.Item2 != null)
+                            attributes = fileStorageWithAttributes.Item2;
+
+                        LogManager.Instance.LogInfo(attributes.Count > 0
+                            ? $"按 Hash={fileStorage.FileHash} 加载属性成功，条数={attributes.Count}"
+                            : $"按 Hash={fileStorage.FileHash} 未获取到属性");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Instance.LogWarning($"按 Hash 查询属性失败: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    LogManager.Instance.LogInfo("FileHash 为空，跳过基于 Hash 的查询");
+                }
+
+                // ---- 2. Hash 未命中或 FileHash 为空时，用 FileId 兜底 ----
                 if (attributes.Count == 0 && fileStorage.Id > 0)
                 {
-                    var fallback = await _databaseManager.GetAttributesJsonByFileIdAsync(fileStorage.Id, fileStorage.FileAttributeId);
-                    if (fallback.Count > 0)
+                    try
                     {
-                        attributes = fallback;
-                        LogManager.Instance.LogInfo($"按 Hash 未命中属性，已按 FileId 兜底加载属性: FileId={fileStorage.Id}, Count={attributes.Count}");
+                        var fallback = await _databaseManager.GetAttributesJsonByFileIdAsync(fileStorage.Id, fileStorage.FileAttributeId);
+                        if (fallback != null && fallback.Count > 0)
+                        {
+                            attributes = fallback;
+                            LogManager.Instance.LogInfo($"按 FileId={fileStorage.Id} 兜底加载属性成功，条数={attributes.Count}");
+                        }
+                        else
+                        {
+                            LogManager.Instance.LogInfo($"按 FileId={fileStorage.Id} 也未获取到属性");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Instance.LogWarning($"按 FileId 查询属性失败: {ex.Message}");
                     }
                 }
 
-                var displayData = PrepareFileDisplayData(fileStorage, attributes);
-                this.PropertiesDataGrid.ItemsSource = displayData;
-                CapturePropertiesSnapshot(displayData);
+                // ---- 3. 最终兜底：如果 FileStorage 对象中已经携带了 AttributesJson 字典（例如从列表查询时已附带），直接使用 ----
+                if (attributes.Count == 0 && fileStorage.AttributesJson is Dictionary<string, string> attachedDict && attachedDict.Count > 0)
+                {
+                    attributes = attachedDict;
+                    LogManager.Instance.LogInfo($"使用 FileStorage 对象自带的属性字典，条数={attributes.Count}");
+                }
 
-                LogManager.Instance.LogInfo("文件属性在PropertiesDataGrid中显示完成");
+                // ---- 4. 生成显示数据并绑定 ----
+                var displayData = PrepareFileDisplayData(fileStorage, attributes);
+                PropertiesDataGrid.ItemsSource = displayData;
+
+                // 快照（如果需要的话）
+                try { CapturePropertiesSnapshot(displayData); } catch { }
+
+                if (displayData != null && displayData.Count > 0)
+                    LogManager.Instance.LogInfo($"文件属性显示完成，共 {displayData.Count} 行");
+                else
+                    LogManager.Instance.LogInfo("文件属性显示完成，但数据为空");
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogError("在PropertiesDataGrid中显示文件属性时出错: " + ex.Message);
-                if (this.PropertiesDataGrid != null) this.PropertiesDataGrid.ItemsSource = null;
+                if (PropertiesDataGrid != null) PropertiesDataGrid.ItemsSource = null;
             }
         }
+
 
         /// <summary>
         /// 根据 FileStorage 与属性字典构建 DataGrid 显示模型集合
@@ -2486,44 +2468,114 @@ namespace GB_NewCadPlus_IV
         public List<CategoryPropertyEditModel> PrepareFileDisplayData(FileStorage fileStorage, Dictionary<string, string> attributes)
         {
             var result = new List<CategoryPropertyEditModel>();
+
+            // 辅助方法：安全获取字典值，若缺失则返回默认值
+            string GetAttr(string key, string defaultValue = "")
+            {
+                if (attributes != null && attributes.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v))
+                    return v;
+                return defaultValue;
+            }
+
+            // 标记哪些键已经被固定行占用，后续遍历时跳过它们
+            var usedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void AddRow(string name1, string key1, string def1,
+                        string name2, string key2, string def2)
+            {
+                usedKeys.Add(key1);
+                usedKeys.Add(key2);
+                result.Add(new CategoryPropertyEditModel
+                {
+                    PropertyName1 = name1,
+                    PropertyValue1 = GetAttr(key1, def1),
+                    PropertyName2 = name2,
+                    PropertyValue2 = GetAttr(key2, def2)
+                });
+            }
+
             try
             {
-                // 常见展示项（与原项目保持兼容）——两列模式：PropertyName1/PropertyValue1, PropertyName2/PropertyValue2
-                // 先准备基础信息
-                string displayName = fileStorage?.DisplayName ?? Path.GetFileNameWithoutExtension(_selectedFilePath) ?? string.Empty;
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "显示名称", PropertyValue1 = displayName, PropertyName2 = "元素块名", PropertyValue2 = GetAttribute(attributes, "BlockName", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "层名", PropertyValue1 = GetAttribute(attributes, "Layer", "TJ(  专业  )"), PropertyName2 = "颜色索引", PropertyValue2 = GetAttribute(attributes, "ColorIndex", "40") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "描述", PropertyValue1 = GetAttribute(attributes, "Description", ""), PropertyName2 = "版本", PropertyValue2 = GetAttribute(attributes, "Version", "1") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "是否公开", PropertyValue1 = GetAttribute(attributes, "IsPublic", "是"), PropertyName2 = "创建者", PropertyValue2 = GetAttribute(attributes, "Creator", Environment.UserName) });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "是否天正", PropertyValue1 = GetAttribute(attributes, "IsTianZheng", "否") });
+                // ---- 固定字段（从字典或直接赋默认值） ----
+                string displayName = fileStorage?.DisplayName ?? string.Empty;
+                AddRow("文件名", "FileName", displayName,
+                       "显示名称", "DisplayName", displayName);
+                AddRow("元素块名", "BlockName", "",
+                       "图层名称", "LayerName", "");
+                AddRow("颜色索引", "ColorIndex", "1",
+                       "比例", "Scale", "1");
+                //AddRow("描述", "Description", "",
+                //       "版本", "Version", "1");
+                AddRow("创建者", "CreatedBy", Environment.UserName,
+                       "是否公开", "IsPublic", "是");
+                AddRow("是否天正", "IsTianZheng", "否",
+                       "", "", "");
 
-                // 规格/几何相关
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "长度", PropertyValue1 = GetAttribute(attributes, "Length", ""), PropertyName2 = "宽度", PropertyValue2 = GetAttribute(attributes, "Width", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "高度", PropertyValue1 = GetAttribute(attributes, "Height", ""), PropertyName2 = "角度", PropertyValue2 = GetAttribute(attributes, "Angle", "0") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "基点X", PropertyValue1 = GetAttribute(attributes, "BaseX", "0"), PropertyName2 = "基点Y", PropertyValue2 = GetAttribute(attributes, "BaseY", "0") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "基点Z", PropertyValue1 = GetAttribute(attributes, "BaseZ", "0"), PropertyName2 = "介质", PropertyValue2 = GetAttribute(attributes, "Medium", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "规格", PropertyValue1 = GetAttribute(attributes, "Spec", ""), PropertyName2 = "材质", PropertyValue2 = GetAttribute(attributes, "Material", "") });
+                // 几何信息
+                AddRow("长度", "Length", "",
+                       "宽度", "Width", "");
+                AddRow("高度", "Height", "",
+                       "角度", "Angle", "0");
+                if (attributes != null && attributes.Count > 0)
+                {
+                    var pairs = attributes
+                        .Where(kv => !string.IsNullOrWhiteSpace(kv.Value) && !usedKeys.Contains(kv.Key))
+                        .ToList();
 
-                // 其它工程属性
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "标准号", PropertyValue1 = GetAttribute(attributes, "Standard", ""), PropertyName2 = "功率", PropertyValue2 = GetAttribute(attributes, "Power", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "容积", PropertyValue1 = GetAttribute(attributes, "Volume", ""), PropertyName2 = "压力", PropertyValue2 = GetAttribute(attributes, "Pressure", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "温度", PropertyValue1 = GetAttribute(attributes, "Temperature", ""), PropertyName2 = "直径", PropertyValue2 = GetAttribute(attributes, "Diameter", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "外径", PropertyValue1 = GetAttribute(attributes, "OD", ""), PropertyName2 = "内径", PropertyValue2 = GetAttribute(attributes, "ID", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "厚度", PropertyValue1 = GetAttribute(attributes, "Thickness", ""), PropertyName2 = "重量", PropertyValue2 = GetAttribute(attributes, "Weight", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "型号", PropertyValue1 = GetAttribute(attributes, "Model", ""), PropertyName2 = "备注", PropertyValue2 = GetAttribute(attributes, "Remark", "") });
-
-                // 标签等可扩展项
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "标签1", PropertyValue1 = GetAttribute(attributes, "Tag1", ""), PropertyName2 = "标签2", PropertyValue2 = GetAttribute(attributes, "Tag2", "") });
-                result.Add(new CategoryPropertyEditModel { PropertyName1 = "标签3", PropertyValue1 = GetAttribute(attributes, "Tag3", ""), PropertyName2 = "", PropertyValue2 = "" });
+                    for (int i = 0; i < pairs.Count; i += 2)
+                    {
+                        var p1 = pairs[i];
+                        var p2 = (i + 1 < pairs.Count) ? pairs[i + 1] : default;
+                        result.Add(new CategoryPropertyEditModel
+                        {
+                            PropertyName1 = p1.Key,
+                            PropertyValue1 = p1.Value,
+                            PropertyName2 = p2.Key ?? string.Empty,
+                            PropertyValue2 = p2.Value ?? string.Empty
+                        });
+                    }
+                }
+                return result;
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo("PrepareFileDisplayData 异常: " + ex.Message);
             }
+
             return result;
         }
 
-        // 获取字典中键（不区分大小写）
+        //获取字典中键（不区分大小写）
+
+        /// <summary>
+        /// 根据 FileStorage 与属性字典构建 DataGrid 显示模型集合
+        /// 返回 List<CategoryPropertyEditModel>
+        /// </summary>
+        //public List<CategoryPropertyEditModel> PrepareFileDisplayData(FileStorage fileStorage, Dictionary<string, string> attributes)
+        //{
+        //    var result = new List<CategoryPropertyEditModel>();
+        //    if (attributes != null && attributes.Count > 0)
+        //    {
+        //        var pairs = attributes
+        //            .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+        //            .ToList();
+        //        for (int i = 0; i < pairs.Count; i += 2)
+        //        {
+        //            var p1 = pairs[i];
+        //            var p2 = (i + 1 < pairs.Count) ? pairs[i + 1] : default;
+        //            result.Add(new CategoryPropertyEditModel
+        //            {
+        //                PropertyName1 = p1.Key,
+        //                PropertyValue1 = p1.Value,
+        //                PropertyName2 = p2.Key ?? string.Empty,
+        //                PropertyValue2 = p2.Value ?? string.Empty
+        //            });
+        //        }
+        //    }
+        //    return result;
+        //}
+
+
         private static string GetAttribute(Dictionary<string, string> dict, string key, string defaultValue)
         {
             if (dict == null) return defaultValue;
@@ -2777,7 +2829,7 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 初始化属性编辑网格
         /// </summary>
-        private void AddFileInitializeFilePropertiesGrid()
+        private async void AddFileInitializeFilePropertiesGrid()
         {
             try
             {
@@ -2801,13 +2853,42 @@ namespace GB_NewCadPlus_IV
                   new CategoryPropertyEditModel { PropertyName1 = "外径", PropertyValue1 = "", PropertyName2 = "内径", PropertyValue2 = "" },
                   new CategoryPropertyEditModel { PropertyName1 = "厚度", PropertyValue1 = "", PropertyName2 = "重量", PropertyValue2 = "" },
                   new CategoryPropertyEditModel { PropertyName1 = "型号", PropertyValue1 = "", PropertyName2 = "备注", PropertyValue2 = "" },
-                  
+
                   // 文件标签表(file_tags)相关属性（可以添加多个标签）
                   new CategoryPropertyEditModel { PropertyName1 = "标签1", PropertyValue1 = "", PropertyName2 = "标签2", PropertyValue2 = "" },
                   new CategoryPropertyEditModel { PropertyName1 = "标签3", PropertyValue1 = "", PropertyName2 = "", PropertyValue2 = "" }
                   };
 
                 CategoryPropertiesDataGrid.ItemsSource = properties;
+
+                //FileStorage? fileStorage = null;
+                //Dictionary<string, string> attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                //if (!string.IsNullOrWhiteSpace(_selectedFilePath) && _databaseManager != null)
+                //{
+                //    string fileHash = await TryCalculateFileHashAsync(_selectedFilePath);
+                //    if (!string.IsNullOrWhiteSpace(fileHash))
+                //    {
+                //        var result = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileHash);
+                //        fileStorage = result.File;
+                //        attributes = result.Attributes;
+                //    }
+
+                //    // 如果未获取到完整记录，至少构造基础存储对象用于后续显示
+                //    if (fileStorage == null)
+                //    {
+                //        fileStorage = new FileStorage
+                //        {
+                //            FilePath = _selectedFilePath,
+                //            FileName = Path.GetFileNameWithoutExtension(_selectedFilePath),
+                //            DisplayName = Path.GetFileNameWithoutExtension(_selectedFilePath)
+                //        };
+                //    }
+                //}
+
+                //var displayData = PrepareFileDisplayData(fileStorage, attributes);
+                //CategoryPropertiesDataGrid.ItemsSource = displayData;
+
             }
             catch (Exception ex)
             {
@@ -5634,8 +5715,7 @@ namespace GB_NewCadPlus_IV
         public async Task UploadFileAndSaveToDatabase()
         {
             // ===== 1. 前置校验 =====
-            // 1.1 获取分类 ID（通过当前选中的分类树节点）
-            int categoryId = _selectedCategoryNode?.Id ?? 0;   // 若 CategoryTreeNode 的 ID 属性名不同，请调整为实际属性
+            int categoryId = _selectedCategoryNode?.Id ?? 0;
             if (categoryId <= 0)
             {
                 LogManager.Instance.LogWarning("UploadFileAndSaveToDatabase: 未选中有效分类，操作中止");
@@ -5643,7 +5723,6 @@ namespace GB_NewCadPlus_IV
                 return;
             }
 
-            // 1.2 检查文件路径
             if (string.IsNullOrWhiteSpace(_selectedFilePath) || !File.Exists(_selectedFilePath))
             {
                 LogManager.Instance.LogWarning("UploadFileAndSaveToDatabase: 未选择有效的 DWG 文件");
@@ -5651,20 +5730,15 @@ namespace GB_NewCadPlus_IV
                 return;
             }
 
-            // ===== 2. 从 UI 提取信息（安全访问，找不到则使用默认值） =====
-            // 显示名称：优先使用专门的输入框，否则用文件名（不含扩展名）
+            // ===== 2. 从 UI 提取信息 =====
             string displayName = (FindName("TxtDisplayName") as TextBox)?.Text;
             if (string.IsNullOrWhiteSpace(displayName))
                 displayName = Path.GetFileNameWithoutExtension(_selectedFilePath);
 
-            // 描述
             string description = (FindName("TxtDescription") as TextBox)?.Text ?? string.Empty;
-
-            // 图块名、图层名：通过 FindName 安全查找，找不到则为空
             string blockName = (FindName("txtBlockName") as TextBox)?.Text ?? string.Empty;
             string layerName = (FindName("txtLayerName") as TextBox)?.Text ?? string.Empty;
 
-            // 颜色索引、比例：尝试从对应控件读取，失败则用默认值
             int colorIndex = 1;
             double scale = 1.0;
             try
@@ -5677,24 +5751,50 @@ namespace GB_NewCadPlus_IV
                 if (txtScale != null && double.TryParse(txtScale.Text, out double sc) && sc > 0)
                     scale = sc;
             }
-            catch { /* 忽略解析错误，保留默认值 */ }
+            catch { }
 
-            // 创建人
             string createdBy = VariableDictionary._userName ?? "System";
-
-            // 预览图路径（如果有的话）
             string? previewPath = _selectedPreviewImagePath;
 
-            // 属性字典（可从当前属性面板收集，这里简单初始化为空字典）
+            // ===== 3. ★ 关键修改：建立属性字典并填充所有提取到的字段 ★ =====
             var attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // ===== 3. 构建 DTO 并调用带参上传方法 =====
+            // 填充所有已提取的属性（键名需与 ImportConfirmWindow.UpdateDtoFromGrid 中的 NormalizeKey 映射一致）
+            void AddIfNotEmpty(string key, string value)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                    attributes[key] = value;
+            }
+
+            AddIfNotEmpty("FileName", Path.GetFileName(_selectedFilePath));
+            AddIfNotEmpty("DisplayName", displayName);
+            AddIfNotEmpty("BlockName", blockName);
+            AddIfNotEmpty("LayerName", layerName);
+            AddIfNotEmpty("ColorIndex", colorIndex.ToString());
+            AddIfNotEmpty("Scale", scale.ToString());
+            AddIfNotEmpty("Description", description);
+            AddIfNotEmpty("CreatedBy", createdBy);
+            if (!string.IsNullOrWhiteSpace(previewPath))
+                AddIfNotEmpty("PreviewImagePath", previewPath);
+
+            // 如果有其他从 CAD 实体提取的属性，也在这里添加
+            // 例如：从 _propertiesSnapshotForInsert 合并
+            if (_propertiesSnapshotForInsert != null && _propertiesSnapshotForInsert.Count > 0)
+            {
+                foreach (var kvp in _propertiesSnapshotForInsert)
+                {
+                    if (!attributes.ContainsKey(kvp.Key))
+                        attributes[kvp.Key] = kvp.Value;
+                }
+            }
+
+            // ===== 4. 构建 DTO 并调用带参上传方法 =====
             var dto = new ImportEntityDto
             {
                 FilePath = _selectedFilePath,
                 PreviewImagePath = previewPath,
                 CategoryId = categoryId,
-                CategoryType = "sub",                       // 默认子分类，也可从 UI 获取
+                CategoryType = "sub",
                 BlockName = blockName,
                 LayerName = layerName,
                 ColorIndex = colorIndex,
@@ -5702,22 +5802,18 @@ namespace GB_NewCadPlus_IV
                 DisplayName = displayName,
                 Description = description,
                 CreatedBy = createdBy,
-                AttributesJson = attributes                 // 会在 UploadFileAndSaveToDatabase(dto) 内序列化为 JSON 字符串
+                AttributesJson = attributes   // ★ 现在字典里面有东西了
             };
-
-            // 调用已有的带参上传方法
+            dto.AttributesJson = attributes;
             var (success, message, storageId) = await UploadFileAndSaveToDatabase(dto);
 
             if (success)
-            {
                 LogManager.Instance.LogInfo($"[上传成功] StorageId={storageId}, {message}");
-                // 可选：刷新当前分类面板等 UI 操作
-            }
             else
-            {
                 LogManager.Instance.LogWarning($"[上传失败] {message}");
-            }
         }
+
+
         /// <summary>
         /// 上传文件到服务器并保存元数据
         /// </summary>
@@ -5727,32 +5823,41 @@ namespace GB_NewCadPlus_IV
         {
             // ========== 1. 参数校验 ==========
             if (dto == null)
+            {
+                LogManager.Instance.LogInfo("DTO 参数不能为空;");
                 return (false, "DTO 参数不能为空", 0);
+            }
 
-            if (string.IsNullOrWhiteSpace(dto.FilePath) || !File.Exists(dto.FilePath))
+            if (string.IsNullOrWhiteSpace(dto.FileStorage?.FilePath) || !File.Exists(dto.FileStorage?.FilePath))
+            {
+                LogManager.Instance.LogInfo("DWG 文件不存在，请检查路径;");
                 return (false, "DWG 文件不存在，请检查路径", 0);
+            }
 
-            if (dto.CategoryId <= 0)
+            if (dto.FileStorage?.CategoryId <= 0)
+            {
+                LogManager.Instance.LogInfo("categoryId 必须为有效的正整数;");
                 return (false, "categoryId 必须为有效的正整数", 0);
+            }
 
             // ========== 2. 构建服务端 URL ==========
             string serverIp = VariableDictionary._serverIP ?? "127.0.0.1";
-            int serverPort = VariableDictionary._serverPort > 0 ? VariableDictionary._serverPort : 5000;
+            int serverPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
             string baseUrl = $"http://{serverIp}:{serverPort}";
             string uploadUrl = $"{baseUrl}/api/graphics/upload";
 
             LogManager.Instance.LogInfo($"[Upload] 目标地址: {uploadUrl}");
 
-            // ========== 3. 构建 MultipartFormDataContent ==========
+            // ========== 3. 构建 MultipartFormDataContent ========== string attributesJsonString = "{}";
             try
             {
-                using var form = new MultipartFormDataContent();
+                using var multipartFormDataform = new MultipartFormDataContent();
 
                 // 3.1 添加 DWG 主文件（字段名 "dwgFile"，必填）
-                var dwgStream = new FileStream(dto.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var dwgStream = new FileStream(dto.FileStorage?.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 var dwgContent = new StreamContent(dwgStream);
                 dwgContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-                form.Add(dwgContent, "dwgFile", Path.GetFileName(dto.FilePath));
+                multipartFormDataform.Add(dwgContent, "dwgFile", Path.GetFileName(dto.FileStorage?.FilePath));
 
                 // 3.2 添加预览图（字段名 "previewFile"，可选）
                 FileStream? previewStream = null;
@@ -5770,57 +5875,51 @@ namespace GB_NewCadPlus_IV
                         _ => "application/octet-stream"
                     };
                     previewContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mime);
-                    form.Add(previewContent, "previewFile", Path.GetFileName(dto.PreviewImagePath));
+                    multipartFormDataform.Add(previewContent, "previewFile", Path.GetFileName(dto.PreviewImagePath));
                 }
 
                 // 3.3 添加表单字段（全部使用 StringContent，Key 必须与服务端 Request.Form 一致）
-                form.Add(new StringContent(dto.CategoryId.ToString()), "categoryId");
+                multipartFormDataform.Add(new StringContent(dto.CategoryId.ToString()), "categoryId");
 
                 if (!string.IsNullOrWhiteSpace(dto.CategoryType))
-                    form.Add(new StringContent(dto.CategoryType), "categoryType");
+                    multipartFormDataform.Add(new StringContent(dto.CategoryType), "categoryType");
                 else
-                    form.Add(new StringContent("sub"), "categoryType");
+                    multipartFormDataform.Add(new StringContent("sub"), "categoryType");
 
                 if (!string.IsNullOrWhiteSpace(dto.BlockName))
-                    form.Add(new StringContent(dto.BlockName), "blockName");
+                    multipartFormDataform.Add(new StringContent(dto.BlockName), "blockName");
 
                 if (!string.IsNullOrWhiteSpace(dto.LayerName))
-                    form.Add(new StringContent(dto.LayerName), "layerName");
+                    multipartFormDataform.Add(new StringContent(dto.LayerName), "layerName");
 
                 if (dto.ColorIndex.HasValue)
-                    form.Add(new StringContent(dto.ColorIndex.Value.ToString()), "colorIndex");
+                    multipartFormDataform.Add(new StringContent(dto.ColorIndex.Value.ToString()), "colorIndex");
 
                 if (dto.Scale.HasValue && dto.Scale.Value > 0)
-                    form.Add(new StringContent(dto.Scale.Value.ToString()), "scale");
+                    multipartFormDataform.Add(new StringContent(dto.Scale.Value.ToString()), "scale");
                 else
-                    form.Add(new StringContent("1.0"), "scale");
+                    multipartFormDataform.Add(new StringContent("1.0"), "scale");
 
                 if (!string.IsNullOrWhiteSpace(dto.DisplayName))
-                    form.Add(new StringContent(dto.DisplayName), "displayName");
+                    multipartFormDataform.Add(new StringContent(dto.DisplayName), "displayName");
                 else
-                    form.Add(new StringContent(Path.GetFileNameWithoutExtension(dto.FilePath)), "displayName");
+                    multipartFormDataform.Add(new StringContent(Path.GetFileNameWithoutExtension(dto.FileStorage.FilePath)), "displayName");
 
                 if (!string.IsNullOrWhiteSpace(dto.Description))
-                    form.Add(new StringContent(dto.Description), "description");
+                    multipartFormDataform.Add(new StringContent(dto.Description), "description");
 
                 if (!string.IsNullOrWhiteSpace(dto.CreatedBy))
-                    form.Add(new StringContent(dto.CreatedBy), "createdBy");
+                    multipartFormDataform.Add(new StringContent(dto.CreatedBy), "createdBy");
                 else
-                    form.Add(new StringContent(VariableDictionary._userName ?? "System"), "createdBy");
-
-                string attributesJsonString = "{}";
-                if (dto.AttributesJson != null && dto.AttributesJson.Count > 0)
-                {
-                    attributesJsonString = JsonConvert.SerializeObject(dto.AttributesJson);
-                    // 或者用 System.Text.Json 根据您的项目决定
-                    // attributesJsonString = System.Text.Json.JsonSerializer.Serialize(dto.AttributesJson);
-                }
-                form.Add(new StringContent(attributesJsonString), "attributesJson");
+                    multipartFormDataform.Add(new StringContent(VariableDictionary._userName ?? "System"), "createdBy");
+                
+                var json = JsonConvert.SerializeObject(dto.AttributesJson ?? new Dictionary<string, string>());
+                multipartFormDataform.Add(new StringContent(json), "attributesJson");
                 
                 // ========== 4. 发送请求 ==========
                 LogManager.Instance.LogInfo($"[Upload] 开始上传: {Path.GetFileName(dto.FilePath)}, 分类ID={dto.CategoryId}");
 
-                var response = await _uploadHttpClient.PostAsync(uploadUrl, form);
+                var response = await _uploadHttpClient.PostAsync(uploadUrl, multipartFormDataform);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
                 // ========== 5. 解析响应 ==========
@@ -6810,7 +6909,7 @@ namespace GB_NewCadPlus_IV
             {
                 // 更新字段值
                 VariableDictionary._serverIP = TextBoxSetServiceIP.Text.Trim();
-                VariableDictionary._serverPort = int.TryParse(TextBoxSetServicePort.Text.Trim(), out int port) ? port : 3306;
+                VariableDictionary._dataBaseServerPort = int.TryParse(TextBoxSetServicePort.Text.Trim(), out int port) ? port : 3306;
                 VariableDictionary._dataBaseName = TextBoxSetDatabaseName.Text.Trim();
                 //VariableDictionary._userName = TextBox_Set_Username.Text.Trim();
                 //VariableDictionary._passWord = PasswordBox_Set_Password.Text.Trim();
@@ -6821,7 +6920,7 @@ namespace GB_NewCadPlus_IV
 
                 // 保存到配置文件
                 Properties.Settings.Default.ServerIP = VariableDictionary._serverIP;
-                Properties.Settings.Default.ServerPort = VariableDictionary._serverPort;
+                Properties.Settings.Default.ServerPort = VariableDictionary._dataBaseServerPort;
                 Properties.Settings.Default.DatabaseName = VariableDictionary._dataBaseName;
                 Properties.Settings.Default.Username = VariableDictionary._userName;
                 Properties.Settings.Default.Password = VariableDictionary._passWord;
@@ -7262,9 +7361,6 @@ namespace GB_NewCadPlus_IV
             _selectedFilePath = dto.FileStorage.FilePath;
             _selectedPreviewImagePath = dto.PreviewImagePath;
             _currentFileStorage = dto.FileStorage;
-
-            // 旧 FileAttribute 仅保留兼容，不再作为主写库来源
-            // _currentFileAttribute = dto.FileAttribute;
         }
         /// <summary>
         /// 确认导入
@@ -10218,7 +10314,7 @@ namespace GB_NewCadPlus_IV
                     if (cfg != null)
                     {
                         if (!string.IsNullOrWhiteSpace(cfg.ServerIP)) host = cfg.ServerIP;
-                        if (!string.IsNullOrWhiteSpace(cfg.ServerPort)) port = cfg.ServerPort;
+                        if (!string.IsNullOrWhiteSpace(cfg.DataBaseserverPort)) port = cfg.DataBaseserverPort;
                     }
                 }
 
@@ -10257,8 +10353,9 @@ namespace GB_NewCadPlus_IV
             {
                 await Task.Run(() =>
                 {
-                    _svc.EnsureCategoriesTableExists();
-                    _svc.EnsureDepartmentsTableExists();
+                    // 确保所有必要的表都已存在（包括分类表和部门表）
+                    _svc.EnsureAllTablesExist();
+                    // 执行同步
                     _svc.SyncDepartmentsFromCadCategories();
                 });
                 RefreshDepartmentsAsync();
@@ -10384,6 +10481,7 @@ namespace GB_NewCadPlus_IV
                 Id = initial?.Id ?? 0,
                 Name = initial?.Name ?? string.Empty,
                 RealName = initial?.RealName ?? string.Empty,
+                DisplayName = initial?.DisplayName ?? string.Empty,
                 Description = initial?.Description ?? string.Empty,
                 SortOrder = initial?.SortOrder ?? 0,
                 ManagerUserId = initial?.ManagerUserId,

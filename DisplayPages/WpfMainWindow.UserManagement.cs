@@ -16,10 +16,11 @@ namespace GB_NewCadPlus_IV
     public partial class WpfMainWindow
     {
         string host = VariableDictionary._serverIP; // 或者从配置读取
-        int port = VariableDictionary._serverPort;  // 或者从配置读取
+        int port = VariableDictionary._dataBaseServerPort;  // 或者从配置读取
         string dbType = VariableDictionary._databaseType; // "MYSQL" 或 "DM"
         string user = VariableDictionary._dbUserName;
         string pwd = VariableDictionary._dbPassWord;
+
 
         /// <summary>
         /// 新增用户按钮点击处理（界面事件绑定）
@@ -62,6 +63,7 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show("新增用户异常：" + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
             }
         }
+
         /// <summary>
         /// 编辑用户按钮点击处理（界面事件绑定）
         /// 逻辑：检查选中用户 -> 打开编辑对话 -> 调用 _svc.UpdateUser -> 刷新用户列表

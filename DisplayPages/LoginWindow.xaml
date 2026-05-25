@@ -141,7 +141,7 @@
                 FontSize="12"
                 Text="端口：" />
             <TextBox
-                x:Name="TxtServerPort"
+                x:Name="TxtDataBaseserverPort"
                 Height="26"
                 PreviewTextInput="TxtServerPort_PreviewTextInput" />
         </StackPanel>

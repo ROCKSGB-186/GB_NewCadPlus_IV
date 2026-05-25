@@ -701,15 +701,15 @@ namespace GB_NewCadPlus_IV
 
                 }
                 /// 绔彛
-                VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var p) ? p : 3306;
+                VariableDictionary._dataBaseServerPort = int.TryParse(TextBox_Set_ServicePort.Text, out var p) ? p : 3306;
 
 
                 // 蹇€?TCP 妫€娴?
-                bool tcpOk = await Task.Run(() => LoginWindow.TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._serverPort));
+                bool tcpOk = await Task.Run(() => LoginWindow.TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort));
                 if (tcpOk)
                 {
                     // 灏濊瘯鍒涘缓 DatabaseManager锛堜娇鐢ㄩ」鐩害瀹氱殑榛樿鍙傛暟锛?
-                    string conn = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Database=cad_sw_library;Uid=root;Pwd=root;";
+                    string conn = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._dataBaseServerPort};Database=cad_sw_library;Uid=root;Pwd=root;";
                     try
                     {
                         var db = new DatabaseManager(conn);
@@ -717,7 +717,7 @@ namespace GB_NewCadPlus_IV
                         {
                             _databaseManager = db;
                             _useDatabaseMode = true;
-                            LogManager.Instance.LogInfo($"鐩存帴杩炴帴鏁版嵁搴撴垚鍔燂細{VariableDictionary._serverIP}:{VariableDictionary._serverPort}");
+                            LogManager.Instance.LogInfo($"鐩存帴杩炴帴鏁版嵁搴撴垚鍔燂細{VariableDictionary._serverIP}:{VariableDictionary._dataBaseServerPort}");
                             return true;
                         }
                     }
@@ -755,8 +755,8 @@ namespace GB_NewCadPlus_IV
                     // 鍚﹀垯灏濊瘯浣跨敤鐧诲綍绐楀彛淇濆瓨鐨勭晫闈㈠€奸噸璇曚竴娆★紙LoadServerConfigFromLogin 浼氭妸閰嶇疆鍚屾鍒扮晫闈級
                     LoadServerConfigFromLogin();
                     VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text?.Trim() ?? VariableDictionary._serverIP;
-                    VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text, out var pp) ? pp : VariableDictionary._serverPort;
-                    string conn2 = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._serverPort};Database=cad_sw_library;Uid=root;Pwd=root;SslMode=None;";
+                    VariableDictionary._dataBaseServerPort = int.TryParse(TextBox_Set_ServicePort.Text, out var pp) ? pp : VariableDictionary._dataBaseServerPort;
+                    string conn2 = $"Server={VariableDictionary._serverIP};Port={VariableDictionary._dataBaseServerPort};Database=cad_sw_library;Uid=root;Pwd=root;SslMode=None;";
                     try
                     {
                         var db2 = new DatabaseManager(conn2);
@@ -7517,7 +7517,7 @@ namespace GB_NewCadPlus_IV
             {
                 // 鏇存柊瀛楁鍊?
                 VariableDictionary._serverIP = TextBox_Set_ServiceIP.Text.Trim();
-                VariableDictionary._serverPort = int.TryParse(TextBox_Set_ServicePort.Text.Trim(), out int port) ? port : 3306;
+                VariableDictionary._dataBaseServerPort = int.TryParse(TextBox_Set_ServicePort.Text.Trim(), out int port) ? port : 3306;
                 VariableDictionary._dataBaseName = TextBox_Set_DatabaseName.Text.Trim();
                 //VariableDictionary._userName = TextBox_Set_Username.Text.Trim();
                 //VariableDictionary._passWord = PasswordBox_Set_Password.Text.Trim();
@@ -7528,7 +7528,7 @@ namespace GB_NewCadPlus_IV
 
                 // 淇濆瓨鍒伴厤缃枃浠?
                 Properties.Settings.Default.ServerIP = VariableDictionary._serverIP;
-                Properties.Settings.Default.ServerPort = VariableDictionary._serverPort;
+                Properties.Settings.Default.ServerPort = VariableDictionary._dataBaseServerPort;
                 Properties.Settings.Default.DatabaseName = VariableDictionary._dataBaseName;
                 Properties.Settings.Default.Username = VariableDictionary._userName;
                 Properties.Settings.Default.Password = VariableDictionary._passWord;

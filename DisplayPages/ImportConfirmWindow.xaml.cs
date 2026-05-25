@@ -166,8 +166,17 @@ namespace GB_NewCadPlus_IV.Views
         /// </summary>
         private void BindPropertiesToGrid()
         {
-            // 优先使用 DTO 中的 JSON 属性字典来生成展示数据
-            this.PropertiesGrid.ItemsSource = (IEnumerable)this._mainWindow.PrepareFileDisplayData(this._dto.FileStorage, this._dto.AttributesJson);
+            // 诊断日志
+            if (_dto.AttributesJson == null)
+                LogManager.Instance.LogWarning("BindPropertiesToGrid: _dto.AttributesJson 为 null");
+            else
+                LogManager.Instance.LogInfo($"BindPropertiesToGrid: AttributesJson 条目数 = {_dto.AttributesJson.Count}");
+
+            var displayData = _mainWindow.PrepareFileDisplayData(_dto.FileStorage, _dto.AttributesJson);
+            if (displayData == null || !displayData.Any())
+                LogManager.Instance.LogWarning("PrepareFileDisplayData 返回空集合");
+
+            PropertiesGrid.ItemsSource = displayData;
         }
 
         /// <summary>
@@ -241,7 +250,7 @@ namespace GB_NewCadPlus_IV.Views
                 foreach (KeyValuePair<string, string> exportAttributes in this.BuildExportAttributesDictionary())
                 {
                     if (!string.IsNullOrWhiteSpace(exportAttributes.Key)) // 仅添加键非空的属性，避免因空键导致的列名问题
-                    {   
+                    {
                         if (!templateDataTable.Columns.Contains(exportAttributes.Key)) // 如果模板中没有定义该列，则动态添加列，允许用户在模板中看到并修改这些动态属性，增强模板的灵活性和适用性
                             templateDataTable.Columns.Add(exportAttributes.Key, typeof(string)); // 添加新列时默认类型为 string，确保 Excel 中显示正确，避免因类型不匹配导致的显示问题
                         row[exportAttributes.Key] = (object)(exportAttributes.Value ?? string.Empty); // 填充属性值，如果为 null 则使用空字符串填充，确保 Excel 中显示为空而非 "null" 字符串
@@ -336,7 +345,7 @@ namespace GB_NewCadPlus_IV.Views
                             // 关闭失败也要给出明确提示
                             int num = (int)MessageBox.Show("关闭文件失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
                         }
-                        this.UpdateDtoFromGrid(); // 关闭后再次同步 UI 到 DTO，保证上传数据一致
+                        //this.UpdateDtoFromGrid(); // 关闭后再次同步 UI 到 DTO，保证上传数据一致
                         this._mainWindow.SetSelectedFileForImport(this._dto); // 设置要导入的文件信息到主窗口
                         try
                         {
@@ -371,9 +380,9 @@ namespace GB_NewCadPlus_IV.Views
                 finally
                 {
                     // 无论如何都要恢复状态
-                    this._isConfirmProcessing = false;
-                    this.BtnConfirm.IsEnabled = true;
-                    Mouse.OverrideCursor = prevCursor;
+                    this._isConfirmProcessing = false;// 重置处理标志，允许再次点击
+                    this.BtnConfirm.IsEnabled = true; // 恢复按钮可用状态
+                    Mouse.OverrideCursor = prevCursor;// 恢复先前光标，确保 UI 状态一致
                 }
             }
         }
@@ -384,15 +393,12 @@ namespace GB_NewCadPlus_IV.Views
         private void UpdateDtoFromGrid()
         {
             // 从数据网格的 ItemsSource 中获取当前显示的属性列表
-            var items = PropertiesGrid.ItemsSource as List<CategoryPropertyEditModel>;
-            if (items == null) return;
-
-            // 确保 JSON 属性字典已初始化
-            _dto.AttributesJson ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
+            var itemsSource = PropertiesGrid.ItemsSource as List<CategoryPropertyEditModel>;
+            if (itemsSource == null) return;
             // 每次重新采集前先清空，避免旧值残留
             _dto.AttributesJson.Clear();
-
+            // 确保 JSON 属性字典已初始化
+            _dto.AttributesJson ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             // 把界面显示名统一映射为系统内部标准键名，避免后续 JSON 键混乱
             string NormalizeKey(string key)
             {
@@ -432,10 +438,21 @@ namespace GB_NewCadPlus_IV.Views
                     case "自定义1": return "Customize1";
                     case "自定义2": return "Customize2";
                     case "自定义3": return "Customize3";
+                    case "创建时间": return "CREATED_AT";
+                    case "更新时间": return "UPDATED_AT";
                     default: return key.Trim();
                 }
             }
+            foreach (var item in itemsSource)// 遍历每一行数据，回写到 DTO 中，确保用户修改的属性能够正确保存并上传，避免因未同步 UI 修改导致的数据不一致问题
+            {
+                // 先回写 FileStorage 固定字段
+                _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName1, item.PropertyValue1);
+                _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName2, item.PropertyValue2);
 
+                // 再把两列属性写回 JSON 字典
+                AddAttr(item.PropertyName1, item.PropertyValue1);
+                AddAttr(item.PropertyName2, item.PropertyValue2);
+            }
             // 局部函数，安全写入 JSON 属性字典
             void AddAttr(string key, string value)
             {
@@ -448,17 +465,6 @@ namespace GB_NewCadPlus_IV.Views
                 _dto.AttributesJson[normalizedKey] = value.Trim();
             }
 
-            foreach (var item in items)
-            {
-                // 先回写 FileStorage 固定字段
-                _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName1, item.PropertyValue1);
-                _mainWindow.SetFileStorageProperty(_dto.FileStorage, item.PropertyName2, item.PropertyValue2);
-
-                // 再把两列属性写回 JSON 字典
-                AddAttr(item.PropertyName1, item.PropertyValue1);
-                AddAttr(item.PropertyName2, item.PropertyValue2);
-            }
-
             // 补充主表关键字段，保证 JSON 中也有一份稳定数据
             AddAttr("FileName", _dto.FileStorage.FileName ?? string.Empty);
             AddAttr("DisplayName", _dto.FileStorage.DisplayName ?? string.Empty);
@@ -467,6 +473,21 @@ namespace GB_NewCadPlus_IV.Views
             AddAttr("ColorIndex", _dto.FileStorage.ColorIndex?.ToString() ?? string.Empty);
             AddAttr("Scale", _dto.FileStorage.Scale?.ToString() ?? string.Empty);
             AddAttr("UpdatedAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            AddAttr("FilePath", _dto.FileStorage.FilePath ?? string.Empty);
+
+            _dto.FilePath = _dto.FileStorage.FilePath ?? string.Empty;
+            _dto.DisplayName = _dto.FileStorage.DisplayName ?? string.Empty;
+            _dto.BlockName = _dto.FileStorage.BlockName ?? string.Empty;
+            _dto.LayerName = _dto.FileStorage.LayerName ?? string.Empty;
+            _dto.ColorIndex = _dto.FileStorage.ColorIndex ;
+            _dto.Scale = _dto.FileStorage.Scale;
+            _dto.CategoryId = _dto.FileStorage.CategoryId ;
+            _dto.CategoryType = _dto.FileStorage.CategoryType ;
+            _dto.CreatedBy = _dto.FileStorage.CreatedBy;
+            _dto.Description= _dto.FileStorage.Description;
+            _dto.PreviewImageName= _dto.FileStorage.PreviewImageName;
+            _dto.PreviewImagePath= _dto.FileStorage.PreviewImagePath;
+
         }
 
     }

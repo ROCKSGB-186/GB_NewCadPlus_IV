@@ -242,116 +242,78 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public void SyncDepartmentsFromCadCategories()
         {
-            using var conn = new MySqlConnection(ConnString());
+            EnsureAllTablesExist();
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(ConnString());
             conn.Open();
             using var tx = conn.BeginTransaction();
             try
             {
-                var sel = conn.CreateCommand();
-                sel.Transaction = tx;
-                sel.CommandText = "SELECT id, name, display_name, sort_order FROM cad_categories ORDER BY sort_order, id;";
-                var categories = new List<(int Id, string Name, string DisplayName, int SortOrder)>();
-                using (var reader = sel.ExecuteReader())
+                var list = new List<(int Id, string Name, string Display, int So)>();
+                using (var sel = conn.CreateCommand())
                 {
-                    while (reader.Read())
+                    sel.Transaction = tx;
+                    sel.CommandText = "SELECT id, name, display_name, sort_order FROM cad_categories";
+                    using var r = sel.ExecuteReader();
+                    while (r.Read())
                     {
-                        categories.Add((
-                            reader.GetInt32("id"),
-                            reader.IsDBNull(reader.GetOrdinal("name")) ? "" : reader.GetString("name"),
-                            reader.IsDBNull(reader.GetOrdinal("display_name")) ? "" : reader.GetString("display_name"),
-                            reader.IsDBNull(reader.GetOrdinal("sort_order")) ? 0 : reader.GetInt32("sort_order")
-                        ));
+                        int id = r.GetInt32("id");
+                        string name = r.IsDBNull(r.GetOrdinal("name")) ? "未命名分类" : r.GetString("name");
+                        string disp = r.IsDBNull(r.GetOrdinal("display_name")) ? name : r.GetString("display_name");
+                        int sort = r.IsDBNull(r.GetOrdinal("sort_order")) ? 0 : r.GetInt32("sort_order");
+                        list.Add((id, name, disp, sort));
                     }
                 }
+                if (list.Count == 0) { tx.Commit(); return; }
 
-                if (categories.Count == 0)
+                var affectedRows = 0;
+                foreach (var c in list)
                 {
-                    tx.Commit();
-                    return;
-                }
-
-                bool hasCadColumn;
-                using (var colCheck = conn.CreateCommand())
-                {
-                    colCheck.Transaction = tx;
-                    colCheck.CommandText = "SELECT COUNT(1) FROM information_schema.columns WHERE table_schema = @schema AND table_name = 'departments' AND column_name = 'cad_category_id';";
-                    colCheck.Parameters.AddWithValue("@schema", conn.Database);
-                    hasCadColumn = Convert.ToInt32(colCheck.ExecuteScalar() ?? 0) > 0;
-                }
-
-                if (hasCadColumn)
-                {
-                    using (var upsert = conn.CreateCommand())
+                    int? matchedDepartmentId = null;
+                    using (var chkByCategory = conn.CreateCommand())
                     {
-                        upsert.Transaction = tx;
-                        upsert.CommandText = @"
-                            INSERT INTO departments (cad_category_id, name, display_name, sort_order, is_active, created_at)
-                            VALUES (@cad, @name, @display, @so, 1, NOW())
-                            ON DUPLICATE KEY UPDATE
-                                name = VALUES(name),
-                                display_name = VALUES(display_name),
-                                sort_order = VALUES(sort_order),
-                                is_active = 1,
-                                updated_at = CURRENT_TIMESTAMP;";
-                        upsert.Parameters.Add("@cad", MySqlDbType.Int32);
-                        upsert.Parameters.Add("@name", MySqlDbType.VarChar);
-                        upsert.Parameters.Add("@display", MySqlDbType.VarChar);
-                        upsert.Parameters.Add("@so", MySqlDbType.Int32);
-
-                        foreach (var c in categories)
-                        {
-                            upsert.Parameters["@cad"].Value = c.Id;
-                            upsert.Parameters["@name"].Value = c.Name ?? "";
-                            upsert.Parameters["@display"].Value = string.IsNullOrEmpty(c.DisplayName) ? (c.Name ?? "") : c.DisplayName;
-                            upsert.Parameters["@so"].Value = c.SortOrder;
-                            upsert.ExecuteNonQuery();
-                        }
+                        chkByCategory.Transaction = tx;
+                        chkByCategory.CommandText = "SELECT id FROM departments WHERE cad_category_id = @id";
+                        chkByCategory.Parameters.AddWithValue("@id", c.Id);
+                        var existingId = chkByCategory.ExecuteScalar();
+                        if (existingId != null && existingId != DBNull.Value)
+                            matchedDepartmentId = Convert.ToInt32(existingId);
                     }
-                }
-                else
-                {
-                    foreach (var c in categories)
+                    if (!matchedDepartmentId.HasValue)
                     {
-                        using (var find = conn.CreateCommand())
-                        {
-                            find.Transaction = tx;
-                            find.CommandText = "SELECT id FROM departments WHERE name = @name LIMIT 1;";
-                            find.Parameters.AddWithValue("@name", c.Name ?? "");
-                            var existingId = Convert.ToInt32(find.ExecuteScalar() ?? 0);
-                            if (existingId > 0)
-                            {
-                                using (var upd = conn.CreateCommand())
-                                {
-                                    upd.Transaction = tx;
-                                    upd.CommandText = "UPDATE departments SET display_name=@display, sort_order=@so, updated_at=CURRENT_TIMESTAMP WHERE id=@id;";
-                                    upd.Parameters.AddWithValue("@display", string.IsNullOrEmpty(c.DisplayName) ? (c.Name ?? "") : c.DisplayName);
-                                    upd.Parameters.AddWithValue("@so", c.SortOrder);
-                                    upd.Parameters.AddWithValue("@id", existingId);
-                                    upd.ExecuteNonQuery();
-                                }
-                            }
-                            else
-                            {
-                                using (var ins = conn.CreateCommand())
-                                {
-                                    ins.Transaction = tx;
-                                    ins.CommandText = "INSERT INTO departments (name, display_name, sort_order, is_active, created_at) VALUES (@name, @display, @so, 1, NOW());";
-                                    ins.Parameters.AddWithValue("@name", c.Name ?? "");
-                                    ins.Parameters.AddWithValue("@display", string.IsNullOrEmpty(c.DisplayName) ? (c.Name ?? "") : c.DisplayName);
-                                    ins.Parameters.AddWithValue("@so", c.SortOrder);
-                                    ins.ExecuteNonQuery();
-                                }
-                            }
-                        }
+                        using var chkByName = conn.CreateCommand();
+                        chkByName.Transaction = tx;
+                        chkByName.CommandText = "SELECT id FROM departments WHERE name = @name";
+                        chkByName.Parameters.AddWithValue("@name", c.Name);
+                        var existingId = chkByName.ExecuteScalar();
+                        if (existingId != null && existingId != DBNull.Value)
+                            matchedDepartmentId = Convert.ToInt32(existingId);
                     }
+                    using var cmd = conn.CreateCommand();
+                    cmd.Transaction = tx;
+                    if (matchedDepartmentId.HasValue)
+                    {
+                        cmd.CommandText = @"UPDATE departments SET cad_category_id=@cid, name=@n,
+display_name=@d, sort_order=@s, is_active=1, updated_at=CURRENT_TIMESTAMP WHERE id=@deptId";
+                        cmd.Parameters.AddWithValue("@deptId", matchedDepartmentId.Value);
+                    }
+                    else
+                    {
+                        cmd.CommandText = @"INSERT INTO departments
+(cad_category_id, name, display_name, sort_order, is_active, created_at)
+VALUES (@cid, @n, @d, @s, 1, CURRENT_TIMESTAMP)";
+                    }
+                    cmd.Parameters.AddWithValue("@cid", c.Id);
+                    cmd.Parameters.AddWithValue("@n", c.Name);
+                    cmd.Parameters.AddWithValue("@d", string.IsNullOrEmpty(c.Display) ? c.Name : c.Display);
+                    cmd.Parameters.AddWithValue("@s", c.So);
+                    affectedRows += cmd.ExecuteNonQuery();
                 }
-
                 tx.Commit();
+                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories_MySQL: 完成，受影响 {affectedRows} 行");
             }
-            catch (Exception ex)
+            catch
             {
-                try { tx.Rollback(); } catch { }
-                LogManager.Instance.LogInfo($"SyncDepartmentsFromCadCategories 失败: {ex.Message}");
+                tx.Rollback();
                 throw;
             }
         }
@@ -662,6 +624,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         #endregion
 
         #region 部门 CRUD 与用户分配
+
+
         /// <summary>
         /// 新增部门
         /// </summary>
@@ -971,9 +935,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         private static string ComputeHash(string password, string salt)
         {
             using var sha = SHA256.Create();
-            var bytes = Encoding.UTF8.GetBytes((salt ?? "") + password);
-            var hashed = sha.ComputeHash(bytes);
-            return BitConverter.ToString(hashed).Replace("-", "").ToLowerInvariant();
+            byte[] bytes = Encoding.UTF8.GetBytes(password + salt);
+            return Convert.ToBase64String(sha.ComputeHash(bytes));
         }
         /// <summary>
         /// 生成盐值,为密码加密16字节随机数的十六进制表示
@@ -981,46 +944,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns>盐值</returns>
         private static string GenerateSalt()
         {
-            var b = new byte[16];
-            using var rng = RandomNumberGenerator.Create();
-            rng.GetBytes(b);
-            return BitConverter.ToString(b).Replace("-", "").ToLowerInvariant();
+            byte[] bytes = new byte[32];
+            using var rng = RandomNumberGenerator.Create();  // 使用新的 API，但输出格式不变
+            rng.GetBytes(bytes);
+            return Convert.ToBase64String(bytes);
         }
 
         #endregion
     }
 
-    /// <summary>
-    /// 简单模型用于返回数据
-    /// </summary>
-    /// <remarks></remarks>
-    public class DepartmentModel
-    {
-        public int Id { get; set; }
-        public int? CadCategoryId { get; set; }
-        public string? Name { get; set; }
-        public string? RealName { get; set; }
-        public string? Description { get; set; }
-        public int? ManagerUserId { get; set; }
-        public int SortOrder { get; set; }
-        public bool IsActive { get; set; }
-        public int UserCount { get; set; }
-    }
-    /// <summary>
-    /// 用户模型
-    /// </summary>
-    public class UserModel
-    {
-        public int Id { get; set; }// 用户ID
-        public string? Username { get; set; }// 用户名
-        public string? RealName { get; set; }// 真实姓名
-        public string? DisplayName { get; set; }// 真实姓名/显示名（兼容旧命名）
-        public string? FullName { get; set; }// 姓名（兼容旧绑定）
-        public string? DepartmentName { get; set; }// 所属部门
-        public string? Gender { get; set; }// 性别
-        public string? Email { get; set; }// 邮箱
-        public string? Phone { get; set; }// 手机
-        public string? Role { get; set; }// 角色
-        public bool IsActive { get; set; }// 是否激活
-    }
 }

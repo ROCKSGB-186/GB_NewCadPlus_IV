@@ -12,14 +12,7 @@ namespace GB_NewCadPlus_IV.DMDatabaseReader
 {
     // 修复方法：将原先嵌套在 DMDatabaseReader 静态类内部的 DTO 类移动到命名空间级别。
     // 这样在其他地方引用时就不会因为“类名与命名空间同名”而产生歧义。
-
-    // 表信息类：定义在命名空间下，方便引用
-    public class TableInfo
-    {
-        public string TableName { get; set; }
-        public string TableComment { get; set; }
-    }
-
+    
     // 列信息类
     public class ColumnInfo
     {

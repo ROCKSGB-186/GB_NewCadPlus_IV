@@ -303,11 +303,96 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public async Task<FileStorage> GetFileStorageAsync(string fileHash)
         {
-            await Task.Yield();
-            // 内部可按需调用现有的 GetFileByIdAsync 逻辑或 SQL
-            return null;
+            if (string.IsNullOrWhiteSpace(fileHash)) return null;
+
+            const string sql = @"
+              SELECT 
+                  id AS Id,
+                  category_id AS CategoryId,
+                  file_attribute_id AS FileAttributeId,
+                  file_name AS FileName,
+                  file_stored_name AS FileStoredName,
+                  display_name AS DisplayName,
+                  file_type AS FileType,
+                  file_hash AS FileHash,
+                  block_name AS BlockName,
+                  layer_name AS LayerName,
+                  color_index AS ColorIndex,
+                  scale AS Scale,
+                  file_path AS FilePath,
+                  preview_image_name AS PreviewImageName,
+                  preview_image_path AS PreviewImagePath,
+                  description AS Description,
+                  version AS Version,
+                  is_preview AS IsPreview,
+                  is_active AS IsActive,
+                  created_by AS CreatedBy,
+                  category_type AS CategoryType,
+                  title AS Title,
+                  keywords AS Keywords,
+                  is_public AS IsPublic,
+                  updated_by AS UpdatedBy,
+                  last_accessed_at AS LastAccessedAt,
+                  created_at AS CreatedAt,
+                  updated_at AS UpdatedAt
+              FROM cad_file_storage
+              WHERE file_hash = :FileHash
+              FETCH FIRST 1 ROWS ONLY";
+
+            try
+            {
+                using var conn = GetConnection();
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = _adapter.DatabaseType == "MySQL"
+                    ? sql.Replace(":FileHash", "@FileHash").Replace("FETCH FIRST 1 ROWS ONLY", "LIMIT 1")
+                    : _adapter.NormalizeSql(sql);
+                AddParam(cmd, "FileHash", fileHash);
+
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read()) return null;
+
+                var f = new FileStorage();
+                // ... 列映射省略，参照您已有的 GetFileByIdAsync 写法 ...
+                int ord;
+                ord = reader.GetOrdinal("Id"); f.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("CategoryId"); f.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("FileAttributeId"); f.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileName"); f.FileName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileStoredName"); f.FileStoredName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("DisplayName"); f.DisplayName = reader.IsDBNull(ord) ? f.FileName : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileType"); f.FileType = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("FileHash"); f.FileHash = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("BlockName"); f.BlockName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("LayerName"); f.LayerName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("ColorIndex"); f.ColorIndex = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("Scale"); f.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                ord = reader.GetOrdinal("FilePath"); f.FilePath = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImageName"); f.PreviewImageName = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("PreviewImagePath"); f.PreviewImagePath = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("Description"); f.Description = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("Version"); f.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("IsPreview"); f.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("IsActive"); f.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                ord = reader.GetOrdinal("CreatedBy"); f.CreatedBy = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("CategoryType"); f.CategoryType = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("Title"); f.Title = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("Keywords"); f.Keywords = reader.IsDBNull(ord) ? string.Empty : reader.GetString(ord);
+                ord = reader.GetOrdinal("IsPublic"); f.IsPublic = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                ord = reader.GetOrdinal("UpdatedBy"); f.UpdatedBy = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                ord = reader.GetOrdinal("LastAccessedAt"); f.LastAccessedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("CreatedAt"); f.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                ord = reader.GetOrdinal("UpdatedAt"); f.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+
+                return f;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"GetFileStorageAsync 出错: {ex.Message}");
+                return null;
+            }
         }
-        
+
         /// <summary>
         /// 补齐：构建属性表插入值字典
         /// </summary>
@@ -1655,90 +1740,211 @@ WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.
         /// <summary>
         /// 新增：按文件哈希获取“主记录 + JSON 属性字典 + 配置名”
         /// </summary>
+        //        public async Task<(FileStorage File, Dictionary<string, string> Attributes, string ConfigName)> GetFileStorageWithAttributesByHashAsync(
+        //    string filehash,
+        //    string preferredConfigName = null)
+        //        {
+        //            // 1. 获取主记录
+        //            var fileStorage = await GetFileStorageAsync(filehash).ConfigureAwait(false);
+        //            if (fileStorage == null)
+        //                return (null, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+
+        //            // 2. 构造两个查询（按配置名、按最新），自动适配分页语法
+        //            string GetAttrSql(bool byConfig)
+        //            {
+        //                string baseSql = byConfig ?
+        //                    @"SELECT config_name AS ConfigName, attributes_json AS AttributesJson
+        //FROM cad_block_attributes_json
+        //WHERE file_id = @FileId
+        //  AND config_name = @ConfigName
+        //ORDER BY attr_id DESC" :
+        //                    @"SELECT config_name AS ConfigName, attributes_json AS AttributesJson
+        //FROM cad_block_attributes_json
+        //WHERE file_id = @FileId
+        //ORDER BY attr_id DESC";
+
+        //                // 根据数据库类型添加不同的限制子句
+        //                if (_adapter.DatabaseType == "MySQL")
+        //                    return baseSql + " LIMIT 1";
+        //                else
+        //                    return baseSql + " FETCH FIRST 1 ROWS ONLY";
+        //            }
+
+        //            try
+        //            {
+        //                // 确定优先配置名：优先参数，其次 file.FileAttributeId
+        //                var configName = string.IsNullOrWhiteSpace(preferredConfigName)
+        //                    ? (fileStorage.FileAttributeId ?? string.Empty)
+        //                    : preferredConfigName.Trim();
+
+        //                // ---- MySQL 分支 ----
+        //                if (_adapter.DatabaseType == "MySQL")
+        //                {
+        //                    using var connection = new MySqlConnection(_connectionString);
+
+        //                    (string ConfigName, string AttributesJson)? row = null;
+
+        //                    if (!string.IsNullOrWhiteSpace(configName))
+        //                    {
+        //                        row = await connection.QueryFirstOrDefaultAsync<(string, string)>(
+        //                            GetAttrSql(true), new { FileId = fileStorage.Id, ConfigName = configName }).ConfigureAwait(false);
+        //                    }
+
+        //                    if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+        //                    {
+        //                        row = await connection.QueryFirstOrDefaultAsync<(string, string)>(
+        //                            GetAttrSql(false), new { FileId = fileStorage.Id }).ConfigureAwait(false);
+        //                    }
+
+        //                    if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
+        //                        return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+
+        //                    string rawJson = row.Value.AttributesJson;
+        //                    LogManager.Instance.LogDebug($"从数据库读取到的属性JSON（MySQL）：{rawJson}");
+
+        //                    var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(rawJson)
+        //                               ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        //                    return (fileStorage, dict, row.Value.ConfigName ?? string.Empty);
+        //                }
+
+        //                // ---- 达梦（DM）分支 ----
+        //                using var dconn = GetConnection();
+        //                dconn.Open();
+
+        //                string? attributesJson = null;
+        //                string foundConfigName = string.Empty;
+
+        //                // 按配置名查询（优先）
+        //                if (!string.IsNullOrWhiteSpace(configName))
+        //                {
+        //                    using var cmd = dconn.CreateCommand();
+        //                    cmd.CommandText = _adapter.NormalizeSql(GetAttrSql(true));
+        //                    AddDmParam(cmd, "FileId", fileStorage.Id);
+        //                    AddDmParam(cmd, "ConfigName", configName);
+        //                    using var rdr = cmd.ExecuteReader();
+        //                    if (rdr.Read())
+        //                    {
+        //                        attributesJson = rdr.IsDBNull(1) ? null : rdr.GetString(1);
+        //                        foundConfigName = rdr.IsDBNull(0) ? string.Empty : rdr.GetString(0);
+        //                    }
+        //                }
+
+        //                // 兜底查询（取最新）
+        //                if (string.IsNullOrWhiteSpace(attributesJson))
+        //                {
+        //                    using var cmd2 = dconn.CreateCommand();
+        //                    cmd2.CommandText = _adapter.NormalizeSql(GetAttrSql(false));
+        //                    AddDmParam(cmd2, "FileId", fileStorage.Id);
+        //                    using var rdr2 = cmd2.ExecuteReader();
+        //                    if (rdr2.Read())
+        //                    {
+        //                        attributesJson = rdr2.IsDBNull(1) ? null : rdr2.GetString(1);
+        //                        foundConfigName = rdr2.IsDBNull(0) ? string.Empty : rdr2.GetString(0);
+        //                    }
+        //                }
+
+        //                if (string.IsNullOrWhiteSpace(attributesJson))
+        //                    return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+
+        //                var dictDm = JsonConvert.DeserializeObject<Dictionary<string, string>>(attributesJson)
+        //                             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        //                return (fileStorage, dictDm, foundConfigName ?? string.Empty);
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                LogManager.Instance.LogError($"GetFileStorageWithAttributesByHashAsync 出错: {ex.Message}");
+        //                return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+        //            }
+        //        }
+
+
         public async Task<(FileStorage File, Dictionary<string, string> Attributes, string ConfigName)> GetFileStorageWithAttributesByHashAsync(
             string filehash,
             string preferredConfigName = null)
         {
-            // 先拿主记录（复用现有方法）
-            var file = await GetFileStorageAsync(filehash).ConfigureAwait(false);
-
-            // 主记录不存在时，直接返回空元组内容
-            if (file == null)
+            // 1. 获取主记录
+            var fileStorage = await GetFileStorageAsync(filehash).ConfigureAwait(false);
+            if (fileStorage == null)
                 return (null, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
 
-            // 准备查询属性 JSON 的 SQL（优先配置名）
-            const string attrByConfigSql = @"
-SELECT config_name AS ConfigName, attributes_json AS AttributesJson
+            // 2. 构造 SQL（根据数据库类型使用正确占位符和限制子句）
+            string GetAttrSql(bool byConfig)
+            {
+                string prefix = _adapter.DatabaseType == "MySQL" ? "@" : ":";
+                string sql;
+                if (byConfig)
+                {
+                    sql = $@"SELECT config_name AS ConfigName, attributes_json AS AttributesJson
 FROM cad_block_attributes_json
-WHERE file_id = @FileId
-  AND config_name = @ConfigName
-ORDER BY attr_id DESC
-LIMIT 1;";
-
-            // 兜底查询（取最新）
-            const string attrLatestSql = @"
-SELECT config_name AS ConfigName, attributes_json AS AttributesJson
+WHERE file_id = {prefix}FileId
+  AND config_name = {prefix}ConfigName
+ORDER BY attr_id DESC";
+                }
+                else
+                {
+                    sql = $@"SELECT config_name AS ConfigName, attributes_json AS AttributesJson
 FROM cad_block_attributes_json
-WHERE file_id = @FileId
-ORDER BY attr_id DESC
-LIMIT 1;";
+WHERE file_id = {prefix}FileId
+ORDER BY attr_id DESC";
+                }
+                sql += _adapter.DatabaseType == "MySQL" ? " LIMIT 1" : " FETCH FIRST 1 ROWS ONLY";
+                return sql;
+            }
 
             try
             {
-                // MySQL 快捷路径
+                // 修正配置名取值：优先传入参数，否则使用 "default"
+                string configName = !string.IsNullOrWhiteSpace(preferredConfigName)
+                    ? preferredConfigName.Trim()
+                    : "default";
+
+                // ---- MySQL 分支 ----
                 if (_adapter.DatabaseType == "MySQL")
                 {
                     using var connection = new MySqlConnection(_connectionString);
 
-                    // 确定优先配置名（参数优先，其次主表 file_attribute_id）
-                    var configName = string.IsNullOrWhiteSpace(preferredConfigName)
-                        ? (file.FileAttributeId ?? string.Empty)
-                        : preferredConfigName.Trim();
-
                     (string ConfigName, string AttributesJson)? row = null;
 
-                    // 优先按配置名查
                     if (!string.IsNullOrWhiteSpace(configName))
                     {
-                        row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
-                            attrByConfigSql.Replace(":", "@"), new { FileId = file.Id, ConfigName = configName }).ConfigureAwait(false);
+                        row = await connection.QueryFirstOrDefaultAsync<(string, string)>(
+                            GetAttrSql(true), new { FileId = fileStorage.Id, ConfigName = configName }).ConfigureAwait(false);
                     }
 
-                    // 兜底查最新
                     if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
                     {
-                        row = await connection.QueryFirstOrDefaultAsync<(string ConfigName, string AttributesJson)>(
-                            attrLatestSql.Replace(":", "@"), new { FileId = file.Id }).ConfigureAwait(false);
+                        row = await connection.QueryFirstOrDefaultAsync<(string, string)>(
+                            GetAttrSql(false), new { FileId = fileStorage.Id }).ConfigureAwait(false);
                     }
 
-                    // 没有属性记录时返回空字典
                     if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
-                    {
-                        return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-                    }
+                        return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
 
-                    // 反序列化 JSON -> 字典
-                    var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(row.Value.AttributesJson)
+                    string rawJson = row.Value.AttributesJson;
+                    LogManager.Instance.LogDebug($"从数据库读取到的属性JSON（MySQL）：{rawJson}");
+
+                    var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(rawJson)
                                ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                    // 返回聚合结果
-                    return (file, dict, row.Value.ConfigName ?? string.Empty);
+                    return (fileStorage, dict, row.Value.ConfigName ?? string.Empty);
                 }
 
-                // 达梦路径：手动查询并映射
+                // ---- 达梦（DM）分支 ----
                 using var dconn = GetConnection();
                 dconn.Open();
 
-                var config = string.IsNullOrWhiteSpace(preferredConfigName) ? (file.FileAttributeId ?? string.Empty) : preferredConfigName.Trim();
                 string? attributesJson = null;
                 string foundConfigName = string.Empty;
 
-                if (!string.IsNullOrWhiteSpace(config))
+                // 优先按配置名查询
+                if (!string.IsNullOrWhiteSpace(configName))
                 {
                     using var cmd = dconn.CreateCommand();
-                    cmd.CommandText = _adapter.NormalizeSql(attrByConfigSql);
-                    AddDmParam(cmd, "FileId", file.Id);
-                    AddDmParam(cmd, "ConfigName", config);
+                    cmd.CommandText = GetAttrSql(true); // SQL 中已含正确的 :FileId 等
+                    AddDmParam(cmd, "FileId", fileStorage.Id);
+                    AddDmParam(cmd, "ConfigName", configName);
                     using var rdr = cmd.ExecuteReader();
                     if (rdr.Read())
                     {
@@ -1747,11 +1953,12 @@ LIMIT 1;";
                     }
                 }
 
+                // 兜底查询（取最新一条）
                 if (string.IsNullOrWhiteSpace(attributesJson))
                 {
                     using var cmd2 = dconn.CreateCommand();
-                    cmd2.CommandText = _adapter.NormalizeSql(attrLatestSql);
-                    AddDmParam(cmd2, "FileId", file.Id);
+                    cmd2.CommandText = GetAttrSql(false);
+                    AddDmParam(cmd2, "FileId", fileStorage.Id);
                     using var rdr2 = cmd2.ExecuteReader();
                     if (rdr2.Read())
                     {
@@ -1759,25 +1966,21 @@ LIMIT 1;";
                         foundConfigName = rdr2.IsDBNull(0) ? string.Empty : rdr2.GetString(0);
                     }
                 }
-
+                // 最终检查：如果仍未获取到有效的 JSON，则返回空字典和空配置名
                 if (string.IsNullOrWhiteSpace(attributesJson))
-                {
-                    return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-                }
-
-                var dictDm = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(attributesJson)
+                    return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+                // 解析 JSON 到字典（使用不区分大小写的比较器）
+                var dictDm = JsonConvert.DeserializeObject<Dictionary<string, string>>(attributesJson)
                              ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                return (file, dictDm, foundConfigName ?? string.Empty);
+                return (fileStorage, dictDm, foundConfigName ?? string.Empty);
             }
             catch (Exception ex)
             {
-                // 异常时记录日志并返回主记录+空字典
-                LogManager.Instance.LogInfo($"GetFileStorageWithAttributesByHashAsync 出错: {ex.Message}");
-                return (file, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
+                LogManager.Instance.LogError($"GetFileStorageWithAttributesByHashAsync 出错: {ex.Message}");
+                return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
             }
         }
-
 
         /// <summary>
         /// 新方案——插入文件主记录 + JSON属性记录（事务）

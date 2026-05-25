@@ -55,10 +55,12 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// 创建人
         /// </summary>
         public string? CreatedBy { get; set; }
+
         /// <summary>
         /// JSON属性字典（新上传入口使用）
         /// </summary>
-        public Dictionary<string, string> AttributesJson { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> AttributesJson { get; set; }
+            = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>
         /// 属性业务ID（兼容字段）
         /// </summary>
@@ -106,6 +108,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public DateTime UpdatedAt { get; set; }
         // 是否天正（兼容旧代码使用的字段）
         public int? IsTianZheng { get; set; }
+        /// <summary>
+        /// JSON属性字典（新上传入口使用）
+        /// </summary>
+        public Dictionary<string, string> AttributesJson { get; set; }
+            = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
     /// <summary>
     /// 同步清单模型，用于描述服务器和客户端文件状态的对比结果，辅助同步决策。
@@ -268,5 +275,78 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public DateTime AccessTime { get; set; }
         // 访问IP，允许为空
         public string? IpAddress { get; set; }
+    }
+    /// <summary>
+    /// 部门信息模型
+    /// </summary>
+    public class DepartmentModel
+    {
+        /// <summary>
+        ///  id 
+        /// </summary>
+        public int Id { get; set; }
+        /// <summary>
+        /// cad分类id，关联cad_category表的id字段，表示该部门所属的CAD分类。允许为空以兼容旧数据结构和历史数据导入。通过这个字段可以将部门与特定的CAD分类关联起来，便于在系统中进行分类管理和权限控制。
+        /// </summary>
+        public int? CadCategoryId { get; set; }
+        /// <summary>
+        /// 部门名称，允许为空以兼容旧数据结构和历史数据导入。这个字段用于存储部门的名称信息，在系统中显示和识别部门。由于历史数据可能存在缺失或不完整的部门名称，因此允许该字段为空以确保数据兼容性和系统稳定性。
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+        /// <summary>
+        /// 真实名称
+        /// </summary>
+        public string RealName { get; set; } = string.Empty;
+        /// <summary>
+        /// 显示名称
+        /// </summary>
+        public string DisplayName { get; set; } = string.Empty;
+        /// <summary>
+        /// 描述
+        /// </summary>
+        public string Description { get; set; } = string.Empty;
+        /// <summary>
+        /// 排序顺序
+        /// </summary>
+        public int SortOrder { get; set; }
+        /// <summary>
+        /// 管理员用户id
+        /// </summary>
+        public int? ManagerUserId { get; set; }        // ★ 新增：部门经理用户ID
+        /// <summary>
+        /// 是否启用，默认为true。
+        /// </summary>
+        public bool IsActive { get; set; } = true;
+        /// <summary>
+        /// 用户数量，表示该部门下的用户总数。
+        /// </summary>
+        public int UserCount { get; set; }
+    }
+
+    /// <summary>
+    /// 用户信息模型
+    /// </summary>
+    public class UserModel
+    {
+        public int Id { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string RealName { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Gender { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public string DepartmentName { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+    }
+
+    /// <summary>
+    /// 表信息模型（用于数据库浏览）
+    /// </summary>
+    public class TableInfo
+    {
+        public string TableName { get; set; } = string.Empty;
+        public string TableComment { get; set; } = string.Empty;
     }
 }

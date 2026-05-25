@@ -13,7 +13,8 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
     {
         #region 服务器端字段和属性
         public static string? _serverIP;//服务器IP地址
-        public static int _serverPort;//服务器端口号
+        public static int _dataBaseServerPort;//服务器端口号
+        public static int _apiPort = 10010;   // 默认为 10010，后续可从配置文件中动态加载
         public static string _dataBaseName = "cad_sw_library";//数据库名称
         public static string? _userName;//应用登录用户名（users 表）
         public static string? _passWord;//应用登录密码（users 表）
@@ -28,6 +29,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         public static bool winForm_Status = false;//winForm状态
         public static bool radioButton = false;//二层传递窗单选按钮状态
         public static string version = ""; //版本号
+        // 本地缓存根目录（与 WpfMainWindow.AppPath 保持一致）
+        public static string AppDataPath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GB_CADPLUS");
+
+        public static string PreviewCachePath => Path.Combine(AppDataPath, "PreviewCache");
+        public static string DwgCachePath => Path.Combine(AppDataPath, "DwgCache");
         #endregion
         #region 变量
         /// <summary>
