@@ -640,7 +640,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 if (userPoint1.Status != PromptStatus.OK) return; // 用户取消则退出
                 var ucsUserPoint1 = userPoint1.Value.Wcs2Ucs().Z20(); // 转换到 UCS
 
-                double uiScale = AutoCadHelper.GetScale(true); // 读取当前界面比例
+                double uiScale = AutoCadHelper.GetScale(); // 读取当前界面比例
 
                 double textHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 文字高度
                 double arrowSize = TextFontsStyleHelper.ComputeScaledHeight(2.0, uiScale); // 箭头尺寸
@@ -2632,11 +2632,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return false;
             }
         }
-        
+
 
         #endregion
 
-      
+
         #endregion
 
 
@@ -5628,6 +5628,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
+                VariableDictionary.winForm_Status = true;
+                var uiScale = AutoCadHelper.GetScale();
                 // 1) 选择文件
                 string excelPath = SelectExcelFile();
                 if (string.IsNullOrWhiteSpace(excelPath) || !File.Exists(excelPath))
@@ -5734,7 +5736,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 using (doc.LockDocument())
                 using (DBTrans tr = new())
                 {
-                    TextFontsStyleHelper.TextStyleAndLayerInfo(tr, "设备层", 1, "tJText");
+                    TextFontsStyleHelper.TextStyleAndLayerInfo(tr, "S_设备", 1, "tJText");
 
                     // 保持你原有展示顺序：数据倒序（表头会变到最后一行）
                     dataList.Reverse();
@@ -5748,7 +5750,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     var table = new Autodesk.AutoCAD.DatabaseServices.Table
                     {
                         Position = ppr.Value,
-                        Layer = "设备层"
+                        Layer = "S_设备"
                     };
                     table.SetSize(rows, cols);
 
@@ -5761,7 +5763,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             var cell = table.Cells[r, c];
                             cell.TextString = dataList[r][c];
                             cell.TextStyleId = tr.TextStyleTable["tJText"];
-                            cell.TextHeight = isHeaderRow ? 350 : 300;
+                            cell.TextHeight = isHeaderRow ? 3.5 * uiScale : 3 * uiScale;
                             cell.Alignment = CellAlignment.MiddleCenter;
                         }
                     }
@@ -5769,7 +5771,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     // 行高
                     for (int r = 0; r < rows; r++)
                     {
-                        table.Rows[r].Height = (r == rows - 1) ? 500 : 450;
+                        table.Rows[r].Height = (r == rows - 1) ? 5 * uiScale : 4.5 * uiScale;
                     }
 
                     // 列宽（按文本长度估算，并做上限保护）
@@ -5783,7 +5785,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         }
 
                         // 经验值：每字符约180，最小600，最大6000，避免异常宽列
-                        double width = Math.Min(6000.0, Math.Max(600.0, maxLen * 180.0));
+                        double width = Math.Min(60 * uiScale, Math.Max(6 * uiScale, maxLen * 1.8 * uiScale));
                         table.Columns[c].Width = width;
                     }
 

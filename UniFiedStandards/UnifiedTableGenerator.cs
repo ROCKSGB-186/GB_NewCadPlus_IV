@@ -75,8 +75,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //实例化WPF窗体
         WpfMainWindow wpfMainWindow = new WpfMainWindow();
 
-
-
         /// <summary>
         /// 主命令：生成设备材料表（按类型拆分为多个表）
         /// 修复要点：

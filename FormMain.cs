@@ -1371,6 +1371,7 @@ namespace GB_NewCadPlus_IV
         private void button_设备部位号_Click(object sender, EventArgs e)
         {
             // 设置设备位号标注的基础上下文（图层、颜色、比例等）
+            VariableDictionary.winForm_Status = true;// 标记是winfrom调用，方便命令里区分处理
             VariableDictionary.btnFileName = "TJ(设备位号)";
             VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.layerName = "TJ(设备位号)";
@@ -4366,7 +4367,7 @@ namespace GB_NewCadPlus_IV
             Env.Document.SendStringToExecute("IsFrozenLayer ", false, false, false);
             //Env.Document.SendStringToExecute("CloseLayer ", false, false, false);
         }
-        
+
         /// <summary>
         /// 生成外轮廓线
         /// </summary>
@@ -9015,7 +9016,7 @@ namespace GB_NewCadPlus_IV
 
         #endregion
 
-       
+
     }
 }
 

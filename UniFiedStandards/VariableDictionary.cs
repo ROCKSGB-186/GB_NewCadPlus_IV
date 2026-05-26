@@ -249,18 +249,19 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// </summary>
         public static List<string> SBtjtBtn = new List<string>
         {
-           "SB",
-           "设备",
            "S_设备",
-           "设备层",
-           "TJ(设备位号)",
-           "设备位号",
-           "SB(工艺设备)",
+           "S_设备名称",
            "S_工艺设备",
+           "S_办公家具",
+           "SB",
+           "SB(工艺设备)",
            "SB(设备名称)",
-           "设备名称",
            "SB(设备外框)",
-           "S_办公家具"
+           "设备",
+           "设备层",
+           "设备名称",
+           "设备位号",
+           "TJ(设备位号)"
         };
         /// <summary>
         /// 工艺条件检查
@@ -337,7 +338,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             "TJ(建筑专业J)",
             "TJ(建筑专业J)Y",
             "TJ(建筑吊顶)",
-            "TJ(建筑过结构洞口)",            
+            "TJ(建筑过结构洞口)",
         };
 
         /// <summary>
