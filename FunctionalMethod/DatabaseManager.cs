@@ -455,7 +455,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
             return values;
         }
-        
+
         /// <summary>
         /// 级联删除 CAD 图元记录
         /// </summary>
@@ -467,18 +467,28 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 using var connection = GetConnection();
-                // 达梦与 MySQL 在删除逻辑上基本一致
-                var sql = physicalDelete
-                    ? "DELETE FROM cad_file_storage WHERE id = @Id"
-                    : "UPDATE cad_file_storage SET is_active = 0 WHERE id = @Id";
+                connection.Open();
+                using var cmd = connection.CreateCommand();
 
-                // 注意：如果是达梦且未开启自动参数映射，可能需要 NormalizeSql 或手动切换参数占位符
-                var result = await ExecuteWriteAsync(connection, null, sql, new { Id = id }).ConfigureAwait(false);
-                return result > 0;
+                string sql = physicalDelete
+                    ? "DELETE FROM cad_file_storage WHERE id = :Id"
+                    : "UPDATE cad_file_storage SET is_active = 0 WHERE id = :Id";
+
+                // MySQL 参数占位符适配
+                if (_adapter.DatabaseType == "MySQL")
+                    sql = sql.Replace(":Id", "@Id");
+
+                cmd.CommandText = _adapter.NormalizeSql(sql);
+                AddParam(cmd, "Id", id);   // 使用类型安全的 AddParam 方法
+
+                int rows = cmd.ExecuteNonQuery();
+                LogManager.Instance.LogInfo($"DeleteCadGraphicCascadeAsync: id={id}, rows={rows}, physical={physicalDelete}");
+                return rows > 0;
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogInfo($"DeleteCadGraphicCascadeAsync 出错: {ex.Message}");
+                // 更详细的错误日志
+                LogManager.Instance.LogError($"DeleteCadGraphicCascadeAsync 出错: id={id}, type={_adapter.DatabaseType}, {ex.Message}");
                 return false;
             }
         }

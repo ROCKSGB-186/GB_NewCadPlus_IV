@@ -171,12 +171,14 @@ namespace GB_NewCadPlus_IV.Views
                 LogManager.Instance.LogWarning("BindPropertiesToGrid: _dto.AttributesJson 为 null");
             else
                 LogManager.Instance.LogInfo($"BindPropertiesToGrid: AttributesJson 条目数 = {_dto.AttributesJson.Count}");
-
+            // 准备显示数据时捕获异常并记录日志，避免因单条数据问题导致整个绑定失败
             var displayData = _mainWindow.PrepareFileDisplayData(_dto.FileStorage, _dto.AttributesJson);
             if (displayData == null || !displayData.Any())
                 LogManager.Instance.LogWarning("PrepareFileDisplayData 返回空集合");
 
-            PropertiesGrid.ItemsSource = displayData;
+            PropertiesGrid.ItemsSource = null; // 先清空绑定，确保 UI 能正确刷新，避免因旧数据残留导致的显示异常
+            
+            PropertiesGrid.ItemsSource = displayData;// 绑定数据源到数据网格，确保 UI 能正确显示属性列表，避免因绑定问题导致的显示异常
         }
 
         /// <summary>
@@ -211,8 +213,12 @@ namespace GB_NewCadPlus_IV.Views
                         string destFileName = Path.Combine(str1, $"preview_uploaded_{Guid.NewGuid()}{str2}"); // 构建目标文件路径，使用 GUID 确保文件名唯一，避免多次上传导致的文件覆盖问题
                         File.Copy(fileName, destFileName); // 复制文件到目标路径，使用 File.Copy 而非 File.Move 保持原文件不变，避免用户误操作导致数据丢失
                         this._dto.PreviewImagePath = destFileName; // 更新 DTO 中的预览图路径，确保后续加载预览图时能正确找到新文件
+                        this._dto.PreviewImageName = fileName; // 同时更新预览图文件名字段，保持 DTO 数据的一致性，避免后续使用时因字段不一致导致的问题
+                        this._dto.FileStorage.PreviewImagePath = destFileName; // 更新 DTO 中的预览图路径，确保后续加载预览图时能正确找到新文件
+                        this._dto.FileStorage.PreviewImageName = fileName; // 同时更新预览图文件名字段，保持 DTO 数据的一致性，避免后续使用时因字段不一致导致的问题
                         LogManager.Instance.LogInfo("预览图已从文件选择保存到: " + destFileName); // 成功保存预览图后，立即加载显示新预览图，提供即时反馈
                         this.Dispatcher.BeginInvoke((Delegate)(() => this.LoadPreviewImage()), DispatcherPriority.Render); // 使用 Dispatcher 调度加载预览图，确保 UI 线程安全地更新图片显示，避免因直接调用 LoadPreviewImage 导致的线程问题
+                        BindPropertiesToGrid();// 绑定数据源 绑定属性到数据网格 绑定属性到数据网格
                     }
                     catch (Exception ex)
                     {
@@ -479,14 +485,14 @@ namespace GB_NewCadPlus_IV.Views
             _dto.DisplayName = _dto.FileStorage.DisplayName ?? string.Empty;
             _dto.BlockName = _dto.FileStorage.BlockName ?? string.Empty;
             _dto.LayerName = _dto.FileStorage.LayerName ?? string.Empty;
-            _dto.ColorIndex = _dto.FileStorage.ColorIndex ;
+            _dto.ColorIndex = _dto.FileStorage.ColorIndex;
             _dto.Scale = _dto.FileStorage.Scale;
-            _dto.CategoryId = _dto.FileStorage.CategoryId ;
-            _dto.CategoryType = _dto.FileStorage.CategoryType ;
+            _dto.CategoryId = _dto.FileStorage.CategoryId;
+            _dto.CategoryType = _dto.FileStorage.CategoryType;
             _dto.CreatedBy = _dto.FileStorage.CreatedBy;
-            _dto.Description= _dto.FileStorage.Description;
-            _dto.PreviewImageName= _dto.FileStorage.PreviewImageName;
-            _dto.PreviewImagePath= _dto.FileStorage.PreviewImagePath;
+            _dto.Description = _dto.FileStorage.Description;
+            _dto.PreviewImageName = _dto.FileStorage.PreviewImageName;
+            _dto.PreviewImagePath = _dto.FileStorage.PreviewImagePath;
 
         }
 

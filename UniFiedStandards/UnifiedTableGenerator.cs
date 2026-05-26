@@ -76,9 +76,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         WpfMainWindow wpfMainWindow = new WpfMainWindow();
 
 
-        /// <summary>
-        /// 主命令：生成设备材料表（按类型拆分为多个表）arrowEntities
-        /// </summary>
+
         /// <summary>
         /// 主命令：生成设备材料表（按类型拆分为多个表）
         /// 修复要点：
@@ -86,7 +84,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// - 直接使用 SelectAndAnalyzeBlocks 内的选择逻辑
         /// - 每生成并插入一个表后立即刷新界面，确保用户能看到刚插入的表
         /// </summary>
-        [CommandMethod("GenerateDeviceTable")]
+        [CommandMethod(nameof(GenerateDeviceTable))]
         public void GenerateDeviceTable()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
@@ -170,7 +168,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     }
 
                     // 统一比例来源——强制使用 AutoCadHelper.GetScale(...)（禁用缓存，避免刚切视口时读到旧值）
-                    double rawScale = AutoCadHelper.GetScale(useCache: false);
+                    double rawScale = AutoCadHelper.GetScale();
                     // 把 GetScale 返回值统一归一化为“比例分母”（例如 0.01->100，100->100，1->1）
                     double scaleDenom = TextFontsStyleHelper.DetermineScaleDenominator(rawScale, null, roundToCommon: false);
                     // 兜底保护，防止非法值导致表格高度异常
@@ -630,7 +628,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     }
                     estimatedWidth = maxLineWidth;
                     // 增加左右边距 (Padding)，减小边距让列更紧凑
-                    double padding = textHeight * 1.0;
+                    double padding = textHeight * 2.0;
                     estimatedWidth += padding;
 
                     if (estimatedWidth > maxWidthInCol)
@@ -641,7 +639,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                 // 设置列宽，设置一个最小宽度以防万一
                 // 【修改点】减小最小宽度系数，从 4.0 改为 3.0，让短列更紧凑
-                double minWidth = textHeight * 1.0;
+                double minWidth = textHeight * 2.0;
                 if (maxWidthInCol < minWidth) maxWidthInCol = minWidth;
 
                 // 设置最大宽度限制，防止某列特别长导致表格过宽
@@ -6199,7 +6197,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <param name="db">当前数据库</param>
         /// <param name="deviceList">设备信息列表</param>
         /// <param name="scaleDenominator">绘图比例分母（用于计算文字高度和行高）</param>
-        private void CreateDeviceTable(Database db, List<DeviceInfo> deviceList, double scaleDenominator = 0.0, IEnumerable<string> includedFields = null)
+        private void CreateDeviceTable(Database db, List<DeviceInfo> deviceList, double scaleDenominator = 1, IEnumerable<string> includedFields = null)
         {
             // 如果设备列表为空，直接返回
             if (deviceList == null || deviceList.Count == 0) return;
