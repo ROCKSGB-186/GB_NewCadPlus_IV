@@ -1287,6 +1287,8 @@ namespace GB_NewCadPlus_IV.Helpers
             try
             {
                 string? runPath = null;
+                VariableDictionary.textBoxScale=AutoCadHelper.GetScale();
+                //VariableDictionary.entityRotateAngle = 0;
 
                 // 如果有字节缓存，则每次重复都新建一个临时文件
                 if (_lastCopyDwgBytes != null && _lastCopyDwgBytes.Length > 0)
@@ -1687,6 +1689,15 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 // 重置 WinForm 状态标志
                 VariableDictionary.winForm_Status = false;
+                //VariableDictionary.btnFileName = null;
+                //VariableDictionary.entityRotateAngle = 0;
+                //VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
+                //VariableDictionary.TCH_Ptj_No = 0;
+                //VariableDictionary.blockScale = AutoCadHelper.GetScale();
+                //VariableDictionary.layerName = null;
+                //VariableDictionary.layerColorIndex = 1;
+                //VariableDictionary.textColorIndex = 1;
+
             }
             catch (Exception ex) // 捕获整个执行过程中的任何未预期异常
             {

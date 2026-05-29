@@ -28,6 +28,7 @@ namespace GB_NewCadPlus_IV
             this.textBox_Scale_比例.Leave += textBox_Scale_比例_Leave;
             // 获取程序集版本号 (AssemblyVersion)
             VariableDictionary.version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            VariableDictionary.serverVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
             this.label_VER.Text = "版本号：" + VariableDictionary.version;
             this.about_label_版本.Text = "版本号：" + VariableDictionary.version;
             //记录运行时间
@@ -40,7 +41,6 @@ namespace GB_NewCadPlus_IV
             InitializePlaceholders();
             // 修正：将特定逻辑的初始化提取出来，单独调用一次
             InitializeTwoStoreyLogic();
-
             // 添加可切换的 RadioButton（递归绑定点击事件）
             AttachToggleableRadioButtons(this);
         }
@@ -1931,7 +1931,7 @@ namespace GB_NewCadPlus_IV
         {
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
-            //VariableDictionary.btnFileName = "JZTJ_排水沟";
+            VariableDictionary.btnFileName = "JZTJ_排水沟";
             //VariableDictionary.buttonText = "JZTJ_排水沟";
             //VariableDictionary.btnFileName_blockName = "$TWTSYS$00000508";
             //VariableDictionary.btnBlockLayer = "TJ(建筑专业J)";
@@ -2010,13 +2010,10 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "ZKTJ_EQUIP_电话插座";
             VariableDictionary.btnFileName_blockName = "$equip$00001867";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "EQUIP-通讯";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 3;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.ZKTJ_EQUIP_电话插座;
-            //VariableDictionary.blockScale = 500;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -2027,13 +2024,10 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "ZKTJ_EQUIP_网络插座";
             VariableDictionary.btnFileName_blockName = "$equip$00001847";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "EQUIP-通讯";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 3;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.ZKTJ_EQUIP_网络插座;
-            //VariableDictionary.blockScale = 500;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -2044,13 +2038,10 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "ZKTJ_EQUIP_电话网络插座";
             VariableDictionary.btnFileName_blockName = "ZKTJ-电话网络插座";
-            // VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "EQUIP-通讯";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 3;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.ZKTJ_EQUIP_电话网络插座;
-            //VariableDictionary.blockScale = 500;
-            VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) * 5;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
+            VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) * 1;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -2061,13 +2052,10 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "ZKTJ_EQUIP_安防监控";
             VariableDictionary.btnFileName_blockName = "HC002695005706";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "EQUIP-安防";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 3;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.ZKTJ_EQUIP_安防监控;
-            //VariableDictionary.blockScale = 500;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -2368,12 +2356,10 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "ZKTJ_EQUIP_防爆型电话机";
             VariableDictionary.btnFileName_blockName = "$equip$00003047";
-            // VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "EQUIP-通讯";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 3;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.ZKTJ_EQUIP_防爆型电话机;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -2383,14 +2369,10 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "ZKTJ_EQUIP_半球彩色摄像机";
-            VariableDictionary.btnFileName_blockName = "$equip$00002353";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.btnBlockLayer = "EQUIP-安防";//设置为被插入的图层名
             VariableDictionary.layerColorIndex = 3;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.ZKTJ_EQUIP_半球彩色摄像机;
-            //VariableDictionary.blockScale = 500;
-            VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 125;
-            //Env.Document.SendStringToExecute("GB_InsertBlock ", false, false, false);
+            VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
             System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
             GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
@@ -2691,9 +2673,8 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "PTJ_小便器给水";
-            VariableDictionary.btnFileName_blockName = "$TWTSYS$00000603";
+            //VariableDictionary.btnFileName_blockName = "$TWTSYS$00000603";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_小便器给水;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2707,9 +2688,8 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "PTJ_大洗涤池";
-            VariableDictionary.btnFileName_blockName = "$equip$00003217";
+            //VariableDictionary.btnFileName_blockName = "$equip$00003217";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_大洗涤池_1x0_5m;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2723,9 +2703,8 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "PTJ_大便器给水";
-            VariableDictionary.btnFileName_blockName = "$TWTSYS$00000602";
+            //VariableDictionary.btnFileName_blockName = "$TWTSYS$00000602";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_大便器给水;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2739,10 +2718,9 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "PTJ_洗涤盆";
-            VariableDictionary.btnFileName_blockName = "普通区洗涤盆";
+            //VariableDictionary.btnFileName_blockName = "普通区洗涤盆";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 0;
-            // VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_洗涤盆;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2760,7 +2738,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "$TWTSYS$00000605";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.blockScale = 1.5;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_水池给水;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2778,7 +2755,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnBlockLayer = "EQUIP_地漏";
             VariableDictionary.blockScale = 1.5;
             VariableDictionary.TCH_Ptj_No = 0;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_热直排管;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2796,7 +2772,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnBlockLayer = "EQUIP_地漏";
             VariableDictionary.blockScale = 1.5;
             VariableDictionary.TCH_Ptj_No = 0;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_冷直排管;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2814,7 +2789,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnBlockLayer = "PTJ_地漏";
             VariableDictionary.blockScale = 1.5;
             VariableDictionary.TCH_Ptj_No = 0;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_地漏;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2845,11 +2819,9 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "PTJ_洗脸盆";
-            //VariableDictionary.btnFileName_blockName = "$TWTSYS$00000600";
             VariableDictionary.btnFileName_blockName = "普通区洗脸盆";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 10;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_洗脸盆;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2867,7 +2839,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnBlockLayer = "EQUIP_地漏";
             VariableDictionary.blockScale = 1;
             VariableDictionary.TCH_Ptj_No = 0;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_冷不带压直排;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2884,8 +2855,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "$TwtSys$00000138";
             VariableDictionary.btnBlockLayer = "EQUIP_地漏";
             VariableDictionary.blockScale = 1;
-            //TCH_Ptj = true;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_热不带压直排;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2902,7 +2871,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "A$C32361FA1";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 0;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_拖布池;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2919,7 +2887,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "A$C5C905366";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 10;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_大洗涤池_1x0_5m;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2936,7 +2903,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "A$C18325CD1";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 10;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_大洗涤池_1_2x0_5m;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2953,7 +2919,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "A$C5A6D4801";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 10;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_大洗涤池_1_5x0_5m;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2970,7 +2935,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "A$C3C1E07D8";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 0;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_大洗涤池_1_8x0_5m;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -2987,7 +2951,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName_blockName = "A$C0AB663B7";
             VariableDictionary.btnBlockLayer = "TJ(给排水专业S)";
             VariableDictionary.TCH_Ptj_No = 10;
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
             VariableDictionary.resourcesFile = Resources.PTJ_大洗涤池_2_0x0_5m;
             VariableDictionary.layerName = "TJ(给排水专业S)";
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3004,6 +2967,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_220V插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3017,6 +2981,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_三相380V插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三相380V插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3029,6 +2994,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_潮湿插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_潮湿插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3041,6 +3007,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_三相潮湿插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三相潮湿插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3053,6 +3020,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_空调插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_空调插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3065,6 +3033,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_设备用电点位";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_设备用电点位;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3077,6 +3046,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_单相夹层插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_单相夹层插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3089,6 +3059,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_插座箱";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.blockScale = 1;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_插座箱;
@@ -3102,6 +3073,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_应急插座";
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_应急插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3114,6 +3086,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_应急16A插座";
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_应急16A插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
@@ -3126,6 +3099,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_UPS插座";
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_UPS插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
@@ -3139,6 +3113,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnBlockLayer = "TJ(电气专业D1)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_UPS16A插座";
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_UPS16A插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
@@ -3151,6 +3126,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_传递窗电源插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_传递窗电源插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3163,6 +3139,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_门禁插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_门禁插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
@@ -3176,6 +3153,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_红外感应门插座;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_红外感应门插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
@@ -3189,6 +3167,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName = "紫外灯";
             VariableDictionary.btnBlockLayer = "TJ(电气专业D)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_紫外灯";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
             Env.Document.SendStringToExecute("DBTextLabel ", false, false, false);
@@ -3198,6 +3177,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_三联插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.blockScale = 1.5;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三联插座;
@@ -3211,6 +3191,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_四联插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_四联插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 500;
@@ -3223,6 +3204,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_互锁插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_互锁插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3235,6 +3217,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_两点互锁";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_两点互锁;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
@@ -3247,6 +3230,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_三点互锁";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.blockScale = 0.8;
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_三点互锁;
@@ -3260,6 +3244,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_立式空调插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_立式空调插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3272,6 +3257,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_壁挂空调插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_壁挂空调插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3284,6 +3270,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_手消毒插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_手消毒插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3296,6 +3283,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_三相380V插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_视孔灯;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 200;
@@ -3308,6 +3296,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_烘手器插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_烘手器插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
@@ -3320,6 +3309,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台功能柱插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台功能柱插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3332,6 +3322,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D1)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台UPS功能柱插座";
             VariableDictionary.layerColorIndex = 4;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台UPS功能柱电源;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3344,6 +3335,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_电热水器安全型插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_电热水器安全型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3356,6 +3348,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_厨宝安全型插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_厨宝安全型插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
@@ -3368,6 +3361,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_烘手器";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_烘手器;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 200;
@@ -3380,6 +3374,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_驱鼠器插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_驱鼠器插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3392,6 +3387,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_灭蝇灯插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_灭蝇灯插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3404,6 +3400,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_灭蝇灯插座_底边";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_灭蝇灯插座_底边;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3416,6 +3413,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台UPS功能柱电源";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台UPS功能柱电源;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;
@@ -3428,6 +3426,7 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.layerName = "TJ(电气专业D)";//设置为被插入的图层名
+            VariableDictionary.btnFileName = "DQTJ_EQUIP_实验台上方220V插座";
             VariableDictionary.layerColorIndex = 142;//设置为被插入的图层颜色
             VariableDictionary.resourcesFile = Resources.DQTJ_EQUIP_实验台上方220V插座;
             VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text) / 100;

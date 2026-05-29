@@ -29,11 +29,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         public static bool winForm_Status = false;//winForm状态
         public static bool radioButton = false;//二层传递窗单选按钮状态
         public static string version = ""; //版本号
-        // 本地缓存根目录（与 WpfMainWindow.AppPath 保持一致）
+        public static string serverVersion = ""; //服务器版本号
         public static string AppDataPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GB_CADPLUS");
-
+            "GB_CADPLUS");// 本地缓存根目录（与 WpfMainWindow.AppPath 保持一致）
         public static string PreviewCachePath => Path.Combine(AppDataPath, "PreviewCache");
         public static string DwgCachePath => Path.Combine(AppDataPath, "DwgCache");
         #endregion

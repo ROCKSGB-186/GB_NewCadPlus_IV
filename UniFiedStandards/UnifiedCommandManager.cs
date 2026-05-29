@@ -155,6 +155,9 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         {
             try
             {
+                VariableDictionary.entityRotateAngle = 0.0;
+                //var resourcesFile = VariableDictionary.resourcesFile;
+                //VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
                 // 根据图元类型和方向设置角度
                 if (VariableDictionary.btnFileName != null && VariableDictionary.btnFileName.Contains("摄像机"))
                 {
@@ -178,10 +181,9 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     // 广播失败不应中断插入流程，记录日志并继续
                     LogManager.Instance.LogInfo($"\nNotifyDirectionChanged 触发失败: {evEx.Message}");
                 }
-                //string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{VariableDictionary.btnFileName}_{Guid.NewGuid():N}.dwg");
-                //System.IO.File.WriteAllBytes(tempPath, VariableDictionary.resourcesFile);
-                //GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+
                 #region 再次点方向按键的重复插入逻辑
+
                 try
                 {
                     // 非拖拽阶段：方向键 = 调角度 + 立即重复上次图元插入
@@ -235,6 +237,19 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             /// </summary>
             public static double GetAdjustedAngleForDirection(string direction, bool isCamera = false)
             {
+                //switch (direction)
+                //{
+                //    case "上": return Math.PI * 0;
+                //    case "右上": return Math.PI * 1.75;
+                //    case "右": return Math.PI * 1.5;
+                //    case "右下": return Math.PI * 1.25;
+                //    case "下": return Math.PI * 1;
+                //    case "左下": return Math.PI * 0.75;
+                //    case "左": return Math.PI * 0.5;
+                //    case "左上": return Math.PI * 0.25;
+                //    default: return 0;
+                //}
+
                 if (isCamera)
                 {
                     // 摄像机的特殊角度处理
@@ -490,7 +505,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             try
             {
 
-                VariableDictionary.btnBlockLayer = "TJ(建筑专业J)";                
+                VariableDictionary.btnBlockLayer = "TJ(建筑专业J)";
 
                 VariableDictionary.buttonText = $"JZTJ_{wallType}开洞";
                 if (wallType == "横墙")

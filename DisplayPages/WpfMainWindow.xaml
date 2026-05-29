@@ -3120,7 +3120,7 @@
                                                 Margin="0,5,0,5"
                                                 Content="优先使用D盘存储"
                                                 IsChecked="True"
-                                                IsEnabled="False" />
+                                                IsEnabled="False" Width="125" />
                                         </StackPanel>
                                     </GroupBox>
 

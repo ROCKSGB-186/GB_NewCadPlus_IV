@@ -121,7 +121,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         tr.TextStyleTable.Add(textStyleName, ttr =>
                         {
                             ttr.FileName = "gbenor.shx";
-                            ttr.BigFontFileName = "hzfs.shx";
+                            ttr.BigFontFileName = "gbcbig.shx";
                             ttr.XScale = 0.8;
                             // 关键：设为 0，避免样式固定高度反向覆盖实体高度
                             // 将 TextSize 设为 0 表示样式不固定高度，实体创建时通过 Height/TextHeight 显式控制。
@@ -133,7 +133,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         tr.TextStyleTable.Change(textStyleName, ttr =>
                         {
                             ttr.FileName = "gbenor.shx";
-                            ttr.BigFontFileName = "hzfs.shx";
+                            ttr.BigFontFileName = "gbcbig.shx";
                             ttr.XScale = 0.8;
                             // 关键：设为 0，避免样式固定高度反向覆盖实体高度
                             ttr.TextSize = 0.0;
