@@ -1,3 +1,4 @@
+using GB_NewCadPlus_IV.FunctionalMethod;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,29 +13,75 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
     internal class VariableDictionary
     {
         #region 服务器端字段和属性
-        public static string? _serverIP;//服务器IP地址
-        public static int _dataBaseServerPort;//服务器端口号
-        public static int _apiPort = 10010;   // 默认为 10010，后续可从配置文件中动态加载
-        public static string _dataBaseName = "cad_sw_library";//数据库名称
-        public static string? _userName;//应用登录用户名（users 表）
-        public static string? _passWord;//应用登录密码（users 表）
-        public static string? _dbUserName;//数据库物理连接用户名（如 SYSDBA/root）
-        public static string? _dbPassWord;//数据库物理连接密码（如 675756SGBsgb/123456）
-        public static string? _databaseType = "DM"; // 数据库类型: MySQL 或 DM
-        public static string? _storagePath;//数据库存储路径
-        public static bool _useDPath;//是否使用DPath
-        public static bool _autoSync;//是否自动同步
-        public static int _syncInterval;//同步间隔
-        public static string? _newConnectionString;//新的数据库连接字符串
-        public static bool winForm_Status = false;//winForm状态
-        public static bool radioButton = false;//二层传递窗单选按钮状态
-        public static string version = ""; //版本号
-        public static string serverVersion = ""; //服务器版本号
-        public static string AppDataPath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GB_CADPLUS");// 本地缓存根目录（与 WpfMainWindow.AppPath 保持一致）
-        public static string PreviewCachePath => Path.Combine(AppDataPath, "PreviewCache");
-        public static string DwgCachePath => Path.Combine(AppDataPath, "DwgCache");
+        /// <summary>
+        /// 服务器IP地址
+        /// </summary>
+        public static string? _serverIP;
+        /// <summary>
+        /// 服务器端口号
+        /// </summary>
+        public static int _dataBaseServerPort;
+        /// <summary>
+        /// 默认为 10010，后续可从配置文件中动态加载
+        /// </summary>
+        public static int _apiPort = 10010; 
+        /// <summary>
+        /// 数据库名称
+        /// </summary>
+        public static string _dataBaseName = "cad_sw_library";
+        /// <summary>
+        /// 应用登录用户名（users 表）
+        /// </summary>
+        public static string? _userName;
+        /// <summary>
+        /// 应用登录密码（users 表）
+        /// </summary>
+        public static string? _passWord;
+        /// <summary>
+        /// 数据库物理连接用户名（如 SYSDBA/root）
+        /// </summary>
+        public static string? _dbUserName;
+        /// <summary>
+        /// 数据库物理连接密码（如 675756SGBsgb/123456）
+        /// </summary>
+        public static string? _dbPassWord;
+        /// <summary>
+        /// 数据库类型: MySQL 或 DM
+        /// </summary>
+        public static string? _databaseType = "DM"; 
+        /// <summary>
+        /// 是否使用DPath
+        /// </summary>
+        public static bool _useDPath;
+        /// <summary>
+        /// 是否自动同步
+        /// </summary>
+        public static bool _autoSync;
+        /// <summary>
+        /// 同步间隔
+        /// </summary>
+        public static int _syncInterval;
+        /// <summary>
+        /// 新的数据库连接字符串
+        /// </summary>
+        public static string? _newConnectionString;
+        /// <summary>
+        /// winForm状态
+        /// </summary>
+        public static bool winForm_Status = false;
+        /// <summary>
+        /// 二层传递窗单选按钮状态
+        /// </summary>
+        public static bool radioButton = false;
+        /// <summary>
+        /// 版本号
+        /// </summary>
+        public static string version = ""; 
+        /// <summary>
+        /// 服务器版本号
+        /// </summary>
+        public static string serverVersion = "";
+        
         #endregion
         #region 变量
         /// <summary>
@@ -101,13 +148,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
      };
         public static int jjqInt = 1;//洁净区层索引
         public static int xtqInt = 1;//系统分区层索引
-        public static string? deviceNo_1;//设备编号
-        public static string? deviceNo_2;//设备编号
+        //public static string? deviceNo_1;//设备编号
+        //public static string? deviceNo_2;//设备编号
         public static string? layerName;//图层名称
         /// <summary>
         /// 圆形按键文字 
         /// </summary>
-        public static string? buttonCirText;
+        //public static string? buttonCirText;
         /// <summary>
         /// 圆形外扩量
         /// </summary>
@@ -139,11 +186,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 结构的矩形宽度
         /// </summary>
-        public static double? textbox_S_Width;
+        //public static double? textbox_S_Width;
         /// <summary>
         /// 结构的矩形高度
         /// </summary>
-        public static double? textbox_S_Height;
+        //public static double? textbox_S_Height;
         /// <summary>
         /// 结构圆直径
         /// </summary>

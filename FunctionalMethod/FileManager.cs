@@ -1,10 +1,11 @@
+using GB_NewCadPlus_IV.Helpers;
+using GB_NewCadPlus_IV.UniFiedStandards;
 using System.Data;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Xml.Serialization;
-using GB_NewCadPlus_IV.UniFiedStandards;
 using static GB_NewCadPlus_IV.WpfMainWindow;
 using DataTable = System.Data.DataTable;
 using MessageBox = System.Windows.MessageBox;
@@ -22,31 +23,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// 数据库管理器
         /// </summary>
         private readonly DatabaseManager _databaseManager;
-        /// <summary>
-        /// 当前选中的文件字节数组（用于上传或插入时使用）
-        /// </summary>
-        public byte[]? FileBytes { get; set; }
-        /// <summary>
-        /// 基础存储路径
-        /// </summary>
-        private readonly string _baseStoragePath;
-
-        /// <summary>
-        /// 是否使用D盘
-        /// </summary>
-        private readonly bool _useDPath;
-
-        /// <summary>
-        /// 新方案主字段——当前选中的 JSON 属性字典
-        /// </summary>
-        private Dictionary<string, string> _selectedAttributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// 兼容字段（旧代码还可能用到），逐步退役
-        /// </summary>
-        [Obsolete("过渡字段：请逐步改用 _selectedAttributes")]
-        private FileAttribute _selectedFileAttribute;
-               
+     
         /// <summary>
         /// 分类管理器
         /// </summary>
@@ -58,38 +35,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="databaseManager">数据库管理器</param>
         /// <param name="baseStoragePath">基础存储路径</param>
         /// <param name="useDPath">是否使用D盘</param>
-        public FileManager(DatabaseManager databaseManager, string baseStoragePath = null, bool useDPath = true)
+        public FileManager(DatabaseManager databaseManager)
         {
-            _databaseManager = databaseManager;/// 数据库管理器
-            _useDPath = useDPath;/// 是否使用D盘
-
-            if (!string.IsNullOrEmpty(baseStoragePath))/// 如果提供了基础存储路径，则使用它
-            {
-                _baseStoragePath = baseStoragePath;/// 使用指定的基础存储路径
-            }
-            else
-            {
-                _baseStoragePath = GetBaseStoragePath();/// 否则，智能选择C盘或D盘作为基础存储路径
-            }
+            _databaseManager = databaseManager;// 数据库管理器
         }
-
-        /// <summary>
-        /// 获取基础存储路径（智能选择C盘或D盘）
-        /// </summary>
-        private string GetBaseStoragePath()
-        {
-            // 如果启用D盘优先且D盘存在且可写
-            if (_useDPath && Directory.Exists("D:\\") && IsDirectoryWritable("D:\\"))
-            {
-                return "D:\\GB_Tools\\Cad_Sw_Library";
-            }
-            else
-            {
-                // 使用C盘作为备选
-                return "C:\\GB_Tools\\Cad_Sw_Library";
-            }
-        }
-
+        
         /// <summary>
         /// 规范化配置路径（去空白、去包裹引号、展开环境变量）
         /// </summary>
@@ -328,7 +278,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         private async Task<string> ResolveStorageRootPathAsync(DatabaseManager databaseManager, string operationName)
         {
             // 本地兜底路径（仅数据库不可用时才允许）
-            string fallbackPath = _baseStoragePath;
+            string fallbackPath = GetPath.AppDataPath;
 
             // 读取当前登录服务器 IP（用于将 D:\\... 转换为 \\IP\\D$\\...）
             string serverIp = NormalizeConfiguredPath(VariableDictionary._serverIP);
@@ -353,8 +303,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
 
             // 2) 兼容旧链路：读取运行时变量中的存储路径（即 TextBoxSetStoragePath）
-            LogManager.Instance.LogInfo($"[{operationName}] SourceRoot 为空，读取运行时存储路径 VariableDictionary._storagePath: {VariableDictionary._storagePath}");
-            string runtimeStoragePath = EnsureDirectoryPath(ResolveServerStoragePath(VariableDictionary._storagePath, serverIp, operationName), operationName);
+            LogManager.Instance.LogInfo($"[{operationName}] SourceRoot 为空，读取运行时存储路径 VariableDictionary._cacheStoragePath: {GetPath._cacheStoragePath}");
+            string runtimeStoragePath = EnsureDirectoryPath(ResolveServerStoragePath(GetPath._cacheStoragePath, serverIp, operationName), operationName);
             if (!string.IsNullOrWhiteSpace(runtimeStoragePath))
             {
                 LogManager.Instance.LogInfo($"[{operationName}] SourceRoot 为空，回退到运行时存储路径(服务器路径): {runtimeStoragePath}");
@@ -409,40 +359,21 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
-                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV");
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                return Path.Combine(dir, isOutlet ? "LastPipeAttrs_Outlet.xml" : "LastPipeAttrs_Inlet.xml");
+                //缓存路径优先级：1) 用户手动设置的路径（GetPath._cacheStoragePath）；2) 默认本地应用数据路径
+                string path = !string.IsNullOrWhiteSpace(GetPath._cacheStoragePath)
+                    ? GetPath._cacheStoragePath
+                    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GB_CADPLUS");
+                var pipeAttrsDir = Path.Combine(path, "PipeAttrs");// 管道属性文件夹
+                if (!Directory.Exists(pipeAttrsDir)) Directory.CreateDirectory(pipeAttrsDir);// 确保目录存在
+                return Path.Combine(pipeAttrsDir, isOutlet ? "LastPipeAttrs_Outlet.xml" : "LastPipeAttrs_Inlet.xml");// 返回管道属性文件路径
+
             }
             catch
             {
                 return Path.GetTempFileName(); // 兜底
             }
         }
-
-        /// <summary>
-        /// 格式化文件大小
-        /// </summary>
-        /// <param name="fileSize"></param>
-        /// <returns></returns>
-        public static string FormatFileSize(long fileSize)
-        {
-            try
-            {
-                if (fileSize < 1024)
-                    return $"{fileSize} B";
-                else if (fileSize < 1024 * 1024)
-                    return $"{fileSize / 1024.0:F2} KB";
-                else if (fileSize < 1024 * 1024 * 1024)
-                    return $"{fileSize / (1024.0 * 1024.0):F2} MB";
-                else
-                    return $"{fileSize / (1024.0 * 1024.0 * 1024.0):F2} GB";
-            }
-            catch
-            {
-                return fileSize.ToString();
-            }
-        }
-
+        
         /// <summary>
         /// 可序列化的键值项，保证序列化输出始终包含 <Key> 与 <Value>
         /// </summary>
@@ -669,208 +600,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
             }
         }
-
-        /// <summary>
-        /// 判断文件扩展名是否为预览文件
-        /// </summary>
-        /// <param name="fileExtension">文件扩展名</param>
-        /// <returns>1: 是预览文件, 0: 不是预览文件</returns>
-        public static int IsPreviewFile(string fileExtension)
-        {
-            var previewExtensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif" };// 预览文件扩展名列表
-            if(previewExtensions.Contains(fileExtension.ToLower())) { return 1; }else { return 0; }// 判断文件扩展名是否为预览文件
-
-        }
-       
-        /// <summary>
-        /// 删除文件夹（如果为空）
-        /// </summary>
-        /// <param name="folderPath">文件夹路径</param>
-        /// <returns>是否删除成功</returns>
-        public static bool DeleteEmptyFolder(string folderPath)
-        {
-            try
-            {
-                if (Directory.Exists(folderPath) && Directory.GetFileSystemEntries(folderPath).Length == 0)
-                {
-                    Directory.Delete(folderPath);
-                }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"删除空文件夹失败: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 回滚文件上传操作
-        /// </summary>
-        /// <param name="uploadedFiles">已上传的文件路径列表</param>
-        /// <param name="fileStorage">已保存的文件记录</param>
-        /// <param name="fileAttribute">已保存的属性记录</param>
-        public static async Task RollbackFileUpload(DatabaseManager databaseManager, List<string> uploadedFiles, FileStorage fileStorage, FileAttribute fileAttribute)
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("开始回滚文件上传操作...");
-
-                // 1. 删除已上传的文件
-                foreach (string filePath in uploadedFiles)
-                {
-                    if (File.Exists(filePath))
-                    {
-                        try
-                        {
-                            File.Delete(filePath);//删除文件
-                            System.Diagnostics.Debug.WriteLine($"已删除文件: {filePath}");
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"删除文件失败 {filePath}: {ex.Message}");
-                        }
-                    }
-                }
-
-                // 2. 删除空的文件夹
-                if (fileStorage != null)
-                {
-                    string categoryPath = Path.GetDirectoryName(fileStorage.FilePath);// 获取文件所在的分类文件夹路径
-                    if (Directory.Exists(categoryPath))
-                    {
-                        try
-                        {
-                            // 尝试删除分类文件夹（如果为空）
-                            DeleteEmptyFolder(categoryPath);
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"删除文件夹失败: {ex.Message}");
-                        }
-                    }
-                }
-
-                // 3. 如果数据库记录已创建，删除数据库记录
-                // 已废弃 DeleteFileAttributeAsync
-                if (fileAttribute != null)
-                {
-                    System.Diagnostics.Debug.WriteLine("[Rollback] 略过旧表属性记录删除");
-                }
-            
-
-                if (fileStorage != null )
-                {
-                    try
-                    {
-                        // 删除文件记录
-                        await databaseManager.DeleteFileStorageAsync(fileStorage.Id);
-                        System.Diagnostics.Debug.WriteLine("已删除文件存储记录");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"删除文件记录失败: {ex.Message}");
-                    }
-                }
-
-                System.Diagnostics.Debug.WriteLine("文件上传回滚操作完成");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"回滚操作失败: {ex.Message}");
-            }
-        }
-       
-        /// <summary>
-        /// 上传文件到服务器指定路径
-        /// </summary>
-        /// <param name="categoryId">分类ID</param>
-        /// <param name="categoryType">分类类型</param>
-        /// <param name="originalFileName">原始文件名</param>
-        /// <param name="fileStream">文件流</param>
-        /// <param name="description">文件描述</param>
-        /// <param name="createdBy">创建者</param>
-        /// <returns>文件存储信息</returns>
-        public async Task<FileStorage> UploadFileAsync(DatabaseManager databaseManager, int categoryId, string categoryType,
-            string originalFileName, Stream fileStream,
-            string description, string createdBy)
-        {
-            try
-            {
-                // 统一解析上传根路径：数据库可用时必须命中服务器配置，避免静默回落本地路径
-                string actualStoragePath = await ResolveStorageRootPathAsync(databaseManager, "UploadFileAsync").ConfigureAwait(false);
-
-                // 确保存储路径存在
-                if (!Directory.Exists(actualStoragePath))
-                {
-                    Directory.CreateDirectory(actualStoragePath);
-                }
-
-                // 生成唯一的存储文件名
-                string fileExtension = Path.GetExtension(originalFileName);
-                string storedFileName = $"{Guid.NewGuid()}{fileExtension}";
-
-                // 确定存储路径（按分类类型和ID组织文件夹）
-                string categoryPath = Path.Combine(actualStoragePath, categoryType, categoryId.ToString());
-                if (!Directory.Exists(categoryPath))
-                {
-                    Directory.CreateDirectory(categoryPath);
-                }
-
-                string fullPath = Path.Combine(categoryPath, storedFileName);
-
-                // 计算文件哈希值（用于去重）
-                string fileHash = await CalculateFileHashAsync(fileStream);
-
-                // 保存文件到磁盘
-                fileStream.Position = 0;
-                using (var fileStreamOutput = File.Create(fullPath))
-                {
-                    await fileStream.CopyToAsync(fileStreamOutput);
-                }
-
-                // 获取文件大小
-                long fileSize = new FileInfo(fullPath).Length;
-
-                // 创建文件记录
-                var fileRecord = new FileStorage
-                {
-                    CategoryId = categoryId,
-                    CategoryType = categoryType,
-                    FileName = originalFileName,
-                    FileStoredName = storedFileName,
-                    FilePath = fullPath,  // 存储完整路径
-                    FileType = fileExtension.ToLower(),
-                    FileSize = fileSize,
-                    FileHash = fileHash,
-                    DisplayName = Path.GetFileNameWithoutExtension(originalFileName),
-                    Description = description,
-                    Version = 1,
-                    IsPreview = IsPreviewFile(fileExtension),
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now,
-                    CreatedBy = createdBy,
-                    IsActive = 1,
-                    IsPublic = 1,
-                    Scale = 1.0
-                };
-
-                return fileRecord;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"上传文件失败: {ex.Message}", ex);
-            }
-        }
-
-        /// <summary>
-        /// 获取当前应使用的服务器存储根路径（统一入口）。
-        /// </summary>
-        public async Task<string> GetServerStorageRootPathAsync(DatabaseManager databaseManager, string operationName)
-        {
-            return await ResolveStorageRootPathAsync(databaseManager, operationName).ConfigureAwait(false);
-        }
-
+      
         /// <summary>
         /// 解析图元主文件在服务器侧的权威路径。
         /// </summary>
@@ -989,57 +719,60 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public async Task<FileStorage> ReplacePreviewFileAsync(DatabaseManager databaseManager, FileStorage storage, string localPreviewPath)
         {
+            // 参数验证
             if (storage == null)
             {
-                throw new ArgumentNullException(nameof(storage));
+                throw new ArgumentNullException(nameof(storage));// storage 不能为空
             }
-
+            // 验证本地预览图路径有效且文件存在
             if (string.IsNullOrWhiteSpace(localPreviewPath) || !File.Exists(localPreviewPath))
             {
-                throw new FileNotFoundException("本地预览图不存在。", localPreviewPath);
+                throw new FileNotFoundException("本地预览图不存在。", localPreviewPath);// 本地预览图路径无效或文件不存在
             }
-
+            // 解析服务器预览图目录
             string serverGraphicPath = await ResolveServerGraphicPathAsync(databaseManager, storage, "ReplacePreviewFileAsync").ConfigureAwait(false);
-            string? targetDir = Path.GetDirectoryName(serverGraphicPath);
+            string? targetDir = Path.GetDirectoryName(serverGraphicPath); // 预览图与主文件同目录
             if (string.IsNullOrWhiteSpace(targetDir))
             {
-                throw new InvalidOperationException("无法解析服务器预览图目录。");
+                throw new InvalidOperationException("无法解析服务器预览图目录。"); // 无法从服务器主文件路径解析出目录
             }
-
+            // 确保预览图目录存在
             if (!Directory.Exists(targetDir))
             {
-                Directory.CreateDirectory(targetDir);
+                Directory.CreateDirectory(targetDir); // 创建预览图目录
             }
-
+            // 确定预览图文件名（优先使用已有配置，否则基于主文件名生成）
             string ext = Path.GetExtension(localPreviewPath);
             if (string.IsNullOrWhiteSpace(ext))
             {
-                ext = ".png";
+                ext = ".png";// 默认使用 PNG 作为预览图扩展名
             }
-
+            // 预览图文件名优先级：1) storage.PreviewImageName；2) 基于主文件名 + 预览图扩展名；3) 随机生成文件名 + 预览图扩展名
             string previewName = storage.PreviewImageName;
-            if (string.IsNullOrWhiteSpace(previewName))
+            if (string.IsNullOrWhiteSpace(previewName)) // 如果 FileStorage 中没有预览图文件名，则基于主文件名生成预览图文件名
             {
+                // 从 FileStorage 中获取主文件名（优先 FileStoredName，其次 FileName），并替换扩展名为预览图扩展名
                 previewName = Path.GetFileNameWithoutExtension(storage.FileStoredName ?? storage.FileName ?? Guid.NewGuid().ToString("N")) + ext;
             }
             else if (string.IsNullOrWhiteSpace(Path.GetExtension(previewName)))
             {
-                previewName = Path.GetFileNameWithoutExtension(previewName) + ext;
+                previewName = Path.GetFileNameWithoutExtension(previewName) + ext; // 如果已有预览图文件名但没有扩展名，则添加预览图扩展名
             }
-
+            // 最终预览图目标路径
             string targetPreviewPath = Path.Combine(targetDir, previewName);
-
+            // 如果目标预览图已存在，先备份原文件（覆盖同名备份）
             if (File.Exists(targetPreviewPath))
             {
+                // 备份现有预览图，命名为原文件名 + ".bak"，如果已存在同名备份则覆盖
                 File.Copy(targetPreviewPath, targetPreviewPath + ".bak", true);
             }
-
+            // 将本地预览图复制到服务器目标路径，覆盖同名文件
             File.Copy(localPreviewPath, targetPreviewPath, true);
 
-            storage.PreviewImagePath = targetPreviewPath;
-            storage.PreviewImageName = Path.GetFileName(targetPreviewPath);
-            storage.UpdatedAt = DateTime.Now;
-
+            storage.PreviewImagePath = targetPreviewPath; // 更新 FileStorage 中的预览图路径为服务器路径
+            storage.PreviewImageName = Path.GetFileName(targetPreviewPath); // 更新 FileStorage 中的预览图文件名
+            storage.UpdatedAt = DateTime.Now; // 更新时间
+            // 注意：预览图的哈希值和大小不存储在 FileStorage 中，如果需要可以额外计算并存储
             return storage;
         }
 
@@ -1125,5 +858,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 + Path.DirectorySeparatorChar;
             return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
         }
+        
     }
 }

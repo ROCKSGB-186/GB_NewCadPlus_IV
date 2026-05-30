@@ -1,3 +1,5 @@
+using GB_NewCadPlus_IV.FunctionalMethod;
+
 namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
@@ -22,22 +24,57 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         public static string? filePathAndName = null;
 
         /// <summary>
-        /// 系统的应用程序路径
+        /// 缓存存储路径（可由用户指定，优先于默认的 AppData 路径）。如果用户没有指定，则为 null，此时会使用 AppDataPath 作为缓存目录的基础路径。
         /// </summary>
-        /// <returns></returns>
-        public static string GetAppDataPath()
-        {
-            return Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);//实际的目录是C:\ProgramData
-        }
+        public static string? _cacheStoragePath;
+
         /// <summary>
-        /// 获取自己程序的路径
+        /// 本地缓存根目录（与 WpfMainWindow.AppPath 保持一致）
         /// </summary>
-        /// <param name="appName">自己程序的名子</param>
-        /// <param name="name">自己程序名称下的数据文件夹（相对路径）</param>
-        /// <returns></returns>
-        public static string GetSelftUserPath(string appName = "GB_App", string name = "UserAppData") //GB_App是本应用程序的名子，UserAppData是本应用下的数据文件夹
+        public static string AppDataPath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GB_CADPLUS");
+
+        /// <summary>
+        /// 预览图缓存目录（AppDataPath 下的子目录）用于存储从数据库下载的预览图，避免重复下载，提高性能
+        /// </summary>
+        public static string PreviewCachePath
         {
-            return System.IO.Path.Combine(GetAppDataPath(), System.IO.Path.Combine(appName, name));
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(_cacheStoragePath))
+                    return Path.Combine(_cacheStoragePath, "PreviewCache");
+                return Path.Combine(AppDataPath, "PreviewCache");
+            }
+            set
+            {
+                if (_cacheStoragePath != value)
+                {
+                    LogManager.Instance.LogWarning($"DwgCachePath 被修改！旧值={_cacheStoragePath}，新值={value}，堆栈：{Environment.StackTrace}");
+                    _cacheStoragePath = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Dwg文件缓存目录（AppDataPath 下的子目录）用于存储从数据库下载的Dwg文件，避免重复下载，提高性能
+        /// </summary>
+        public static string DwgCachePath
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(_cacheStoragePath))
+                    return Path.Combine(_cacheStoragePath, "DwgCache");
+                return Path.Combine(AppDataPath, "DwgCache");
+            }
+            set
+            {
+                if (_cacheStoragePath != value)
+                {
+                    LogManager.Instance.LogWarning($"DwgCachePath 被修改！旧值={_cacheStoragePath}，新值={value}，堆栈：{Environment.StackTrace}");
+                    _cacheStoragePath = value;
+                }
+            }
         }
         #endregion
 

@@ -1227,13 +1227,14 @@ namespace GB_NewCadPlus_IV.Helpers
         #endregion
 
         // 上一次“整图插入”缓存
-        private static byte[]? _lastCopyDwgBytes;
-        private static string? _lastCopyDwgFileNameBase;
-        private static string? _lastCopyDwgPath;
+        private static byte[]? _lastCopyDwgBytes;// 最后一次复制的 DWG 文件字节内容，优先使用字节缓存以避免临时文件被删后无法重复
+        private static string? _lastCopyDwgFileNameBase; // 最后一次复制的 DWG 文件基础名称（不含路径和扩展名，用于生成临时文件名，避免重复执行时文件名过长或包含非法字符）
+        private static string? _lastCopyDwgPath; // 最后一次复制的 DWG 文件路径（仅在没有字节缓存时使用，存在被删除风险）
 
         /// <summary>
-        /// 按钮侧统一调用：注册“上次插入参数”，并通过命令行触发，保证空格可重复
+        /// 执行“整图复制”命令，并缓存相关信息以支持重复执行（空格键再次插入同一图元）
         /// </summary>
+        /// <param name="sourceFilePath">源文件路径</param>
         public static void ExecuteCopyDwgAllFastWithRepeat(string sourceFilePath)
         {
             // 新增：Drag/执行中禁止再次触发，避免命令重入导致 CAD 崩溃
@@ -1245,14 +1246,14 @@ namespace GB_NewCadPlus_IV.Helpers
 
             try
             {
-                // 优先缓存资源字节（最稳，避免临时文件被删后无法重复）
+                //判断源文件路径有效性
                 if (VariableDictionary.resourcesFile != null && VariableDictionary.resourcesFile.Length > 0)
                 {
-                    _lastCopyDwgBytes = (byte[])VariableDictionary.resourcesFile.Clone();// 克隆一份字节数组，避免后续被修改
-                    // 仅缓存文件名的基础部分，去掉路径和扩展名，避免重复执行时文件名过长或包含非法字符
+                    _lastCopyDwgBytes = (byte[])VariableDictionary.resourcesFile.Clone();// 把用户按键指定的文件克隆一份字节数组，避免后续被修改
+                   
                     _lastCopyDwgFileNameBase = string.IsNullOrWhiteSpace(VariableDictionary.btnFileName)
                         ? "GB_CopyDwgAllFast"
-                        : VariableDictionary.btnFileName;
+                        : VariableDictionary.btnFileName; // 使用用户指定的按钮名作为基础文件名，避免重复执行时文件名过长或包含非法字符
                     _lastCopyDwgPath = null;// 已缓存字节后路径不可靠，置空避免误用
                 }
                 else
@@ -1286,10 +1287,9 @@ namespace GB_NewCadPlus_IV.Helpers
 
             try
             {
-                string? runPath = null;
-                VariableDictionary.textBoxScale=AutoCadHelper.GetScale();
-                //VariableDictionary.entityRotateAngle = 0;
-
+                string? tempFilePath = null;
+                VariableDictionary.textBoxScale = AutoCadHelper.GetScale();// 同步最新图纸比例，避免用户忘了更新导致插入图元过大过小
+                VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
                 // 如果有字节缓存，则每次重复都新建一个临时文件
                 if (_lastCopyDwgBytes != null && _lastCopyDwgBytes.Length > 0)
                 {
@@ -1297,29 +1297,31 @@ namespace GB_NewCadPlus_IV.Helpers
                     string baseName = string.IsNullOrWhiteSpace(_lastCopyDwgFileNameBase)
                         ? "GB_CopyDwgAllFast"
                         : _lastCopyDwgFileNameBase;
+
                     // 确保基础文件名不包含非法字符
                     foreach (var c in Path.GetInvalidFileNameChars())
                     {
                         baseName = baseName.Replace(c, '_');
                     }
                     // 生成临时文件路径
-                    runPath = Path.Combine(Path.GetTempPath(), $"{baseName}_{Guid.NewGuid():N}.dwg");
-                    System.IO.File.WriteAllBytes(runPath, _lastCopyDwgBytes);// 写入临时文件
+                    tempFilePath = Path.Combine(Path.GetTempPath(), $"{baseName}_{Guid.NewGuid():N}.dwg");
+                    // 写入临时文件
+                    System.IO.File.WriteAllBytes(tempFilePath, _lastCopyDwgBytes);
                 }
                 else
                 {
-                    runPath = _lastCopyDwgPath;// 没有字节缓存则使用上次的路径（可能是原文件路径，存在被删除风险）
+                    tempFilePath = _lastCopyDwgPath;// 没有字节缓存则使用上次的路径（可能是原文件路径，存在被删除风险）
                 }
                 // 最后再次验证路径有效性，避免误用已被删除的临时文件路径
-                if (string.IsNullOrWhiteSpace(runPath) || !System.IO.File.Exists(runPath))
+                if (string.IsNullOrWhiteSpace(tempFilePath) || !System.IO.File.Exists(tempFilePath))
                 {
                     Env.Editor.WriteMessage("\n没有可重复的上一次插入命令。");
                     return;
                 }
 
-                if (runPath != null)
+                if (tempFilePath != null)
                     //插入源文件中的图元到当前图纸
-                    CopyDwgAllFast(runPath);// 直接调用插入方法，传入路径
+                    CopyDwgAllFast(tempFilePath);// 直接调用插入方法，传入路径
             }
             catch (Exception ex)
             {

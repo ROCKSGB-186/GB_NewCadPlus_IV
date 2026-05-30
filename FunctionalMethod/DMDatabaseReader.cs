@@ -8,6 +8,7 @@ using Dapper;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using Newtonsoft.Json;
 
+//达梦数据库读取工具类，包含了连接数据库、读取表结构等功能。
 namespace GB_NewCadPlus_IV.DMDatabaseReader
 {
     // 修复方法：将原先嵌套在 DMDatabaseReader 静态类内部的 DTO 类移动到命名空间级别。

@@ -59,13 +59,13 @@
                 Margin="2,0,0,2"
                 FontSize="12"
                 Text="用户名：" />
-            <TextBox x:Name="TxtUsername" Height="26" />
+            <TextBox x:Name="Login_Username" Height="26" />
 
             <TextBlock
                 Margin="2,8,0,2"
                 FontSize="12"
                 Text="密码：" />
-            <PasswordBox x:Name="PwdBox" Height="26" />
+            <PasswordBox x:Name="Login_Password" Height="26" />
 
             <StackPanel
                 Width="351"
@@ -131,7 +131,7 @@
                 FontSize="12"
                 Text="服务器 IP：" />
             <TextBox
-                x:Name="TxtServerIP"
+                x:Name="Login_ServerIP"
                 Height="26"
                 Style="{StaticResource WatermarkTextBoxStyle}"
                 Tag="例如：127.0.0.1" />
@@ -141,7 +141,7 @@
                 FontSize="12"
                 Text="端口：" />
             <TextBox
-                x:Name="TxtDataBaseserverPort"
+                x:Name="Login_DataBaseserverPort"
                 Height="26"
                 PreviewTextInput="TxtServerPort_PreviewTextInput" />
         </StackPanel>

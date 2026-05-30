@@ -42,100 +42,279 @@ namespace GB_NewCadPlus_IV
         /// 如果登录成功且可以连接数据库，此属性由 LoginWindow 构造并返回给调用方（可能为 null 表示未能连接 DB）
         /// </summary>
         public DatabaseManager CreatedDatabaseManager { get; private set; }
+
         /// <summary>
         /// 登录窗口
         /// </summary>
         public LoginWindow()
         {
             InitializeComponent();
-            _configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");// 配置文件路径
+            //初始化配置文件路径，放在用户的应用数据目录下，确保有写权限且不同用户之间隔离
+            //_configPath = Path.Combine(
+            //    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            //    "GB_NewCadPlus_IV",
+            //    "login_config.json");//C:\Users\ShiGu\AppData\Roaming\GB_NewCadPlus_IV\login_config.json
+
+            // 同时设置全局变量中的缓存存储路径，供 LogManager 和其他需要存储数据的组件使用
+            GetPath._cacheStoragePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "GB_CADPLUS",
+                "CacheStorage");
+            // 确保日志管理器使用新的存储路径（如果之前已初始化，则会切换路径）
+            _configPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "GB_CADPLUS",
+                "login_config.json");//C:\Users\ShiGu\AppData\Local\GB_CADPLUS\Logs
+
             LoadConfig();//加载配置
             Loaded += LoginWindow_Loaded;//注册窗口加载事件处理程序
         }
+
         /// <summary>
-        /// 窗口加载事件处理程序
+        /// 窗口加载事件：填充默认值、同步全局变量、测试网络并加载部门。
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
         private async void LoginWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // 如果没有输入服务器，则填默认（先不强制覆盖，下面会根据 DB 类型再次设置）
-            if (string.IsNullOrWhiteSpace(TxtServerIP.Text))
-            {
-                TxtServerIP.Text = "127.0.0.1"; // 默认本机 IP
-            }
-
-            // 先尝试从 UI 或配置读取数据库类型，优先 UI 选择
-            string selectedDb = "DM"; // 默认使用达梦
             try
             {
-                if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)// 尝试从 UI 读取数据库类型
-                    selectedDb = s.ToUpper().Trim();// 标准化为大写并去除空白
-                else if (!string.IsNullOrWhiteSpace(VariableDictionary._databaseType))// 如果 UI 没有选择但全局变量中有配置，则使用全局变量（例如从配置文件加载时）
-                    selectedDb = VariableDictionary._databaseType.ToUpper().Trim(); // 标准化为大写并去除空白
-            }
-            catch { /* 忽略读取失败 */ }
+                // 1. 确保服务器 IP 有默认值
+                if (string.IsNullOrWhiteSpace(Login_ServerIP.Text))
+                    Login_ServerIP.Text = "127.0.0.1";
 
-            // 根据数据库类型设置端口与默认用户名（只在用户未填写时才覆盖）
-            if (selectedDb == "MYSQL")
-            {
-                // MySQL 常用端口，只有在端口输入为空或为达梦默认时才替换为 MySQL 默认
-                if (string.IsNullOrWhiteSpace(TxtDataBaseserverPort.Text))
-                    TxtDataBaseserverPort.Text = "3308"; // MySQL 默认端口按项目约定使用 3308
-                if (string.IsNullOrWhiteSpace(TxtUsername.Text))
-                    TxtUsername.Text = "root"; // MySQL 管理用户，生产请替换为低权限用户
-                if (string.IsNullOrWhiteSpace(PwdBox.Password))
-                    PwdBox.Password="123456"; // MySQL 管理用户默认密码，生产请替换为实际密码或使用安全输入方式
-            }
-            else
-            {
-                // 达梦默认端口与用户名
-                if (string.IsNullOrWhiteSpace(TxtDataBaseserverPort.Text))
-                    TxtDataBaseserverPort.Text = "5236";
-                if (string.IsNullOrWhiteSpace(TxtUsername.Text))
-                    TxtUsername.Text = "SYSDBA";
-                if (string.IsNullOrWhiteSpace(PwdBox.Password))
-                    PwdBox.Password = "675756SGBsgb";
-            }
+                // 2. 确定当前数据库类型（UI > VariableDictionary > 默认 "DM"）
+                string selectedDb = ResolveSelectedDatabaseType();
+                VariableDictionary._databaseType = selectedDb;
 
-            // 更新 UI 状态提示包含数据库类型信息，帮助排查
-            TxtStatus.Text = $"正在检测服务器连接... (数据库类型: {selectedDb})";
+                // 3. 根据数据库类型填充空的端口/用户名/密码
+                ApplyDatabaseTypeDefaults(selectedDb);
 
-            // 把选择写入全局变量，后续异步任务会读取这些值
-            VariableDictionary._databaseType = selectedDb;
-            VariableDictionary._serverIP = TxtServerIP.Text.Trim();
-            VariableDictionary._dataBaseServerPort = int.TryParse(TxtDataBaseserverPort.Text.Trim(), out int port) ? port : (selectedDb == "MYSQL" ? 3308 : 5236);
-            VariableDictionary._userName = TxtUsername.Text.Trim(); // 应用登录用户名
-            VariableDictionary._passWord = PwdBox.Password; // 应用登录密码
-            VariableDictionary._dbUserName = selectedDb == "MYSQL" ? "root" : "SYSDBA"; // 物理连接账号
-            VariableDictionary._dbPassWord = selectedDb == "MYSQL" ? "123456" : "675756SGBsgb"; // 物理连接密码
+                // 4. 将 UI 状态同步到全局变量（统一操作，消除分散赋值）
+                SyncUiToGlobalVariables();
 
-            // 快速 TCP 层连通性检测，使用当前全局端口
-            bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort));
-            if (!tcpOk)
-            {
-                // 首次尝试失败：提示用户填写有效服务器IP/端口（保留端口提示）
-                TxtStatus.Text = $"无法连接到服务器 {VariableDictionary._serverIP}:{VariableDictionary._dataBaseServerPort}，请在上方输入正确的服务器IP/端口后点击“保存服务器\\端口”。";
-                TxtDataBaseserverPort.Text = VariableDictionary._databaseType == "MYSQL" ? "3308" : "5236";
-                TxtServerIP.Focus();
-                CmbDepartments.ItemsSource = null;
-                return;
+                // 5. TCP 连通性检测
+                TxtStatus.Text = $"正在检测服务器连接... (数据库类型: {selectedDb})";
+                bool tcpOk = await Task.Run(() =>
+                    TestNetworkConnection(VariableDictionary._serverIP,
+                        VariableDictionary._dataBaseServerPort, 3000));
+
+                if (!tcpOk)
+                {
+                    TxtStatus.Text = $"无法连接到服务器 {VariableDictionary._serverIP}:{VariableDictionary._dataBaseServerPort}，请检查IP/端口。";
+                    CmbDepartments.ItemsSource = null;
+                    return;
+                }
+
+                // 6. 尝试加载部门列表
+                bool loaded = await TryLoadDepartmentsAsync(VariableDictionary._serverIP,
+                    VariableDictionary._dataBaseServerPort);
+                if (loaded)
+                {
+                    TxtStatus.Text = $"已连接 {selectedDb} 并加载部门。";
+                }
+                else
+                {
+                    // 具体失败原因已由 TryLoadDepartmentsAsync 写入 TxtStatus
+                    CmbDepartments.ItemsSource = null;
+                }
             }
-
-            // TCP 可达后再尝试从对应数据库读取部门（TryLoadDepartmentsAsync 已支持 DM 与 MySQL）
-            var loaded = await TryLoadDepartmentsAsync(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort);
-            if (!loaded)
+            catch (Exception ex)
             {
-                // 将失败原因显示在状态栏，提示用户检查 DB 类型/凭据
-                TxtStatus.Text = $"服务器可达，但从 {VariableDictionary._databaseType} 数据库读取或初始化部门失败，请检查数据库或凭据，或在设置中修改服务器信息。";
-                CmbDepartments.ItemsSource = null;
-            }
-            else
-            {
-                // 成功加载部门后提示并确保 UI 显示同步的 DB 类型
-                TxtStatus.Text = $"已连接 {VariableDictionary._databaseType} 并加载部门。";
+                LogManager.Instance.LogError($"LoginWindow_Loaded 异常: {ex}");
+                TxtStatus.Text = "初始化窗口时发生错误。";
             }
         }
+
+        /// <summary>
+        /// 从配置文件恢复 UI 控件值，不修改任何全局变量。
+        /// </summary>
+        private void LoadConfig()
+        {
+            try
+            {
+                if (!File.Exists(_configPath)) // 配置文件不存在时直接返回，保持 UI 默认值
+                    return;
+
+                string json = File.ReadAllText(_configPath); // 读取配置文件内容
+                var serializer = new JavaScriptSerializer(); // 使用 JavaScriptSerializer 反序列化 JSON 到 LoginConfig 对象
+                var cfg = serializer.Deserialize<LoginConfig>(json); // 反序列化后的对象可能为 null，需检查
+                if (cfg == null) // 反序列化失败时保持默认值并返回
+                    return;
+
+                // 恢复基本连接信息
+                Login_ServerIP.Text = cfg.ServerIP ?? string.Empty; // 登录服务器 IP
+                Login_DataBaseserverPort.Text = cfg.DataBaseserverPort ?? string.Empty; // 登录服务器端口
+                Login_Username.Text = cfg.Username ?? string.Empty; // 登录用户名
+
+                // 恢复密码（若保存了加密凭证）
+                if (cfg.SavePassword && !string.IsNullOrWhiteSpace(cfg.EncryptedPassword))
+                {
+                    try
+                    {
+                        byte[] encryptedBytes = Convert.FromBase64String(cfg.EncryptedPassword); // 从 Base64 字符串转换回字节数组
+                        byte[] decryptedBytes = ProtectedData.Unprotect(encryptedBytes, null,
+                            DataProtectionScope.CurrentUser);  // 使用 DPAPI 解密，作用范围为当前用户
+                        Login_Password.Password = Encoding.UTF8.GetString(decryptedBytes); // 将解密后的字节数组转换回字符串并设置到密码框
+                        ChkSavePassword.IsChecked = true; // 恢复保存密码的勾选状态
+                    }
+                    catch (Exception ex)
+                    {
+                        // 解密失败（如在不同的 Windows 账户下）时，清空密码并取消勾选
+                        LogManager.Instance.LogWarning("恢复已保存密码失败，可能需要重新输入: " + ex.Message);
+                        Login_Password.Password = string.Empty; // 清空密码框
+                        ChkSavePassword.IsChecked = false; // 取消保存密码的勾选状态
+                    }
+                }
+
+                // 恢复数据库类型选择（触发 SelectionChanged 会自动填充相应默认值）
+                if (!string.IsNullOrWhiteSpace(cfg.DatabaseType) && CmbDatabaseType != null)
+                {
+                    string targetDbType = cfg.DatabaseType.ToUpperInvariant(); // 标准化为大写以便比较
+                    foreach (var item in CmbDatabaseType.Items) // 遍历 ComboBox 的选项，寻找匹配的数据库类型
+                    {
+                        if (item is ComboBoxItem cbi &&
+                            string.Equals(cbi.Content as string, targetDbType, StringComparison.OrdinalIgnoreCase)) // 比较内容是否与目标数据库类型匹配（忽略大小写）
+                        {
+                            CmbDatabaseType.SelectedItem = item; // 设置选中项为匹配的数据库类型
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 配置损坏时不应阻止窗口显示，仅记录日志
+                LogManager.Instance.LogError($"加载登录配置失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 将当前 UI 上的连接配置保存到本地 JSON 文件。
+        /// 当 savePassword 为 false 时，会清除之前保存的密码。
+        /// </summary>
+        private void SaveConfig(bool savePassword)
+        {
+            try
+            {
+                // 确保配置文件目录存在
+                string? configDir = Path.GetDirectoryName(_configPath);
+                if (!string.IsNullOrEmpty(configDir) && !Directory.Exists(configDir))
+                    Directory.CreateDirectory(configDir); // 创建目录
+
+                // 从 UI 控件读取当前值
+                var loginConfig = new LoginConfig
+                {
+                    ServerIP = Login_ServerIP.Text.Trim(), // 登录服务器 IP
+                    DataBaseserverPort = Login_DataBaseserverPort.Text.Trim(), // 登录服务器端口
+                    Username = Login_Username.Text.Trim(), // 登录用户名
+                    SavePassword = savePassword, // 是否保存密码
+                    // 数据库类型也一并持久化
+                    DatabaseType = (CmbDatabaseType?.SelectedItem as ComboBoxItem)?.Content as string
+                                   ?? VariableDictionary._databaseType
+                                   ?? "DM",
+                    configPath = configDir
+                };
+
+                // 处理密码加密
+                if (savePassword)
+                {
+                    string plainPwd = Login_Password.Password ?? string.Empty; // 从密码框获取明文密码
+                    byte[] plainBytes = Encoding.UTF8.GetBytes(plainPwd); // 将明文密码转换为字节数组
+                    byte[] protectedBytes = ProtectedData.Protect(plainBytes, null, // 使用 DPAPI 加密，作用范围为当前用户
+                        DataProtectionScope.CurrentUser); //    将加密后的字节数组转换为 Base64 字符串以便存储
+                    loginConfig.EncryptedPassword = Convert.ToBase64String(protectedBytes); // 将加密后的密码存储在配置对象中
+                }
+                else
+                {
+                    // 不保存密码时，显式清除已保存的加密字段，防止下次加载时恢复旧密码
+                    loginConfig.EncryptedPassword = null;
+                }
+
+                // 序列化并写入文件
+                var serializer = new JavaScriptSerializer(); // 使用 JavaScriptSerializer 将 LoginConfig 对象序列化为 JSON 字符串
+                string loginJson = serializer.Serialize(loginConfig);    // 将 JSON 字符串写入配置文件
+                File.WriteAllText(_configPath, loginJson); // 写入文件
+
+                TxtStatus.Text = "配置已保存。";
+            }
+            catch (Exception ex)
+            {
+                TxtStatus.Text = "保存配置失败：" + ex.Message;
+                LogManager.Instance.LogError($"保存登录配置失败: {ex.Message}");
+            }
+        }
+
+        #region 辅助方法
+
+        /// <summary>
+        /// 从 UI 或 VariableDictionary 解析当前数据库类型，优先级：UI选择 > VariableDictionary > 默认"DM"
+        /// </summary>
+        private string ResolveSelectedDatabaseType()
+        {
+            // 1) 从 UI 获取
+            if (CmbDatabaseType?.SelectedItem is ComboBoxItem cbi && cbi.Content is string uiType)
+                return uiType.ToUpperInvariant();
+
+            // 2) 从 VariableDictionary 获取
+            if (!string.IsNullOrWhiteSpace(VariableDictionary._databaseType))
+                return VariableDictionary._databaseType.ToUpperInvariant();
+
+            // 3) 默认
+            return "DM";
+        }
+
+        /// <summary>
+        /// 根据数据库类型为空白输入框填充默认值（不覆盖已有输入）。
+        /// </summary>
+        private void ApplyDatabaseTypeDefaults(string dbType)
+        {
+            // 端口默认值
+            if (string.IsNullOrWhiteSpace(Login_DataBaseserverPort.Text))
+            {
+                Login_DataBaseserverPort.Text = (dbType == "MYSQL") ? "3308" : "5236";
+            }
+
+            // 应用用户默认凭据（注意：这是数据库管理员凭据，生产环境应通过服务端管理）
+            if (string.IsNullOrWhiteSpace(Login_Username.Text))
+            {
+                Login_Username.Text = (dbType == "MYSQL") ? "root" : "SYSDBA";
+            }
+            if (string.IsNullOrWhiteSpace(Login_Password.Password))
+            {
+                Login_Password.Password = (dbType == "MYSQL") ? "123456" : "675756SGBsgb";
+            }
+        }
+
+        /// <summary>
+        /// 将当前 UI 控件中的连接信息同步到 VariableDictionary 全局变量。
+        /// </summary>
+        private void SyncUiToGlobalVariables()
+        {
+            // 服务器 IP
+            VariableDictionary._serverIP = (Login_ServerIP.Text ?? string.Empty).Trim();
+
+            // 端口（转换失败时回退默认）
+            if (int.TryParse(Login_DataBaseserverPort.Text.Trim(), out int port) && port > 0)
+                VariableDictionary._dataBaseServerPort = port;
+            else
+                VariableDictionary._dataBaseServerPort = 5236;
+
+            // 应用用户凭据
+            VariableDictionary._userName = Login_Username.Text.Trim();
+            VariableDictionary._passWord = Login_Password.Password.Trim();
+
+            // 数据库管理员凭据（当前仍为硬编码，后续可改为服务端管理）
+            string dbType = VariableDictionary._databaseType ?? "DM";
+            VariableDictionary._dbUserName = (dbType == "MYSQL") ? "root" : "SYSDBA";
+            VariableDictionary._dbPassWord = (dbType == "MYSQL") ? "123456" : "675756SGBsgb";
+
+            // API 端口（固定值）
+            VariableDictionary._apiPort = 10010;
+        }
+
+        #endregion
+
+
+
 
         /// <summary>
         /// 尝试使用 DMAuthService 读取部门并填充下拉框，返回是否成功
@@ -215,142 +394,7 @@ namespace GB_NewCadPlus_IV
             }
         }
 
-        /// <summary>
-        /// 加载登录配置
-        /// </summary>
-        private void LoadConfig()
-        {
-            try
-            {
-                if (!File.Exists(_configPath)) return;// 配置文件不存在则返回
-                var json = File.ReadAllText(_configPath);//读取配置文件内容
-                var ser = new JavaScriptSerializer();//创建JSON序列化器 创建序列化器
-                var cfg = ser.Deserialize<LoginConfig>(json);//反序列化JSON反序列化为LoginConfig对象
-                if (cfg == null) return;//配置文件为空则返回 配置为空则返回
-                TxtServerIP.Text = cfg.ServerIP ?? "";//若配置存在则填入（不要覆盖为127.0.0.1，这里让 Loaded 处理默认）
-                TxtDataBaseserverPort.Text = cfg.DataBaseserverPort ?? "";//同上
-                TxtUsername.Text = cfg.Username ?? "";//设置用户名
-                if (cfg.EncryptedPassword != null && cfg.SavePassword)//保存密码如果保存了密码
-                {
-                    var pwd = ProtectedData.Unprotect(Convert.FromBase64String(cfg.EncryptedPassword), null, DataProtectionScope.CurrentUser);//解密密码
-                    PwdBox.Password = Encoding.UTF8.GetString(pwd);//设置密码
-                    ChkSavePassword.IsChecked = true;//勾选保存密码
-                }
-                VariableDictionary._serverIP = TxtServerIP.Text.Trim();
-                VariableDictionary._dataBaseServerPort = int.TryParse(TxtDataBaseserverPort.Text.Trim(), out int port) ? port : 5236;
-            VariableDictionary._userName = TxtUsername.Text.Trim();
-            VariableDictionary._passWord = PwdBox.Password.Trim();
-            var dbTypeForLogin = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant();
-            VariableDictionary._dbUserName = dbTypeForLogin == "MYSQL" ? "root" : "SYSDBA";
-            VariableDictionary._dbPassWord = dbTypeForLogin == "MYSQL" ? "123456" : "675756SGBsgb";
-                // 恢复配置中的数据库类型（如果存在）并同步到 UI
-                try
-                {
-                    if (cfg != null && !string.IsNullOrWhiteSpace(cfg.DatabaseType))
-                    {
-                        VariableDictionary._databaseType = cfg.DatabaseType.ToUpper().Trim();
-                        if (CmbDatabaseType != null)
-                        {
-                            foreach (var item in CmbDatabaseType.Items)
-                            {
-                                if (item is ComboBoxItem cbi && cbi.Content is string s && s.Equals(VariableDictionary._databaseType, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    CmbDatabaseType.SelectedItem = item;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                catch { }
-            }
-            catch (Exception ex)
-            {
-                TxtStatus.Text = "加载配置失败：" + ex.Message;
-                MessageBox.Show("加载配置失败：" + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-        /// <summary>
-        /// 保存登录配置
-        /// </summary>
-        /// <param name="savePassword"></param>
-        private void SaveConfig(bool savePassword)
-        {
-            try
-            {
-                var dir = Path.GetDirectoryName(_configPath);//获取配置文件目录
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);//创建目录
-                //创建登录配置对象
-                var cfg = new LoginConfig
-                {
-                    ServerIP = TxtServerIP.Text,//设置服务器IP
-                    DataBaseserverPort = TxtDataBaseserverPort.Text,//设置服务端口
-                    Username = TxtUsername.Text,//设置用户名
-                    SavePassword = savePassword//保存密码
-                };
 
-                // 如果 UI 中存在数据库类型选择，则保存到配置
-                try
-                {
-                    if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem sel)
-                    {
-                        var selStr = sel.Content as string;
-                        if (!string.IsNullOrWhiteSpace(selStr))
-                        {
-                            // 使用反射设置 LoginConfig 上可能不存在的属性，保持向后兼容
-                            var dbTypeProp = cfg.GetType().GetProperty("DatabaseType");
-                            if (dbTypeProp != null)
-                            {
-                                dbTypeProp.SetValue(cfg, selStr.ToUpper());
-                            }
-                            else
-                            {
-                                // 如果 LoginConfig 没有该属性，则通过序列化前替换 JSON 文本方式持久化
-                                // 这里先将 VariableDictionary 设置好，并在写文件后手动追加字段
-                                VariableDictionary._databaseType = selStr.ToUpper();
-                            }
-                        }
-                    }
-                }
-                catch { }
-
-                if (savePassword)//保存密码
-                {
-                    var bytes = Encoding.UTF8.GetBytes(PwdBox.Password ?? "");//获取密码字节数组
-                    var protectedBytes = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);//保护密码
-                    cfg.EncryptedPassword = Convert.ToBase64String(protectedBytes);//保存加密后的密码
-                }
-                VariableDictionary._serverIP = TxtServerIP.Text.Trim();
-                VariableDictionary._dataBaseServerPort = int.TryParse(TxtDataBaseserverPort.Text.Trim(), out int port) ? port : 5236;
-                VariableDictionary._userName = TxtUsername.Text.Trim();
-                VariableDictionary._passWord = PwdBox.Password.Trim();
-                var ser = new JavaScriptSerializer();//创建JSON序列化器
-                var json = ser.Serialize(cfg);
-                // 如果 LoginConfig 类型没有 DatabaseType 字段，但 VariableDictionary._databaseType 已设置，则追加该字段到 JSON（向后兼容）
-                try
-                {
-                    var dbTypeProp = cfg.GetType().GetProperty("DatabaseType");
-                    if (dbTypeProp == null && !string.IsNullOrWhiteSpace(VariableDictionary._databaseType))
-                    {
-                        // 简单方式：在结尾前插入字段（假设 ser.Serialize 产出一个对象 JSON）
-                        if (json.TrimEnd().EndsWith("}"))
-                        {
-                            var insert = $",\n  \"DatabaseType\": \"{VariableDictionary._databaseType}\"\n";
-                            json = json.TrimEnd();
-                            json = json.Substring(0, json.Length - 1) + insert + "}";
-                        }
-                    }
-                }
-                catch { }
-
-                File.WriteAllText(_configPath, json);//保存配置序列化并写入配置文件
-                TxtStatus.Text = "配置已保存。";//显示保存成功消息
-            }
-            catch (Exception ex)
-            {
-                TxtStatus.Text = "保存配置失败：" + ex.Message;//显示保存失败消息
-            }
-        }
         /// <summary>
         /// 登录按钮点击事件处理程序
         /// 在登录成功后：1) 保存登录配置；2) 尝试创建 DatabaseManager 并赋值 CreatedDatabaseManager；3) 关闭窗口返回 DialogResult=true
@@ -372,14 +416,15 @@ namespace GB_NewCadPlus_IV
                 }
             }
             catch { }
-            VariableDictionary._serverIP = TxtServerIP.Text.Trim();
-            VariableDictionary._dataBaseServerPort = int.TryParse(TxtDataBaseserverPort.Text.Trim(), out int port) ? port : 5236;
+            VariableDictionary._databaseType = CmbDatabaseType.SelectedItem?.ToString(); // 尝试从 UI 读取数据库类型，后续认证逻辑会根据这个值分支处理
+            VariableDictionary._serverIP = Login_ServerIP.Text.Trim(); // 更新全局服务器 IP
+            VariableDictionary._dataBaseServerPort = int.TryParse(Login_DataBaseserverPort.Text.Trim(), out int port) ? port : 5236; // 更新全局数据库端口
             VariableDictionary._apiPort = 10010; // API 端口固定为 10010，后续可改为 UI 可配置
-            VariableDictionary._userName = TxtUsername.Text.Trim();
-            VariableDictionary._passWord = PwdBox.Password.Trim();
+            VariableDictionary._userName = Login_Username.Text.Trim(); // 更新全局用户名
+            VariableDictionary._passWord = Login_Password.Password.Trim(); // 更新全局密码
 
-            BtnLogin.IsEnabled = false;
-            TxtStatus.Text = "正在连接并验证用户...";
+            BtnLogin.IsEnabled = false; // 禁用登录按钮，防止重复点击
+            TxtStatus.Text = "正在连接并验证用户..."; // 更新状态提示
             // 1) 先做快速 TCP 连通性检测；失败则直接退回 FormMain
             bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort));
             if (!tcpOk)
@@ -404,9 +449,8 @@ namespace GB_NewCadPlus_IV
                     try
                     {
                         // 判定是否为 MySQL 模式
-                        bool isMySql = VariableDictionary._databaseType == "MYSQL";
 
-                        if (isMySql)
+                        if (VariableDictionary._databaseType == "MYSQL")
                         {
                             // --- MySQL 分支 ---
                             // 使用数据库管理凭据（root）初始化服务，确保具有建表和查询系统表的权限
@@ -450,10 +494,10 @@ namespace GB_NewCadPlus_IV
                     {
                         if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem sel)
                         {
-                            var selStr = sel.Content as string;
-                            if (!string.IsNullOrWhiteSpace(selStr))
+                            var selStr = sel.Content as string; // 尝试从 UI 读取数据库类型，优先 UI 选择
+                            if (!string.IsNullOrWhiteSpace(selStr)) // 标准化为大写并去除空白
                             {
-                                VariableDictionary._databaseType = selStr.ToUpper().Trim();
+                                VariableDictionary._databaseType = selStr.ToUpper().Trim(); // 更新全局数据库类型标识
                             }
                         }
                     }
@@ -603,25 +647,25 @@ namespace GB_NewCadPlus_IV
             SaveConfig(ChkSavePassword.IsChecked == true);//保存登录配置
 
             // 尝试用新配置连接并加载部门
-            VariableDictionary._serverIP = TxtServerIP.Text.Trim();
+            VariableDictionary._serverIP = Login_ServerIP.Text.Trim();
             if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
             {
                 MessageBox.Show("请填写服务器IP地址。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                TxtServerIP.Focus();
+                Login_ServerIP.Focus();
                 return;
             }
-           
-            if (string.IsNullOrWhiteSpace(TxtDataBaseserverPort.Text))
+
+            if (string.IsNullOrWhiteSpace(Login_DataBaseserverPort.Text))
             {
                 MessageBox.Show("请填写服务器端口。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                TxtDataBaseserverPort.Focus();
+                Login_DataBaseserverPort.Focus();
                 return;
             }
             else
             {
-                VariableDictionary._dataBaseServerPort = Convert.ToInt32(TxtDataBaseserverPort.Text);
+                VariableDictionary._dataBaseServerPort = Convert.ToInt32(Login_DataBaseserverPort.Text);
             }
-            
+
             TxtStatus.Text = "正在连接服务器...";
 
             // 先做 TCP 层检测，快速反馈
@@ -689,19 +733,19 @@ namespace GB_NewCadPlus_IV
                     // 仅在用户还没有填写用户名/端口时才自动填充
                     if (sel == "MYSQL")
                     {
-                        if (string.IsNullOrWhiteSpace(TxtDataBaseserverPort.Text))
-                            TxtDataBaseserverPort.Text = "3308"; // 你的 MySQL 端口示例
-                        if (string.IsNullOrWhiteSpace(TxtUsername.Text))
-                            TxtUsername.Text = "root"; // MySQL 管理连接默认账号
+                        if (string.IsNullOrWhiteSpace(Login_DataBaseserverPort.Text))
+                            Login_DataBaseserverPort.Text = "3308"; // 你的 MySQL 端口示例
+                        if (string.IsNullOrWhiteSpace(Login_Username.Text))
+                            Login_Username.Text = "root"; // MySQL 管理连接默认账号
                         // 不自动设置密码，避免写入明文
                     }
                     else
                     {
                         // DM 默认端口为 5236
-                        if (string.IsNullOrWhiteSpace(TxtDataBaseserverPort.Text))
-                            TxtDataBaseserverPort.Text = "5236";
-                        if (string.IsNullOrWhiteSpace(TxtUsername.Text))
-                            TxtUsername.Text = "SYSDBA";
+                        if (string.IsNullOrWhiteSpace(Login_DataBaseserverPort.Text))
+                            Login_DataBaseserverPort.Text = "5236";
+                        if (string.IsNullOrWhiteSpace(Login_Username.Text))
+                            Login_Username.Text = "SYSDBA";
                     }
                     // 将选择保存到全局变量，供后续构造 DatabaseManager 使用
                     VariableDictionary._databaseType = sel;
@@ -756,11 +800,13 @@ namespace GB_NewCadPlus_IV
                 if (selectedDb == "MYSQL")
                 {
                     // 测试 MySQL 连接
-                    var dataBaseserver = TxtServerIP.Text.Trim();
-                    var dataBaseServerPort = TxtDataBaseserverPort.Text.Trim();
+                    var dataBaseserver = Login_ServerIP.Text.Trim();
+                    VariableDictionary._serverIP = dataBaseserver;
+                    var dataBaseServerPort = Login_DataBaseserverPort.Text.Trim();
+                    VariableDictionary._dataBaseServerPort = int.TryParse(dataBaseServerPort, out int port) ? port : 5236;
                     // 优先使用 UI 中填写的用户名，否则回退到 VariableDictionary 中可能已保存的用户名
-                    //var user = string.IsNullOrWhiteSpace(TxtUsername.Text) ? (VariableDictionary._userName ?? string.Empty) : TxtUsername.Text.Trim();
-                    //var pwd = PwdBox.Password.Trim();
+                    //var user = string.IsNullOrWhiteSpace(Login_Username.Text) ? (VariableDictionary._userName ?? string.Empty) : Login_Username.Text.Trim();
+                    //var pwd = Login_Password.Password.Trim();
                     // 记录用于测试的目标信息（不记录明文密码）
                     LogManager.Instance.LogInfo($"测试 MySQL 连接: {dataBaseserver}:{dataBaseServerPort} user = root ");
                     string dbPart = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? string.Empty : $"Database={VariableDictionary._dataBaseName};";
@@ -801,14 +847,14 @@ namespace GB_NewCadPlus_IV
                     // 构建参数数组用于 DMDatabaseReader
                     string[] args = new string[]
                     {
-                        TxtServerIP.Text.Trim(), // 服务器地址
-                        TxtDataBaseserverPort.Text.Trim(), // 服务器端口
-                        //TxtUsername.Text.Trim(), // 用户名
-                        //PwdBox.Password.Trim() // 密码
+                        Login_ServerIP.Text.Trim(), // 服务器地址
+                        Login_DataBaseserverPort.Text.Trim(), // 服务器端口
+                        //Login_Username.Text.Trim(), // 用户名
+                        //Login_Password.Password.Trim() // 密码
                         "SYSDBA",
                         "675756SGBsgb"
                     };
-                    
+
                     // 调用 DMDatabaseReaderMethod 方法
                     GB_NewCadPlus_IV.DMDatabaseReader.DMDatabaseReader.DMDatabaseReaderMethod(args);
 
@@ -825,7 +871,7 @@ namespace GB_NewCadPlus_IV
                 BtnTestServer测试服务器.IsEnabled = true; // 恢复按钮可用状态
             }
         }
-     
+
     }
     /// <summary>
     /// 登录配置类
@@ -839,5 +885,6 @@ namespace GB_NewCadPlus_IV
         public string EncryptedPassword { get; set; }
         // 可选：持久化数据库类型（"DM" 或 "MYSQL"），用于下次启动时恢复选项
         public string DatabaseType { get; set; }
+        public string configPath { get; set; }
     }
 }

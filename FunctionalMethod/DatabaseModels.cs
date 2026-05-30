@@ -55,7 +55,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// 创建人
         /// </summary>
         public string? CreatedBy { get; set; }
-
         /// <summary>
         /// JSON属性字典（新上传入口使用）
         /// </summary>
@@ -154,7 +153,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public bool NeedsFileSync { get; set; }
         public bool NeedsPreviewSync { get; set; }
     }
-
     /// <summary>
     /// [已废弃] 图元属性模型。之前使用 cad_file_attributes 表存放各种预定义列，
     /// 现已被字典/JSON字符串 (cad_block_attributes_json) 完全取代。
@@ -166,10 +164,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public long Id { get; set; }
         public string? FileAttributeId { get; set; }
     }
-
-
-
-
     /// <summary>
     /// 兼容之前 DatabaseManager 中使用的 SW 相关模型
     /// </summary>
@@ -200,7 +194,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
-
     /// <summary>
     /// SW 图形模型，描述软件中的图形元素信息。
     /// </summary>
@@ -250,31 +243,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public string? SubcategoryIds { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-    }
-    /// <summary>
-    /// 文件标签模型，描述文件与标签的关联信息，包括文件ID、标签文本、创建时间等，兼容旧数据结构，允许标签文本为空以适应历史数据导入。
-    /// </summary>
-    public class FileTag
-    {
-        public int Id { get; set; }
-        public int FileId { get; set; }
-        // 标签文本，允许为空以兼容历史数据
-        public string? Tag { get; set; }
-        public DateTime CreatedAt { get; set; }
-    }
-    /// <summary>
-    /// 文件访问日志模型，记录文件访问事件的信息，包括文件ID、访问者用户名、操作类型、访问时间、访问IP等，兼容旧数据结构，允许用户名、操作类型和IP地址为空以适应历史数据导入。
-    /// </summary>
-    public class FileAccessLog
-    {
-        public int FileId { get; set; }
-        // 访问者用户名，允许为空
-        public string? UserName { get; set; }
-        // 操作类型（Download/View/...），允许为空
-        public string? ActionType { get; set; }
-        public DateTime AccessTime { get; set; }
-        // 访问IP，允许为空
-        public string? IpAddress { get; set; }
     }
     /// <summary>
     /// 部门信息模型
@@ -340,7 +308,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public string DepartmentName { get; set; } = string.Empty;
         public bool IsActive { get; set; }
     }
-
     /// <summary>
     /// 表信息模型（用于数据库浏览）
     /// </summary>

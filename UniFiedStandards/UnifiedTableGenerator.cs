@@ -13,7 +13,7 @@ using AttributeCollection = Autodesk.AutoCAD.DatabaseServices.AttributeCollectio
 using DataTable = System.Data.DataTable;
 
 
-
+/// 设备属性块信息类和统一表生成器类
 namespace GB_NewCadPlus_IV.UniFiedStandards
 {
     /// <summary>
@@ -128,7 +128,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// - 最终以表格形式（沿用本类表格样式）生成一张或多张“管道”表
         /// - 新增功能：自动调整每列列宽以适应最长文字
         /// </summary>
-        [CommandMethod("GeneratePipeTableFromSelection")]
+        [CommandMethod(nameof(GeneratePipeTableFromSelection))]
         public void GeneratePipeTableFromSelection()
         {
             // 获取当前活动文档，若为空直接返回，避免空引用异常
@@ -457,89 +457,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         /// <summary>
-        /// 自动调整表格列宽以适应内容
-        /// </summary>
-        /// <param name="tr">当前事务</param>
-        /// <param name="tableId">表格对象的 ObjectId</param>
-        /// <param name="ed">编辑器对象，用于获取文字 extents</param>
-        private void AutoFitTableColumns(Transaction tr, ObjectId tableId, Editor ed)
-        {
-            try
-            {
-                // 以写模式打开表格对象
-                var table = tr.GetObject(tableId, OpenMode.ForWrite) as Autodesk.AutoCAD.DatabaseServices.Table;
-                if (table == null) return;
-
-                // 获取表格的行数和列数
-                int numRows = table.Rows.Count;
-                int numCols = table.Columns.Count;
-
-                // 遍历每一列
-                for (int col = 0; col < numCols; col++)
-                {
-                    double maxWidth = 0.0;
-                    // 获取当前列的文字高度（假设所有单元格文字高度一致，取第一个非空单元格的高度）
-                    double textHeight = 2.5; // 默认高度，可根据实际情况调整
-
-                    // 遍历该列的所有行
-                    for (int row = 0; row < numRows; row++)
-                    {
-                        // 获取单元格的文本内容
-                        string cellText = table.Cells[row, col].TextString;
-                        if (string.IsNullOrWhiteSpace(cellText)) continue;
-
-                        // 获取单元格的文字高度
-                        if (table.Cells[row, col].TextHeight > 0)
-                        {
-                            textHeight = Convert.ToDouble(table.Cells[row, col].TextHeight);
-                        }
-
-                        // 计算文本的显示宽度
-                        // 简单估算：汉字宽度约为高度的 1.0-1.2 倍，英文约为 0.6-0.8 倍
-                        // 更准确的方法是使用 Geometry.TextBounds，但需要知道字体和样式
-                        // 这里使用一种简化的估算方法：每个字符平均宽度为 textHeight * 0.8
-                        // 对于中文，可能需要更宽，这里乘以 1.0 作为系数
-                        double estimatedWidth = cellText.Length * textHeight * 0.8;
-
-                        // 考虑一些常用汉字的宽度，适当增加系数
-                        // 如果包含中文，系数可以更大一些，比如 1.0
-                        bool hasChinese = Regex.IsMatch(cellText, @"[\u4e00-\u9fff]");
-                        if (hasChinese)
-                        {
-                            estimatedWidth = cellText.Length * textHeight * 1.0;
-                        }
-
-                        // 更新最大宽度
-                        if (estimatedWidth > maxWidth)
-                        {
-                            maxWidth = estimatedWidth;
-                        }
-                    }
-
-                    // 设置列宽，增加一定的边距（Padding），例如左右各加 0.5 倍文字高度
-                    if (maxWidth > 0)
-                    {
-                        double padding = textHeight * 1.0; // 左右边距总和
-                        table.Columns[col].Width = maxWidth + padding;
-                    }
-                    else
-                    {
-                        // 如果列中没有内容，设置一个最小宽度
-                        table.Columns[col].Width = textHeight * 5;
-                    }
-                }
-
-                // 强制更新表格显示
-                table.GenerateLayout();
-            }
-            catch (Exception ex)
-            {
-                // 记录异常，但不中断程序
-                ed.WriteMessage($"\n自动调整列宽时出错: {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// 【优化版】高级自动调整表格列宽，考虑合并单元格和实际文本宽度
         /// </summary>
         /// <param name="table">要调整的表格对象</param>
@@ -759,7 +676,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// 简单实现：直接调用 GeneratePipeTableFromSelection，使用统一逻辑（包含选择、分组、插入点提示）。
         /// 如果 WPF 需直接调用此方法，请在 WPF 中触发此命令或直接调用 GeneratePipeTableFromSelection。
         /// </summary>
-        [CommandMethod("InsertPipeTable")]
+        [CommandMethod(nameof(InsertPipeTable))]
         public void InsertPipeTable()
         {
             // 迁移后直接复用 GeneratePipeTableFromSelection 的逻辑
@@ -978,7 +895,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 获取所有选择的线段信息
         /// </summary>
-        [CommandMethod("CollectLineInfo")]
+        [CommandMethod(nameof(CollectLineInfo))]
         public static void CollectLineInfo()
         {
             // 获取当前文档和编辑器
@@ -1246,7 +1163,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 同步管道\属性
         /// </summary>        
-        [CommandMethod("SyncPipeProperties")]
+        [CommandMethod(nameof(SyncPipeProperties))]
         public void SyncPipeProperties()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -1586,8 +1503,8 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             public PipeAttributeEditorForm(Dictionary<string, string> initialAttributes)
             {
                 _attributes = new Dictionary<string, string>(initialAttributes ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
-                InitializeComponent();
-                LoadAttributesToGrid();
+                InitializeComponent(); // 初始化控件
+                FillAttributesToGrid();// 填充属性表到网格
             }
 
             /// <summary>
@@ -1654,15 +1571,15 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             /// <summary>
             /// 填充属性表
             /// </summary>
-            private void LoadAttributesToGrid()
+            private void FillAttributesToGrid()
             {
-                _dataGridView.Rows.Clear();
-                foreach (var kv in _attributes.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                _dataGridView.Rows.Clear();// 清除现有行
+                foreach (var kv in _attributes.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)) // 循环填充属性表到网格 按键排序以保证稳定性
                 {
-                    _dataGridView.Rows.Add(kv.Key, kv.Value);
+                    _dataGridView.Rows.Add(kv.Key, kv.Value);// 添加行
                 }
-                if (_dataGridView.Rows.Count > 0)
-                    _dataGridView.CurrentCell = _dataGridView.Rows[0].Cells[1];
+                if (_dataGridView.Rows.Count > 0)// 如果有行，选中第一行的值列
+                    _dataGridView.CurrentCell = _dataGridView.Rows[0].Cells[1]; // 选中第一行的值列
             }
 
             /// <summary>
@@ -2389,7 +2306,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 新增：通过点击采集点并生成管道块（入口/出口两种命令）DrawOutletPipeByClicks
         /// </summary>
-        [CommandMethod("DrawOutletPipeByClicks")]
+        [CommandMethod(nameof(DrawOutletPipeByClicks))]
         public void DrawOutletPipeByClicks()
         {
             DrawPipeByClicks(isOutlet: true);
@@ -2398,7 +2315,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 新增：通过点击采集点并生成管道块（入口/出口两种命令）DrawInletPipeByClicks
         /// </summary>
-        [CommandMethod("DrawInletPipeByClicks")]
+        [CommandMethod(nameof(DrawInletPipeByClicks))]
         public void DrawInletPipeByClicks()
         {
             DrawPipeByClicks(isOutlet: false);
@@ -3018,40 +2935,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             // 返回候选列表
             return ordered;
         }
-
-        /// <summary>
-        /// 从属性字典按候选键提取第一个非空值（先精确，再包含）
-        /// </summary>
-        //private static string FindFirstAttrValue(Dictionary<string, string> attrs, string[] keys)
-        //{
-        //    // 空字典保护
-        //    if (attrs == null || attrs.Count == 0) return string.Empty;
-
-        //    // 先做精确键匹配
-        //    foreach (var k in keys)
-        //    {
-        //        if (attrs.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v))
-        //            return v.Trim();
-        //    }
-
-        //    // 再做包含匹配
-        //    foreach (var kv in attrs)
-        //    {
-        //        if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value)) continue;
-        //        foreach (var k in keys)
-        //        {
-        //            if (kv.Key.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0)
-        //                return kv.Value.Trim();
-        //        }
-        //    }
-
-        //    // 未命中
-        //    return string.Empty;
-        //}
+        
 
         #endregion
-
-        //SetOrAddAttrByAliases DrawPipeByClicks NormalizePipeAttributeKeys
+        
 
 
         /// <summary>
@@ -3217,11 +3104,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
             // 优先使用用户在TextBox_绘图比例中设置的比例值
             var scaleFactor = AutoCadHelper.GetScale();
-            if (scaleFactor <= 0) // 如果获取失败，使用原有逻辑
-            {
-                //AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
-                scaleFactor = AutoCadHelper.GetAndApplyActiveDrawingScale();//获取当前绘图比例
-            }
 
             // 箭头模板与填充准备：若无模板则用默认三角
             Polyline arrowTemplate = sampleInfo.DirectionArrowTemplate;
@@ -4154,46 +4036,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 ed.WriteMessage($"\n将块属性同步到表格时出错: {ex.Message}");
             }
         }
-
-        /// <summary>
-        /// 从表格中提取数据
-        /// </summary>
-        /// <param name="table">表格对象</param>
-        /// <returns>表格数据字典</returns>
-        //private Dictionary<string, string> ExtractTableData(Table table)
-        //{
-        //    var data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        //    try
-        //    {
-        //        // 遍历表格的行和列，提取数据
-        //        for (int row = 0; row < table.Rows.Count; row++)
-        //        {
-        //            for (int col = 0; col < table.Columns.Count; col++)
-        //            {
-        //                var cellText = table.Cells[row, col].TextString ?? string.Empty;
-        //                var headerText = table.Cells[0, col].TextString ?? string.Empty; // 使用第一行作为标题
-
-        //                if (!string.IsNullOrWhiteSpace(headerText) && !string.IsNullOrWhiteSpace(cellText))
-        //                {
-        //                    // 避免重复键，使用组合键
-        //                    var key = $"{headerText}_{row}";
-        //                    if (!data.ContainsKey(key))
-        //                    {
-        //                        data[key] = cellText;
-        //                    }
-        //                }
-        //            }
-        //        }
-        //    }
-        //    catch (System.Exception ex)
-        //    {
-        //        Application.DocumentManager.MdiActiveDocument?.Editor?.WriteMessage($"\n提取表格数据时出错: {ex.Message}");
-        //    }
-
-        //    return data;
-        //}
-
+        
         /// <summary>
         /// 从块参照中提取属性
         /// </summary>
@@ -4509,81 +4352,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         /// <summary>
-        /// 自适应调整列宽（使用单元格 TextHeight 作为尺度基准，保证按相同比例放缩）
-        /// 说明：避免直接依赖外部的比例值，改为基于已设置的单元格 TextHeight 计算列宽。
-        /// </summary>
-        //private void AutoResizeColumns(Table table)
-        //{
-        //    try
-        //    {
-        //        for (int j = 0; j < table.Columns.Count; j++)
-        //        {
-        //            double maxWidth = 10.0; // 最小宽度（绘图单位）
-        //            double sampleTextHeight = 0.0;
-
-        //            // 1) 估算该列使用的平均文字高度（取第一非零的 TextHeight）
-        //            for (int i = 0; i < table.Rows.Count; i++)
-        //            {
-        //                try
-        //                {
-        //                    var th = table.Cells[i, j].TextHeight;
-        //                    if (th > 0.0)
-        //                    {
-        //                        sampleTextHeight = Convert.ToDouble(th);
-        //                        break;
-        //                    }
-        //                }
-        //                catch { }
-        //            }
-        //            // 若未找到有效 TextHeight，尝试行内查找（兜底）
-        //            if (sampleTextHeight <= 0.0)
-        //            {
-        //                // 取全表第一个非零 TextHeight
-        //                for (int ii = 0; ii < table.Rows.Count && sampleTextHeight <= 0.0; ii++)
-        //                {
-        //                    for (int jj = 0; jj < table.Columns.Count && sampleTextHeight <= 0.0; jj++)
-        //                    {
-        //                        try { sampleTextHeight = Convert.ToDouble(table.Cells[ii, jj].TextHeight); }
-        //                        catch { sampleTextHeight = 0.0; }
-        //                    }
-        //                }
-        //            }
-
-        //            // 保守兜底：若仍然无有效 TextHeight，则使用一个合理默认
-        //            if (sampleTextHeight <= 0.0)
-        //                sampleTextHeight = TextFontsStyleHelper.ComputeScaledHeight(2.0, 1.0);
-
-        //            // 2) 计算每行文本的估算字符宽度（以字符单位计），并据此求出最大需求
-        //            for (int i = 0; i < table.Rows.Count; i++)
-        //            {
-        //                string text = string.Empty;
-        //                try { text = table.Cells[i, j].TextString ?? string.Empty; } catch { text = string.Empty; }
-        //                if (!string.IsNullOrEmpty(text))
-        //                {
-        //                    double charUnits = EstimateTextWidth(text); // 近似单位
-        //                    // 根据文字高度估算所需宽度（经验系数）
-        //                    double charWidthFactor = 0.55; // 每字符宽度相对 TextHeight 的经验系数，可微调
-        //                    double estWidth = Math.Ceiling(charUnits * sampleTextHeight * charWidthFactor);
-        //                    if (estWidth > maxWidth) maxWidth = estWidth;
-        //                }
-        //            }
-
-        //            // 3) 限制列宽范围，避免过窄或过宽
-        //            double minColWidth = Math.Max(8.0, sampleTextHeight * 2.5);
-        //            double maxColWidth = Math.Max(60.0, sampleTextHeight * 40.0);
-
-        //            double finalWidth = Math.Max(minColWidth, Math.Min(maxColWidth, maxWidth));
-
-        //            try { table.SetColumnWidth(j, finalWidth); } catch { /* 忽略设置失败 */ }
-        //        }
-        //    }
-        //    catch
-        //    {
-        //        // 兜底：保持现状，不抛出异常以免中断调用方流程
-        //    }
-        //}
-
-        /// <summary>
         /// 设置表格边框并按比例选择合适的线宽（尝试性，API 不同版本行为不同，用 try/catch 包裹）
         /// </summary>
         private void SetTableBorders(Table table, double scaleDenominator)
@@ -4820,32 +4588,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 // 容错：忽略任何设置异常
             }
         }
-
-        /// <summary>
-        /// 估算文本宽度
-        /// </summary>
-        private double EstimateTextWidth(string text)
-        {
-            double width = 0;
-            foreach (char c in text)
-            {
-                if (c > 127) // 中文字符
-                    width += 1.5;
-                else
-                    width += 0.8;
-            }
-            return width + 2.0; // 增加一些边距
-            //foreach (char c in text)
-            //{
-            //    if (c > 127) // 中文字符
-            //        width += 3.0;
-            //    else
-            //        width += 1.5;
-            //}
-            //return width + 4.0; // 增加一些边距
-        }
-
-
+        
         /// <summary>
         /// 根据视口尺度因子和比例字符串确定最终的比例分母
         /// </summary>
@@ -5296,11 +5039,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         #region 同步表格
-
-        /// <summary>
-        /// 【临时】用于 WPF 窗口传递待同步的数据列表
-        /// </summary>
-        public static List<DeviceInfo> TempSyncData { get; set; } = new List<DeviceInfo>();
+        
 
         /// <summary>
         /// 同步表格
@@ -5332,7 +5071,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     }
 
                     // 自动识别数据起始行（常见：0=title,1=headerRow1,2=headerRow2, 数据自3起）
-                    int dataStartRow = 3;
+                    int dataStartRow = 2;
                     if (table.Rows.Count <= dataStartRow)
                     {
                         ed.WriteMessage("\n表格行数过少，无法识别数据行，请确认表格结构。");
@@ -5341,7 +5080,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                     // 查找标识列（用于匹配图元）
                     int idCol = -1;
-                    string[] idKeywords = new[] { "部件ID", "部件 Id", "部件编号", "管段号", "管段编号", "Pipeline", "Pipe No", "ID", "序号" };
+                    string[] idKeywords = new[] { "管段号", "名称", "规格", "材料", "数量", "标准号",  "管段等级", "介质名称", "温度", "压力等级", "隔热", "防腐" };
                     for (int c = 0; c < table.Columns.Count; c++)
                     {
                         string h1 = (table.Cells[1, c].TextString ?? string.Empty).Trim();
@@ -5360,7 +5099,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                     if (idCol == -1)
                     {
-                        ed.WriteMessage("\n未能在表头中找到标识列（例如“部件ID”或“管段号”）。请在表格中包含用于匹配块的标识列后重试。");
+                        ed.WriteMessage("\n未能在表头中找到标识列（例如“名称”或“管段号”）。请在表格中包含用于匹配块的标识列后重试。");
                         return;
                     }
 
@@ -5874,6 +5613,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
             return s;
         }
+
         /// <summary>
         /// 导入表格数据
         /// </summary>

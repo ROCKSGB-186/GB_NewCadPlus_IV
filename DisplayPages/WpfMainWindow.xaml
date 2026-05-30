@@ -3030,172 +3030,19 @@
                         Header=" 系统设置 ">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="80" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
                             <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="10,5,10,5">
-                                    <!--  数据库设置  -->
-                                    <GroupBox
-                                        x:Name="数据库设置"
-                                        Margin="0,5,0,5"
-                                        Header="数据库设置">
-                                        <StackPanel Margin="5">
-                                            <TextBlock Margin="0,5,0,2" Text="服务器IP地址：" />
-                                            <TextBox
-                                                x:Name="TextBoxSetServiceIP"
-                                                Margin="0,0,0,5"
-                                                Style="{StaticResource WatermarkTextBoxStyle}"
-                                                Tag="请输入服务器IP地址"
-                                                Text="127.0.0.1" />
-
-                                            <TextBlock Margin="0,5,0,2" Text="端口号：" />
-                                            <TextBox
-                                                x:Name="TextBoxSetServicePort"
-                                                Margin="0,0,0,5"
-                                                DataObject.Pasting="TextBox_Set_ServicePort_Pasting"
-                                                PreviewTextInput="TextBox_Set_ServicePort_PreviewTextInput"
-                                                Style="{StaticResource WatermarkTextBoxStyle}"
-                                                Tag="请输入端口号"
-                                                Text="3306" />
-
-                                            <TextBlock Margin="0,5,0,2" Text="数据库名称：" />
-                                            <TextBox
-                                                x:Name="TextBoxSetDatabaseName"
-                                                Margin="0,0,0,5"
-                                                Background="#f0f0f0"
-                                                FontFamily="Microsoft YaHei UI"
-                                                FontWeight="Normal"
-                                                IsReadOnly="True"
-                                                Style="{StaticResource WatermarkTextBoxStyle}"
-                                                Tag="请输入数据库名称"
-                                                Text="cad_sw_library" />
-
-                                            <TextBlock Margin="0,5,0,2" Text="用户名：" />
-                                            <TextBox
-                                                x:Name="TextBoxSetUsername"
-                                                Margin="0,0,0,5"
-                                                Background="#f0f0f0"
-                                                FontFamily="Microsoft YaHei UI"
-                                                FontWeight="Normal"
-                                                IsReadOnly="True"
-                                                Style="{StaticResource WatermarkTextBoxStyle}"
-                                                Tag="请输入用户名"
-                                                Text="root" />
-
-                                            <TextBlock Margin="0,5,0,2" Text="密码：" />
-                                            <TextBox
-                                                x:Name="PasswordBoxSetPassword"
-                                                Margin="0,0,0,5"
-                                                Background="#f0f0f0"
-                                                FontFamily="Microsoft YaHei UI"
-                                                FontWeight="Normal"
-                                                IsReadOnly="True"
-                                                Style="{StaticResource WatermarkTextBoxStyle}"
-                                                Text="root" />
-                                        </StackPanel>
-                                    </GroupBox>
-
-                                    <!--  文件存储设置  -->
-                                    <GroupBox
-                                        x:Name="文件存储设置"
-                                        Margin="0,5,0,5"
-                                        Header="文件存储设置">
-                                        <StackPanel Margin="5">
-                                            <TextBlock Margin="0,5,0,2" Text="首选存储路径：" />
-                                            <TextBox
-                                                x:Name="TextBoxSetStoragePath"
-                                                Margin="0,0,0,5"
-                                                Background="#f0f0f0"
-                                                FontFamily="Microsoft YaHei UI"
-                                                FontWeight="Normal"
-                                                IsReadOnly="True"
-                                                Style="{StaticResource WatermarkTextBoxStyle}"
-                                                Tag="请输入文件存储路径"
-                                                Text="D\GB_Tools\Cad_Sw_Library" />
-
-                                            <CheckBox
-                                                x:Name="CheckBoxUseDPath"
-                                                Margin="0,5,0,5"
-                                                Content="优先使用D盘存储"
-                                                IsChecked="True"
-                                                IsEnabled="False" Width="125" />
-                                        </StackPanel>
-                                    </GroupBox>
-
-                                    <!--  其他设置  -->
-                                    <GroupBox
-                                        x:Name="其他设置"
-                                        Margin="0,5,0,5"
-                                        Header="其他设置">
-                                        <StackPanel Margin="5">
-                                            <CheckBox
-                                                x:Name="CheckBoxAutoSync"
-                                                Margin="0,5,0,5"
-                                                Background="#f0f0f0"
-                                                Content="启用自动同步"
-                                                IsChecked="True"
-                                                IsEnabled="False" />
-
-                                            <TextBlock Margin="0,5,0,2" Text="同步间隔（分钟）：" />
-                                            <TextBox
-                                                x:Name="TextBoxSyncInterval"
-                                                Margin="0,0,0,5"
-                                                Background="#f0f0f0"
-                                                FontFamily="Microsoft YaHei UI"
-                                                FontWeight="Normal"
-                                                IsReadOnly="True"
-                                                Style="{StaticResource WatermarkTextBoxStyle}"
-                                                Tag="请输入同步间隔"
-                                                Text="30" />
-                                        </StackPanel>
-                                    </GroupBox>
-                                    <GroupBox
-                                        x:Name="应用按键"
-                                        Height="50"
-                                        Margin="0,1,0,1"
-                                        Header="">
-                                        <Grid>
-
-                                            <Button
-                                                x:Name="保存设置按钮"
-                                                Width="80"
-                                                Height="25"
-                                                Margin="0,0,0,0"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Click="保存设置按钮_Click"
-                                                Content="保存设置"
-                                                Cursor="" />
-                                            <Button
-                                                x:Name="测试连接按钮"
-                                                Width="80"
-                                                Height="25"
-                                                Margin="0,0,0,0"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Top"
-                                                Click="测试连接按钮_Click"
-                                                Content="测试连接" />
-                                            <Button
-                                                x:Name="应用设置按钮"
-                                                Width="80"
-                                                Height="25"
-                                                Margin="0,0,0,0"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Bottom"
-                                                Click="应用设置按钮_Click"
-                                                Content="应用设置" />
-
-                                        </Grid>
-                                    </GroupBox>
-
+                                    <!--  版本  -->
                                     <GroupBox
                                         x:Name="版本插入管理"
                                         Height="107"
-                                        Margin="0,5,0,5"
-                                        Header="插件">
-
+                                        Margin="0,1,0,1"
+                                        Header="版本">
                                         <Grid>
                                             <TextBlock
                                                 Height="25"
@@ -3206,12 +3053,13 @@
                                             <TextBox
                                                 x:Name="TextBox插件版本"
                                                 Width="180"
-                                                Height="20"
-                                                Margin="0,5,5,60"
+                                                Height="22"
+                                                Margin="0,0,5,60"
                                                 HorizontalAlignment="Right"
+                                                VerticalAlignment="Bottom"
                                                 AcceptsTab="True"
                                                 BorderThickness="1,2,1,1"
-                                                FontSize="8"
+                                                FontSize="11"
                                                 SelectionOpacity="0.5"
                                                 Style="{StaticResource WatermarkTextBoxStyle}"
                                                 Tag="版本："
@@ -3225,12 +3073,13 @@
                                             <TextBox
                                                 x:Name="TextBox客户端版本"
                                                 Width="180"
-                                                Height="20"
-                                                Margin="0,27,5,38"
+                                                Height="22"
+                                                Margin="0,0,5,33"
                                                 HorizontalAlignment="Right"
+                                                VerticalAlignment="Bottom"
                                                 AcceptsTab="True"
                                                 BorderThickness="1,2,1,1"
-                                                FontSize="8"
+                                                FontSize="11"
                                                 SelectionOpacity="0.5"
                                                 Style="{StaticResource WatermarkTextBoxStyle}"
                                                 Tag="版本："
@@ -3238,53 +3087,158 @@
                                             <Button
                                                 x:Name="下载最新版客户端"
                                                 Width="120"
-                                                Height="25"
-                                                Margin="0,0,15,0"
+                                                Height="20"
+                                                Margin="0,0,35,5"
                                                 HorizontalAlignment="Right"
                                                 VerticalAlignment="Bottom"
                                                 Click="下载最新版客户端_Click"
                                                 Content="下载最新版客户端" />
 
+
+                                        </Grid>
+                                    </GroupBox>
+                                    <!--  文件存储设置  -->
+                                    <GroupBox
+                                        x:Name="文件存储设置"
+                                        Height="94"
+                                        Margin="0,1,0,1"
+                                        Header="文件存储设置">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="15*" />
+                                                <ColumnDefinition Width="77*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock
+                                                Grid.ColumnSpan="2"
+                                                Margin="0,5,0,0"
+                                                Text="首选存储路径：" />
+                                            <TextBox
+                                                x:Name="TextBoxSetStoragePath"
+                                                Grid.ColumnSpan="2"
+                                                Width="276"
+                                                Height="18"
+                                                Margin="0,27,0,0"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Top"
+                                                Background="#f0f0f0"
+                                                FontFamily="Microsoft YaHei UI"
+                                                FontWeight="Normal"
+                                                IsReadOnly="True"
+                                                Style="{StaticResource WatermarkTextBoxStyle}"
+                                                Tag="请输入文件存储路径"
+                                                Text="D\GB_Tools\Cad_Sw_Library" />
+
+                                            <CheckBox
+                                                x:Name="CheckBoxUseDPath"
+                                                Grid.ColumnSpan="2"
+                                                Width="100"
+                                                Margin="10,53,0,2"
+                                                HorizontalAlignment="Left"
+                                                Checked="CheckBoxUseDPath_Checked"
+                                                Content="使用默认路径"
+                                                IsChecked="False"
+                                                Unchecked="CheckBoxUseDPath_Unchecked" />
+                                            <Button
+                                                x:Name="指定路径按键"
+                                                Grid.Column="1"
+                                                Width="85"
+                                                Height="20"
+                                                Margin="144,50,0,0"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top"
+                                                Click="指定路径按键_OnClick"
+                                                Content="指定路径..." />
+                                        </Grid>
+                                    </GroupBox>
+
+                                    <!--  其他设置  -->
+                                    <GroupBox
+                                        x:Name="其他设置"
+                                        Height="75"
+                                        Margin="0,5,0,5"
+                                        Header="其他设置">
+                                        <Grid Width="273" Height="67">
+                                            <CheckBox
+                                                x:Name="CheckBoxAutoSync"
+                                                Margin="0,10,165,37"
+                                                Background="#f0f0f0"
+                                                Content="启用自动同步"
+                                                IsChecked="True"
+                                                IsEnabled="False" />
+
+                                            <TextBlock Margin="8,30,165,19" Text="同步间隔（分钟）：" />
+                                            <TextBox
+                                                x:Name="TextBoxSyncInterval"
+                                                Width="40"
+                                                Margin="124,30,0,0"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top"
+                                                Background="#f0f0f0"
+                                                FontFamily="Microsoft YaHei UI"
+                                                FontWeight="Normal"
+                                                IsReadOnly="True"
+                                                Style="{StaticResource WatermarkTextBoxStyle}"
+                                                Tag="请输入同步间隔"
+                                                Text="30" />
                                             <Button
                                                 x:Name="同步图元"
-                                                Width="100"
-                                                Height="25"
-                                                Margin="15,0,0,0"
+                                                Width="85"
+                                                Height="20"
+                                                Margin="185,30,0,0"
                                                 HorizontalAlignment="Left"
-                                                VerticalAlignment="Bottom"
+                                                VerticalAlignment="Top"
                                                 Click="同步图元_Click"
                                                 Content="同步图元" />
 
                                         </Grid>
-
-
                                     </GroupBox>
-
                                 </StackPanel>
+
                             </ScrollViewer>
 
-                            <Grid Grid.Row="1">
+                            <ScrollViewer Grid.Row="1" x:Name="LogScrollViewer" VerticalScrollBarVisibility="Auto">
+                                <TextBlock x:Name="LogContentTextBlock"
+                                           TextWrapping="Wrap"
+                                           FontFamily="Consolas"
+                                           FontSize="10"
+                                           Text="正在加载日志..."/>
+                            </ScrollViewer>
 
-                                <GroupBox Margin="0,5,0,5" Header="日志">
-                                    <StackPanel Margin="5" Orientation="Horizontal">
+                            <Grid Grid.Row="2" Height="Auto" VerticalAlignment="Top" Margin="0,0,0,0">
+
+
+                                <GroupBox x:Name="日志" Margin="5,0,5,2" Header="日志" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                                    <Grid Height="60">
                                         <Button
-                                            x:Name="查看日志按钮"
-                                            Width="80"
-                                            Height="25"
-                                            Margin="5"
-                                            Click="查看日志按钮_Click"
-                                            Content="查看日志" />
+                                            x:Name="查看日志文件夹按钮"
+                                            Width="125"
+                                            Height="22"
+                                            Margin="10,33,151,0"
+                                            Click="查看日志文件夹按钮_Click"
+                                            Content="查看所有LOG" VerticalContentAlignment="Bottom" VerticalAlignment="Top" />
                                         <Button
-                                            x:Name="显示最新日志按钮"
-                                            Width="80"
-                                            Height="25"
-                                            Margin="5"
-                                            Click="显示最新日志按钮_Click"
-                                            Content="显示最新日志 " />
-                                    </StackPanel>
+                                            x:Name="打开最新日志按钮"
+                                            Width="125"
+                                            Height="22"
+                                            Margin="151,0,10,33"
+                                            Click="打开最新日志按钮_Click"
+                                            Content="打开最新LOG " VerticalContentAlignment="Bottom" VerticalAlignment="Bottom" />
+                                        <Button
+                                            x:Name="加载显示日志按钮"
+                                            Width="125"
+                                            Height="22"
+                                            Margin="10,5,151,0"
+                                            Click="加载显示日志按钮_Click"
+                                            Content="加载日志 " VerticalContentAlignment="Bottom" VerticalAlignment="Top" />
+                                        <Button
+                                            x:Name="应用设置按钮"
+                                            Width="125"
+                                            Height="22"
+                                            Margin="151,0,10,5"
+                                            Click="应用设置按钮_Click"
+                                            Content="应用设置" VerticalContentAlignment="Bottom" VerticalAlignment="Bottom" />
+                                    </Grid>
                                 </GroupBox>
-
-
                             </Grid>
                         </Grid>
                     </TabItem>

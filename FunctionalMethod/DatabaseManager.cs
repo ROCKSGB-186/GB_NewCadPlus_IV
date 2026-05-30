@@ -31,6 +31,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
     /// </summary>
     public class DatabaseManager
     {
+        /// <summary>
         /// 数据库适配器，用于支持多数据库
         /// </summary>
         private readonly IDatabaseAdapter _adapter;
@@ -95,7 +96,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 如果 GetConnection() 返回的是新连接，建议在外部 using 结束后自动关闭
             }
         }
-    
+
         /// <summary>
         /// 将匿名对象或字典参数统一绑定到命令对象。
         /// </summary>
@@ -173,7 +174,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="cmd">要添加参数的命令对象</param>
         /// <param name="name">参数名称</param>
         /// <param name="value">参数值</param>
-     
+
         private void AddParam(IDbCommand cmd, string paramName, object value)
         {
             var param = cmd.CreateParameter();
@@ -280,11 +281,16 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         // 在接入真实后端时，请替换为完整实现。
         // -----------------------------
 
-        public virtual async Task<bool> DeleteFileStorageAsync(long storageId)
-        {
-            await Task.Yield();
-            return true;
-        }
+        /// <summary>
+        /// 删除文件存储记录（最小可编译实现，实际应包含完整逻辑）
+        /// </summary>
+        /// <param name="storageId"></param>
+        /// <returns></returns>
+        //public virtual async Task<bool> DeleteFileStorageAsync(long storageId)
+        //{
+        //    await Task.Yield();
+        //    return true;
+        //}
 
 
         /// <summary>
@@ -394,67 +400,170 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         }
 
         /// <summary>
+        /// 获取所有有效的图元记录（is_active = 1）
+        /// </summary>
+        public async Task<List<FileStorage>> GetAllActiveFileStoragesAsync()
+        {
+            const string sql = @"
+        SELECT 
+            id AS Id,
+            category_id AS CategoryId,
+            file_attribute_id AS FileAttributeId,
+            file_name AS FileName,
+            file_stored_name AS FileStoredName,
+            display_name AS DisplayName,
+            file_type AS FileType,
+            file_hash AS FileHash,
+            block_name AS BlockName,
+            layer_name AS LayerName,
+            color_index AS ColorIndex,
+            scale AS Scale,
+            file_path AS FilePath,
+            preview_image_name AS PreviewImageName,
+            preview_image_path AS PreviewImagePath,
+            file_size AS FileSize,
+            is_preview AS IsPreview,
+            version AS Version,
+            description AS Description,
+            is_active AS IsActive,
+            created_by AS CreatedBy,
+            category_type AS CategoryType,
+            title AS Title,
+            keywords AS Keywords,
+            is_public AS IsPublic,
+            updated_by AS UpdatedBy,
+            last_accessed_at AS LastAccessedAt,
+            created_at AS CreatedAt,
+            updated_at AS UpdatedAt
+        FROM cad_file_storage
+        WHERE is_active = 1
+        ORDER BY updated_at DESC, id DESC";
+
+            try
+            {
+                // ---- MySQL 分支：同步 Open，异步查询 ----
+                if (_adapter.DatabaseType == "MySQL")
+                {
+                    using var conn = _adapter.CreateConnection();
+                    conn.Open();                       // 同步打开，IDbConnection 支持
+                    var rows = await conn.QueryAsync<FileStorage>(sql).ConfigureAwait(false);
+                    return rows.AsList();
+                }
+
+                // ---- 达梦 (DM) 分支：同步 Open，同步读取，整体包裹在 Task.Run 中保持异步 ----
+                return await Task.Run(() =>
+                {
+                    var list = new List<FileStorage>();
+                    using var dconn = GetConnection();
+                    dconn.Open();
+                    using var cmd = dconn.CreateCommand();
+                    cmd.CommandText = _adapter.NormalizeSql(sql);
+
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var file = new FileStorage();
+                        int ord;
+                        ord = reader.GetOrdinal("Id"); file.Id = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("CategoryId"); file.CategoryId = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("FileAttributeId"); file.FileAttributeId = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileName"); file.FileName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileStoredName"); file.FileStoredName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("DisplayName"); file.DisplayName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileType"); file.FileType = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("FileHash"); file.FileHash = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("BlockName"); file.BlockName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("LayerName"); file.LayerName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("ColorIndex"); file.ColorIndex = reader.IsDBNull(ord) ? (int?)null : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("Scale"); file.Scale = reader.IsDBNull(ord) ? (double?)null : reader.GetDouble(ord);
+                        ord = reader.GetOrdinal("PreviewImageName"); file.PreviewImageName = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("PreviewImagePath"); file.PreviewImagePath = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Description"); file.Description = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Version"); file.Version = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("IsPreview"); file.IsPreview = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                        ord = reader.GetOrdinal("IsActive"); file.IsActive = (!reader.IsDBNull(ord) && reader.GetInt32(ord) != 0) ? 1 : 0;
+                        ord = reader.GetOrdinal("CategoryType"); file.CategoryType = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Title"); file.Title = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("Keywords"); file.Keywords = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("IsPublic"); file.IsPublic = reader.IsDBNull(ord) ? 0 : reader.GetInt32(ord);
+                        ord = reader.GetOrdinal("UpdatedBy"); file.UpdatedBy = reader.IsDBNull(ord) ? null : reader.GetString(ord);
+                        ord = reader.GetOrdinal("LastAccessedAt"); file.LastAccessedAt = reader.IsDBNull(ord) ? (DateTime?)null : reader.GetDateTime(ord);
+                        ord = reader.GetOrdinal("CreatedAt"); file.CreatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        ord = reader.GetOrdinal("UpdatedAt"); file.UpdatedAt = reader.IsDBNull(ord) ? DateTime.MinValue : reader.GetDateTime(ord);
+                        list.Add(file);
+                    }
+                    return list;
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"GetAllActiveFileStoragesAsync 出错: {ex.Message}");
+                return new List<FileStorage>();
+            }
+        }
+
+        /// <summary>
         /// 补齐：构建属性表插入值字典
         /// </summary>
         /// <summary>
         /// 完善：构建存储主表插入值字典
         /// </summary>
-        private Dictionary<string, object> BuildStorageInsertValues(FileStorage storage, Dictionary<string, string> attributes, Dictionary<string, string> columns, string configName)
-        {
-            // 使用 StringComparer.OrdinalIgnoreCase 强制字典忽略大小写，防止出现 created_at 和 CREATED_AT 同时存在
-            var values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            var props = typeof(FileStorage).GetProperties();
+        //private Dictionary<string, object> BuildStorageInsertValues(FileStorage storage, Dictionary<string, string> attributes, Dictionary<string, string> columns, string configName)
+        //{
+        //    // 使用 StringComparer.OrdinalIgnoreCase 强制字典忽略大小写，防止出现 created_at 和 CREATED_AT 同时存在
+        //    var values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        //    var props = typeof(FileStorage).GetProperties();
 
-            foreach (var p in props)
-            {
-                // 查找数据库中真实存在的列名
-                var match = columns.Keys.FirstOrDefault(k =>
-                    string.Equals(k, p.Name, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(k.Replace("_", ""), p.Name, StringComparison.OrdinalIgnoreCase));
+        //    foreach (var p in props)
+        //    {
+        //        // 查找数据库中真实存在的列名
+        //        var match = columns.Keys.FirstOrDefault(k =>
+        //            string.Equals(k, p.Name, StringComparison.OrdinalIgnoreCase) ||
+        //            string.Equals(k.Replace("_", ""), p.Name, StringComparison.OrdinalIgnoreCase));
 
-                if (match != null)
-                {
-                    // 核心修复：绝对排除 ID 列，达梦不允许显式插入 ID 值（自增列规则）
-                    if (string.Equals(match, "ID", StringComparison.OrdinalIgnoreCase)) continue;
+        //        if (match != null)
+        //        {
+        //            // 核心修复：绝对排除 ID 列，达梦不允许显式插入 ID 值（自增列规则）
+        //            if (string.Equals(match, "ID", StringComparison.OrdinalIgnoreCase)) continue;
 
-                    values[match] = p.GetValue(storage);
-                }
-            }
+        //            values[match] = p.GetValue(storage);
+        //        }
+        //    }
 
-            // 审计字段逻辑：仅在反射未处理且数据库存在该列时添加，确保不会重复生成 SQL 列名
-            if (columns.ContainsKey("created_at") && !values.ContainsKey("created_at"))
-                values["created_at"] = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt;
+        //    // 审计字段逻辑：仅在反射未处理且数据库存在该列时添加，确保不会重复生成 SQL 列名
+        //    if (columns.ContainsKey("created_at") && !values.ContainsKey("created_at"))
+        //        values["created_at"] = storage.CreatedAt == default ? DateTime.Now : storage.CreatedAt;
 
-            if (columns.ContainsKey("updated_at") && !values.ContainsKey("updated_at"))
-                values["updated_at"] = DateTime.Now;
+        //    if (columns.ContainsKey("updated_at") && !values.ContainsKey("updated_at"))
+        //        values["updated_at"] = DateTime.Now;
 
-            return values;
-        }
-        
+        //    return values;
+        //}
+
         /// <summary>
         /// 完善：构建属性 JSON 表插入值字典
         /// </summary>
-        private Dictionary<string, object> BuildAttributeInsertValues(FileStorage storage, Dictionary<string, string> attributes, Dictionary<string, string> columns, int storageId)
-        {
-            var values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        //private Dictionary<string, object> BuildAttributeInsertValues(FileStorage storage, Dictionary<string, string> attributes, Dictionary<string, string> columns, int storageId)
+        //{
+        //    var values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-            if (columns.ContainsKey("file_id")) values["file_id"] = storageId;
-            if (columns.ContainsKey("config_name")) values["config_name"] = "default";
+        //    if (columns.ContainsKey("file_id")) values["file_id"] = storageId;
+        //    if (columns.ContainsKey("config_name")) values["config_name"] = "default";
 
-            // 显式序列化 JSON 字典
-            if (columns.ContainsKey("attributes_json"))
-            {
-                values["attributes_json"] = Newtonsoft.Json.JsonConvert.SerializeObject(attributes);
-            }
+        //    // 显式序列化 JSON 字典
+        //    if (columns.ContainsKey("attributes_json"))
+        //    {
+        //        values["attributes_json"] = Newtonsoft.Json.JsonConvert.SerializeObject(attributes);
+        //    }
 
-            if (columns.ContainsKey("created_at") && !values.ContainsKey("created_at"))
-                values["created_at"] = DateTime.Now;
+        //    if (columns.ContainsKey("created_at") && !values.ContainsKey("created_at"))
+        //        values["created_at"] = DateTime.Now;
 
-            // 再次加固：确保物理上不含任何 ID 键
-            values.Remove("ID");
+        //    // 再次加固：确保物理上不含任何 ID 键
+        //    values.Remove("ID");
 
-            return values;
-        }
+        //    return values;
+        //}
 
         /// <summary>
         /// 级联删除 CAD 图元记录
@@ -492,9 +601,29 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return false;
             }
         }
+        /// <summary>
+        /// 获取配置值（最小可编译实现，实际应包含完整逻辑）
+        /// </summary>
+        /// <param name="args">  </param>
+        /// <returns></returns>
         public async Task<dynamic> GetConfigValueAsync(params object[] args) { return await Task.FromResult<dynamic>(null); }
-        public async Task<dynamic> UpdateCategoryStatisticsAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
+        /// <summary>
+        /// 更新分类统计数据（最小可编译实现，实际应包含完整逻辑）
+        /// </summary>
+        /// <param name="args"> </param>
+        /// <returns></returns>
+        //public async Task<dynamic> UpdateCategoryStatisticsAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
+        /// <summary>
+        /// 添加 CAD 子分类（最小可编译实现，实际应包含完整逻辑）
+        /// </summary>
+        /// <param name="args"></param>
+        /// <returns></returns>
         public async Task<dynamic> AddCadSubcategoryAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
+        /// <summary>
+        /// 更新父分类的子分类列表（最小可编译实现，实际应包含完整逻辑）
+        /// </summary>
+        /// <param name="args"></param>
+        /// <returns></returns>
         public async Task<dynamic> UpdateParentSubcategoryListAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
 
         /// <summary>
@@ -530,7 +659,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return 0;
             }
         }
-
+        /// <summary>
+        /// 删除cad子分类（最小可编译实现，实际应包含完整逻辑）
+        /// </summary>
+        /// <param name="args"> </param>
+        /// <returns></returns>
         public async Task<dynamic> DeleteCadSubcategoryAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
 
 
@@ -729,13 +862,34 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public class Department
         {
+            /// <summary>
+            /// 部门 ID
+            /// </summary>
             public int Id { get; set; }
+            /// <summary>
+            /// 部门名称（唯一标识）
+            /// </summary>
             public string Name { get; set; }
+            /// <summary>
+            /// 部门显示名称（可重复，允许为空，默认同 Name）
+            /// </summary>
             public string DisplayName { get; set; }
+            /// <summary>
+            /// 排序字段，整数，默认 0
+            /// </summary>
             public int SortOrder { get; set; }
+            /// <summary>
+            /// 是否有效，布尔值，默认 true
+            /// </summary>
             public bool IsActive { get; set; }
+            /// <summary>
+            /// 创建时间，DateTime，默认当前时间
+            /// </summary>
             public DateTime CreatedAt { get; set; }
-            public DateTime UpdatedAt { get; set; }
+            /// <summary>
+            /// 更新时间，DateTime，默认当前时间
+            /// </summary>
+            public DateTime UpdatedAt { get; set; } 
         }
 
         /// <summary>
@@ -787,7 +941,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return new List<Department>();
             }
         }
-
 
         /// <summary>
         /// 将 cad_categories 中尚未映射到 departments 的分类逐条创建部门并建立映射。
@@ -1230,7 +1383,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return null;
             }
         }
-        
+
         /// <summary>
         /// 根据子分类ID获取这个子分类同级的所有兄弟子分类
         /// </summary>
@@ -1470,7 +1623,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 return string.Empty;
             }
         }
-        
+
         /// <summary>
         /// 保存系统配置。
         /// </summary>
@@ -1539,11 +1692,11 @@ WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.
             var result = await connection.QuerySingleOrDefaultAsync<int>(sql, new { parentId });
             return result;
         }
-        
+
         #endregion
 
         #region 优化的文件管理方法
-        
+
         /// <summary>
         ///  获取分类下的所有文件
         /// </summary>
@@ -1654,38 +1807,38 @@ WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.
         {
             // 定义基础 SQL
             string sql = @"
-        SELECT 
-            id AS Id,
-            category_id AS CategoryId,
-            file_attribute_id AS FileAttributeId,
-            file_name AS FileName,
-            file_stored_name AS FileStoredName,
-            display_name AS DisplayName,
-            file_type AS FileType,
-            file_hash AS FileHash,
-            block_name AS BlockName,
-            layer_name AS LayerName,
-            color_index AS ColorIndex,
-            scale AS Scale,
-            file_path AS FilePath,
-            preview_image_name AS PreviewImageName,
-            preview_image_path AS PreviewImagePath,
-            file_size AS FileSize,
-            is_preview AS IsPreview,
-            version AS Version,
-            description AS Description,
-            is_active AS IsActive,
-            created_by AS CreatedBy,
-            category_type AS CategoryType,
-            title AS Title,
-            keywords AS Keywords,
-            is_public AS IsPublic,
-            updated_by AS UpdatedBy,
-            last_accessed_at AS LastAccessedAt,
-            created_at AS CreatedAt,
-            updated_at AS UpdatedAt
-        FROM cad_file_storage
-        WHERE id = @Id";
+            SELECT 
+                id AS Id,
+                category_id AS CategoryId,
+                file_attribute_id AS FileAttributeId,
+                file_name AS FileName,
+                file_stored_name AS FileStoredName,
+                display_name AS DisplayName,
+                file_type AS FileType,
+                file_hash AS FileHash,
+                block_name AS BlockName,
+                layer_name AS LayerName,
+                color_index AS ColorIndex,
+                scale AS Scale,
+                file_path AS FilePath,
+                preview_image_name AS PreviewImageName,
+                preview_image_path AS PreviewImagePath,
+                file_size AS FileSize,
+                is_preview AS IsPreview,
+                version AS Version,
+                description AS Description,
+                is_active AS IsActive,
+                created_by AS CreatedBy,
+                category_type AS CategoryType,
+                title AS Title,
+                keywords AS Keywords,
+                is_public AS IsPublic,
+                updated_by AS UpdatedBy,
+                last_accessed_at AS LastAccessedAt,
+                created_at AS CreatedAt,
+                updated_at AS UpdatedAt
+            FROM cad_file_storage
+            WHERE id = @Id";
 
             // 自适应分页/限制语法：MySQL 使用 LIMIT，达梦使用 FETCH FIRST
             if (_adapter.DatabaseType == "MySQL")
@@ -1746,129 +1899,6 @@ WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.
                 return null;
             }
         }
-
-        /// <summary>
-        /// 新增：按文件哈希获取“主记录 + JSON 属性字典 + 配置名”
-        /// </summary>
-        //        public async Task<(FileStorage File, Dictionary<string, string> Attributes, string ConfigName)> GetFileStorageWithAttributesByHashAsync(
-        //    string filehash,
-        //    string preferredConfigName = null)
-        //        {
-        //            // 1. 获取主记录
-        //            var fileStorage = await GetFileStorageAsync(filehash).ConfigureAwait(false);
-        //            if (fileStorage == null)
-        //                return (null, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-
-        //            // 2. 构造两个查询（按配置名、按最新），自动适配分页语法
-        //            string GetAttrSql(bool byConfig)
-        //            {
-        //                string baseSql = byConfig ?
-        //                    @"SELECT config_name AS ConfigName, attributes_json AS AttributesJson
-        //FROM cad_block_attributes_json
-        //WHERE file_id = @FileId
-        //  AND config_name = @ConfigName
-        //ORDER BY attr_id DESC" :
-        //                    @"SELECT config_name AS ConfigName, attributes_json AS AttributesJson
-        //FROM cad_block_attributes_json
-        //WHERE file_id = @FileId
-        //ORDER BY attr_id DESC";
-
-        //                // 根据数据库类型添加不同的限制子句
-        //                if (_adapter.DatabaseType == "MySQL")
-        //                    return baseSql + " LIMIT 1";
-        //                else
-        //                    return baseSql + " FETCH FIRST 1 ROWS ONLY";
-        //            }
-
-        //            try
-        //            {
-        //                // 确定优先配置名：优先参数，其次 file.FileAttributeId
-        //                var configName = string.IsNullOrWhiteSpace(preferredConfigName)
-        //                    ? (fileStorage.FileAttributeId ?? string.Empty)
-        //                    : preferredConfigName.Trim();
-
-        //                // ---- MySQL 分支 ----
-        //                if (_adapter.DatabaseType == "MySQL")
-        //                {
-        //                    using var connection = new MySqlConnection(_connectionString);
-
-        //                    (string ConfigName, string AttributesJson)? row = null;
-
-        //                    if (!string.IsNullOrWhiteSpace(configName))
-        //                    {
-        //                        row = await connection.QueryFirstOrDefaultAsync<(string, string)>(
-        //                            GetAttrSql(true), new { FileId = fileStorage.Id, ConfigName = configName }).ConfigureAwait(false);
-        //                    }
-
-        //                    if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
-        //                    {
-        //                        row = await connection.QueryFirstOrDefaultAsync<(string, string)>(
-        //                            GetAttrSql(false), new { FileId = fileStorage.Id }).ConfigureAwait(false);
-        //                    }
-
-        //                    if (row == null || string.IsNullOrWhiteSpace(row.Value.AttributesJson))
-        //                        return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-
-        //                    string rawJson = row.Value.AttributesJson;
-        //                    LogManager.Instance.LogDebug($"从数据库读取到的属性JSON（MySQL）：{rawJson}");
-
-        //                    var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(rawJson)
-        //                               ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        //                    return (fileStorage, dict, row.Value.ConfigName ?? string.Empty);
-        //                }
-
-        //                // ---- 达梦（DM）分支 ----
-        //                using var dconn = GetConnection();
-        //                dconn.Open();
-
-        //                string? attributesJson = null;
-        //                string foundConfigName = string.Empty;
-
-        //                // 按配置名查询（优先）
-        //                if (!string.IsNullOrWhiteSpace(configName))
-        //                {
-        //                    using var cmd = dconn.CreateCommand();
-        //                    cmd.CommandText = _adapter.NormalizeSql(GetAttrSql(true));
-        //                    AddDmParam(cmd, "FileId", fileStorage.Id);
-        //                    AddDmParam(cmd, "ConfigName", configName);
-        //                    using var rdr = cmd.ExecuteReader();
-        //                    if (rdr.Read())
-        //                    {
-        //                        attributesJson = rdr.IsDBNull(1) ? null : rdr.GetString(1);
-        //                        foundConfigName = rdr.IsDBNull(0) ? string.Empty : rdr.GetString(0);
-        //                    }
-        //                }
-
-        //                // 兜底查询（取最新）
-        //                if (string.IsNullOrWhiteSpace(attributesJson))
-        //                {
-        //                    using var cmd2 = dconn.CreateCommand();
-        //                    cmd2.CommandText = _adapter.NormalizeSql(GetAttrSql(false));
-        //                    AddDmParam(cmd2, "FileId", fileStorage.Id);
-        //                    using var rdr2 = cmd2.ExecuteReader();
-        //                    if (rdr2.Read())
-        //                    {
-        //                        attributesJson = rdr2.IsDBNull(1) ? null : rdr2.GetString(1);
-        //                        foundConfigName = rdr2.IsDBNull(0) ? string.Empty : rdr2.GetString(0);
-        //                    }
-        //                }
-
-        //                if (string.IsNullOrWhiteSpace(attributesJson))
-        //                    return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-
-        //                var dictDm = JsonConvert.DeserializeObject<Dictionary<string, string>>(attributesJson)
-        //                             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        //                return (fileStorage, dictDm, foundConfigName ?? string.Empty);
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                LogManager.Instance.LogError($"GetFileStorageWithAttributesByHashAsync 出错: {ex.Message}");
-        //                return (fileStorage, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), string.Empty);
-        //            }
-        //        }
-
 
         public async Task<(FileStorage File, Dictionary<string, string> Attributes, string ConfigName)> GetFileStorageWithAttributesByHashAsync(
             string filehash,
@@ -1992,260 +2022,183 @@ ORDER BY attr_id DESC";
             }
         }
 
-        /// <summary>
-        /// 新方案——插入文件主记录 + JSON属性记录（事务）
-        /// </summary>
-        /// <param name="storage">中文注释：文件主表对象</param>
-        /// <param name="attributes">中文注释：动态属性字典</param>
-        /// <param name="configName">中文注释：属性配置名</param>
-        /// <returns>中文注释：返回主表ID与属性表ID</returns>
-        /// <exception cref="ArgumentNullException">中文注释：主表对象为空时抛出</exception>
-        public async Task<(int StorageId, long AttrId)> AddFileStorageAndAttributesJsonAsync(
-        FileStorage storage,
-        Dictionary<string, string> attributes,
-        string configName = "default")
-        {
-            // 参数校验：storage 不能为空
-            if (storage == null) throw new ArgumentNullException(nameof(storage)); // 抛出异常以提示调用方
-                                                                                   // 如果 attributes 为 null，则初始化为不区分大小写的空字典
-            attributes = attributes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            // 获取数据库连接（通过当前类的 GetConnection 方法）
-            using (IDbConnection connection = this.GetConnection())
-            {
-                connection.Open(); // 打开连接
-                                   // 开启事务，保证主/属性表写入的一致性
-                using (IDbTransaction tx = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        // 解析并定位实际存在的主表名（兼容大小写或不同数据库命名）
-                        string storageTable = this.ResolveExistingTableName(connection, tx, "cad_file_storage", "CAD_FILE_STORAGE", "file_storage", "FILE_STORAGE");
-                        if (string.IsNullOrWhiteSpace(storageTable))
-                            throw new InvalidOperationException("未找到图元主表（cad_file_storage）。"); // 找不到表则中止
-
-                        // 解析并定位属性 JSON 表名
-                        string attrTable = this.ResolveExistingTableName(connection, tx, "cad_block_attributes_json", "CAD_BLOCK_ATTRIBUTES_JSON");
-                        if (string.IsNullOrWhiteSpace(attrTable))
-                            throw new InvalidOperationException("未找到图元属性表（cad_block_attributes_json）。"); // 找不到属性表则中止
-
-                        // 读取两张表的列结构（用于动态构建插入列/值）
-                        Dictionary<string, string> storageColumns = this.ReadTableColumns(connection, tx, storageTable); // 主表列
-                        Dictionary<string, string> attrColumns = this.ReadTableColumns(connection, tx, attrTable); // 属性表列
-                        if (storageColumns.Count == 0 || attrColumns.Count == 0)
-                            throw new InvalidOperationException("无法获取数据库表结构信息。"); // 必需的表结构信息缺失
-
-                        // 根据 storage、attributes 和表结构构建主表插入的列值字典
-                        Dictionary<string, object> storageInsertValues = this.BuildStorageInsertValues(storage, attributes, storageColumns, configName);
-                        // 执行插入并返回自增 id（兼容各类数据库，返回 long）
-                        long storageIdLong = await this.ExecuteInsertAndReturnIdentity(connection, tx, storageTable, (object)storageInsertValues).ConfigureAwait(false);
-                        int storageId = Convert.ToInt32(storageIdLong); // 转为 int 以便后续使用
-                        if (storageId <= 0) throw new InvalidOperationException("主表插入失败，未能生成存储 Id。"); // 插入失败检查
-
-                        // 构建属性表插入的列值（将 storageId 关联回属性记录）
-                        Dictionary<string, object> attrInsertValues = this.BuildAttributeInsertValues(storage, attributes, attrColumns, storageId);
-                        // 插入属性表并获取属性 Id（long）
-                        long attrId = await this.ExecuteInsertAndReturnIdentity(connection, tx, attrTable, (object)attrInsertValues).ConfigureAwait(false);
-                        if (attrId <= 0L) throw new InvalidOperationException("属性表插入失败，未能生成属性 Id。"); // 插入失败检查
-
-                        // 将生成的属性 Id 回写到主表的 file_attribute_id 字段（SQL 语句使用命名参数，适配不同数据库）
-                        string updateSql = "UPDATE CAD_FILE_STORAGE SET file_attribute_id = :AttrId WHERE id = :Id";
-                        int rowsAffected = await SqlMapper.ExecuteAsync(connection, updateSql, new { AttrId = attrId, Id = storageId }, tx).ConfigureAwait(false);
-                        // 提交事务，确保主表与属性表的一致性
-                        tx.Commit();
-                        // 返回成功的 StorageId 与 AttrId
-                        return (storageId, attrId);
-                    }
-                    catch (Exception ex)
-                    {
-                        // 出现异常时尝试回滚事务（若回滚本身失败则忽略回滚错误）
-                        try { tx?.Rollback(); } catch { /* 忽略回滚错误 */ }
-                        // 记录日志便于排查
-                        LogManager.Instance.LogInfo("AddFileStorageAndAttributesJsonAsync 事务失败: " + ex.Message);
-                        // 返回零值表示失败
-                        return (0, 0L);
-                    }
-                }
-            }
-        }
-
         #region 辅助方法
 
-        /// <summary>
-        /// 根据表别名或视图名，查询真实的表名（支持多别名/视图名），返回第一个有效表名
-        /// 说明：用于动态适配不同环境（如开发/测试/生产）下的表名差异。
-        /// </summary>
-        /// <param name="aliases">候选表别名列表</param>
-        /// <returns>找到的第一个有效表名，或空字符串</returns>
-        private string ResolveExistingTableName(IDbConnection conn, IDbTransaction tx, params string[] aliases)
-        {
-            if (aliases == null || aliases.Length == 0) return string.Empty;
+        ///// <summary>
+        ///// 根据表别名或视图名，查询真实的表名（支持多别名/视图名），返回第一个有效表名
+        ///// 说明：用于动态适配不同环境（如开发/测试/生产）下的表名差异。
+        ///// </summary>
+        ///// <param name="aliases">候选表别名列表</param>
+        ///// <returns>找到的第一个有效表名，或空字符串</returns>
+        //private string ResolveExistingTableName(IDbConnection conn, IDbTransaction tx, params string[] aliases)
+        //{
+        //    if (aliases == null || aliases.Length == 0) return string.Empty;
 
-            // 达梦数据库通常对大小写敏感，且存储在系统表中的名称默认是大写的。
-            // 修正查询逻辑：不仅查 ALL_TABLES，还要处理候选名的 Trim 和 Upper 处理。
-            string sqlCheckDm = "SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER = :Owner AND TABLE_NAME = :TableName";
-            string sqlCheckMySql = "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = @TableName";
+        //    // 达梦数据库通常对大小写敏感，且存储在系统表中的名称默认是大写的。
+        //    // 修正查询逻辑：不仅查 ALL_TABLES，还要处理候选名的 Trim 和 Upper 处理。
+        //    string sqlCheckDm = "SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER = :Owner AND TABLE_NAME = :TableName";
+        //    string sqlCheckMySql = "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = @TableName";
 
-            var sql = _adapter.DatabaseType == "MySQL" ? sqlCheckMySql : sqlCheckDm;
+        //    var sql = _adapter.DatabaseType == "MySQL" ? sqlCheckMySql : sqlCheckDm;
 
-            foreach (var alias in aliases)
-            {
-                // 生成候选名称序列：原始、大写、小写
-                var namesToTry = new[] { alias.Trim(), alias.Trim().ToUpperInvariant(), alias.Trim().ToLowerInvariant() };
+        //    foreach (var alias in aliases)
+        //    {
+        //        // 生成候选名称序列：原始、大写、小写
+        //        var namesToTry = new[] { alias.Trim(), alias.Trim().ToUpperInvariant(), alias.Trim().ToLowerInvariant() };
 
-                foreach (var name in namesToTry.Distinct())
-                {
-                    try
-                    {
-                        var param = _adapter.DatabaseType == "MySQL"
-                            ? (object)new { TableName = name }
-                            : new { Owner = _schemaName, TableName = name };
+        //        foreach (var name in namesToTry.Distinct())
+        //        {
+        //            try
+        //            {
+        //                var param = _adapter.DatabaseType == "MySQL"
+        //                    ? (object)new { TableName = name }
+        //                    : new { Owner = _schemaName, TableName = name };
 
-                        var found = conn.QuerySingleOrDefault<string>(sql, param, tx);
-                        if (!string.IsNullOrWhiteSpace(found)) return found;
-                    }
-                    catch { continue; }
-                }
-            }
+        //                var found = conn.QuerySingleOrDefault<string>(sql, param, tx);
+        //                if (!string.IsNullOrWhiteSpace(found)) return found;
+        //            }
+        //            catch { continue; }
+        //        }
+        //    }
 
-            // 如果动态查询失败，为了保证业务不中断，强制返回第一个候选名的大写形式（常见于达梦）
-            return aliases[0].ToUpperInvariant();
-        }
+        //    // 如果动态查询失败，为了保证业务不中断，强制返回第一个候选名的大写形式（常见于达梦）
+        //    return aliases[0].ToUpperInvariant();
+        //}
 
-        /// <summary>
-        /// 读取表的所有列信息（用于动态构建插入/更新语句）
-        /// 返回：包含列名及类型的字典，键为列名（不带前缀），值为数据类型
-        /// </summary>
-        /// <param name="tableName">真实表名</param>
-        private Dictionary<string, string> ReadTableColumns(IDbConnection conn, IDbTransaction tx, string tableName)
-        {
-            var columns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        ///// <summary>
+        ///// 读取表的所有列信息（用于动态构建插入/更新语句）
+        ///// 返回：包含列名及类型的字典，键为列名（不带前缀），值为数据类型
+        ///// </summary>
+        ///// <param name="tableName">真实表名</param>
+        //private Dictionary<string, string> ReadTableColumns(IDbConnection conn, IDbTransaction tx, string tableName)
+        //{
+        //    var columns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            // 达梦必须精准匹配 TABLE_NAME，通常为大写。
-            string sqlDm = "SELECT COLUMN_NAME, DATA_TYPE FROM USER_TAB_COLUMNS WHERE TABLE_NAME = :TableName";
-            string sqlMySql = "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = @TableName";
+        //    // 达梦必须精准匹配 TABLE_NAME，通常为大写。
+        //    string sqlDm = "SELECT COLUMN_NAME, DATA_TYPE FROM USER_TAB_COLUMNS WHERE TABLE_NAME = :TableName";
+        //    string sqlMySql = "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = @TableName";
 
-            string sql = _adapter.DatabaseType == "MySQL" ? sqlMySql : sqlDm;
+        //    string sql = _adapter.DatabaseType == "MySQL" ? sqlMySql : sqlDm;
 
-            try
-            {
-                using var cmd = conn.CreateCommand();
-                cmd.Transaction = tx;
-                cmd.CommandText = sql;
-                _adapter.AddParameter(cmd, "TableName", tableName);
+        //    try
+        //    {
+        //        using var cmd = conn.CreateCommand();
+        //        cmd.Transaction = tx;
+        //        cmd.CommandText = sql;
+        //        _adapter.AddParameter(cmd, "TableName", tableName);
 
-                using var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    // 存入字典，Key 强制不区分大小写
-                    columns[reader.GetString(0)] = reader.GetString(1).ToLower();
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"ReadTableColumns 警告 (表 {tableName}): {ex.Message}");
-            }
-            return columns;
-        }
-     
-        /// <summary>
-        /// 执行插入并返回自增 Id（针对 MySQL 和 DM 的统一实现）
-        /// </summary>
-        /// <param name="connection">数据库连接</param>
-        /// <param name="transaction">事务对象</param>
-        /// <param name="tableName">目标表名</param>
-        /// <param name="insertValues">插入字段及对应值</param>
-        /// <returns>插入记录的自增主键 Id</returns>
-        private async Task<long> ExecuteInsertAndReturnIdentity(IDbConnection connection, IDbTransaction transaction, string tableName, object insertValues)
-        {
-            var columnList = new List<string>();// 用于存储实际参与插入的列名列表
-            var dp = new DynamicParameters();// 用于存储实际参与插入的参数列表
+        //        using var reader = cmd.ExecuteReader();
+        //        while (reader.Read())
+        //        {
+        //            // 存入字典，Key 强制不区分大小写
+        //            columns[reader.GetString(0)] = reader.GetString(1).ToLower();
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"ReadTableColumns 警告 (表 {tableName}): {ex.Message}");
+        //    }
+        //    return columns;
+        //}
 
-            // 支持 Dictionary
-            if (insertValues is IDictionary<string, object> dict)
-            {
-                // 遍历字典，构建列名列表和参数列表
-                foreach (var key in dict.Keys)
-                {
-                    // 只处理数据库实际存在的列，且列名不区分大小写
-                    var col = key.ToUpperInvariant();
-                    // 只有当列存在于数据库表结构中时才添加到插入列表，避免因列缺失导致的错误。
-                    columnList.Add(col);
-                    // 直接使用字典中的值，不强制转换为 DBNull，保持原样传递给 Dapper 处理。
-                    object value = dict[key];
-                    // 关键修复：不强制转 DBNull，保持原样即可
-                    dp.Add(col, value);
-                }
-            }
-            // 支持实体对象
-            else
-            {
-                foreach (var prop in insertValues.GetType().GetProperties())
-                {
-                    var col = prop.Name.ToUpperInvariant();
-                    columnList.Add(col);
-                    object value = prop.GetValue(insertValues);
+        ///// <summary>
+        ///// 执行插入并返回自增 Id（针对 MySQL 和 DM 的统一实现）
+        ///// </summary>
+        ///// <param name="connection">数据库连接</param>
+        ///// <param name="transaction">事务对象</param>
+        ///// <param name="tableName">目标表名</param>
+        ///// <param name="insertValues">插入字段及对应值</param>
+        ///// <returns>插入记录的自增主键 Id</returns>
+        //private async Task<long> ExecuteInsertAndReturnIdentity(IDbConnection connection, IDbTransaction transaction, string tableName, object insertValues)
+        //{
+        //    var columnList = new List<string>();// 用于存储实际参与插入的列名列表
+        //    var dp = new DynamicParameters();// 用于存储实际参与插入的参数列表
 
-                    // 关键修复：不转 DBNull
-                    dp.Add(col, value);
-                }
-            }
+        //    // 支持 Dictionary
+        //    if (insertValues is IDictionary<string, object> dict)
+        //    {
+        //        // 遍历字典，构建列名列表和参数列表
+        //        foreach (var key in dict.Keys)
+        //        {
+        //            // 只处理数据库实际存在的列，且列名不区分大小写
+        //            var col = key.ToUpperInvariant();
+        //            // 只有当列存在于数据库表结构中时才添加到插入列表，避免因列缺失导致的错误。
+        //            columnList.Add(col);
+        //            // 直接使用字典中的值，不强制转换为 DBNull，保持原样传递给 Dapper 处理。
+        //            object value = dict[key];
+        //            // 关键修复：不强制转 DBNull，保持原样即可
+        //            dp.Add(col, value);
+        //        }
+        //    }
+        //    // 支持实体对象
+        //    else
+        //    {
+        //        foreach (var prop in insertValues.GetType().GetProperties())
+        //        {
+        //            var col = prop.Name.ToUpperInvariant();
+        //            columnList.Add(col);
+        //            object value = prop.GetValue(insertValues);
 
-            if (columnList.Count == 0)
-                throw new InvalidOperationException("插入对象不包含任何有效字段");
+        //            // 关键修复：不转 DBNull
+        //            dp.Add(col, value);
+        //        }
+        //    }
 
-            // 构建 SQL
-            var sb = new System.Text.StringBuilder();
-            sb.Append("INSERT INTO \"")
-              .Append(tableName.ToUpperInvariant())
-              .Append("\" (");
+        //    if (columnList.Count == 0)
+        //        throw new InvalidOperationException("插入对象不包含任何有效字段");
 
-            sb.Append(string.Join(",", columnList.Select(c => "\"" + c + "\"")));
-            sb.Append(") VALUES (");
-            sb.Append(string.Join(",", columnList.Select(c => ":" + c)));
-            sb.Append(")");
+        //    // 构建 SQL
+        //    var sb = new System.Text.StringBuilder();
+        //    sb.Append("INSERT INTO \"")
+        //      .Append(tableName.ToUpperInvariant())
+        //      .Append("\" (");
 
-            var sql = sb.ToString();
+        //    sb.Append(string.Join(",", columnList.Select(c => "\"" + c + "\"")));
+        //    sb.Append(") VALUES (");
+        //    sb.Append(string.Join(",", columnList.Select(c => ":" + c)));
+        //    sb.Append(")");
 
-            // 执行插入
-            int rows = await connection.ExecuteAsync(sql, dp, transaction).ConfigureAwait(false);
-            if (rows <= 0)
-                throw new InvalidOperationException($"插入失败，受影响行数为0，表名：{tableName}");
+        //    var sql = sb.ToString();
 
-            // MySQL 获取ID
-            if (_adapter.DatabaseType == "MySQL")
-            {
-                var id = await connection.ExecuteScalarAsync("SELECT LAST_INSERT_ID();", null, transaction).ConfigureAwait(false);
-                return Convert.ToInt64(id ?? 0);
-            }
+        //    // 执行插入
+        //    int rows = await connection.ExecuteAsync(sql, dp, transaction).ConfigureAwait(false);
+        //    if (rows <= 0)
+        //        throw new InvalidOperationException($"插入失败，受影响行数为0，表名：{tableName}");
 
-            // ==================== 达梦 ====================
-            object? res = null;
+        //    // MySQL 获取ID
+        //    if (_adapter.DatabaseType == "MySQL")
+        //    {
+        //        var id = await connection.ExecuteScalarAsync("SELECT LAST_INSERT_ID();", null, transaction).ConfigureAwait(false);
+        //        return Convert.ToInt64(id ?? 0);
+        //    }
 
-            try { res = await connection.ExecuteScalarAsync("SELECT SCOPE_IDENTITY()", null, transaction).ConfigureAwait(false); } catch { }
-            if (res == null || res == DBNull.Value)
-                try { res = await connection.ExecuteScalarAsync("SELECT @@IDENTITY", null, transaction).ConfigureAwait(false); } catch { }
-            if (res == null || res == DBNull.Value)
-                try { res = await connection.ExecuteScalarAsync("SELECT IDENTITY_VAL_LOCAL()", null, transaction).ConfigureAwait(false); } catch { }
+        //    // ==================== 达梦 ====================
+        //    object? res = null;
 
-            // 终极兜底
-            if (res == null || res == DBNull.Value)
-            {
-                try
-                {
-                    string finalSql = $@"SELECT ""ID"" FROM ""{tableName.ToUpperInvariant()}"" WHERE ROWID = (SELECT MAX(ROWID) FROM ""{tableName.ToUpperInvariant()}"")";
-                    res = await connection.ExecuteScalarAsync(finalSql, null, transaction).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Instance.LogInfo($"[致命] 获取插入ID失败：{ex.Message}");
-                    throw new InvalidOperationException("无法获取新插入记录的主键ID", ex);
-                }
-            }
+        //    try { res = await connection.ExecuteScalarAsync("SELECT SCOPE_IDENTITY()", null, transaction).ConfigureAwait(false); } catch { }
+        //    if (res == null || res == DBNull.Value)
+        //        try { res = await connection.ExecuteScalarAsync("SELECT @@IDENTITY", null, transaction).ConfigureAwait(false); } catch { }
+        //    if (res == null || res == DBNull.Value)
+        //        try { res = await connection.ExecuteScalarAsync("SELECT IDENTITY_VAL_LOCAL()", null, transaction).ConfigureAwait(false); } catch { }
 
-            return res == null || res == DBNull.Value ? 0L : Convert.ToInt64(res);
-        }
-        
+        //    // 终极兜底
+        //    if (res == null || res == DBNull.Value)
+        //    {
+        //        try
+        //        {
+        //            string finalSql = $@"SELECT ""ID"" FROM ""{tableName.ToUpperInvariant()}"" WHERE ROWID = (SELECT MAX(ROWID) FROM ""{tableName.ToUpperInvariant()}"")";
+        //            res = await connection.ExecuteScalarAsync(finalSql, null, transaction).ConfigureAwait(false);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            LogManager.Instance.LogInfo($"[致命] 获取插入ID失败：{ex.Message}");
+        //            throw new InvalidOperationException("无法获取新插入记录的主键ID", ex);
+        //        }
+        //    }
+
+        //    return res == null || res == DBNull.Value ? 0L : Convert.ToInt64(res);
+        //}
+
         #endregion
         #endregion
 
@@ -2346,7 +2299,6 @@ LIMIT 1;";
                 return empty;
             }
         }
-
 
         /// <summary>
         /// 更新图元主表字段与 JSON 属性表（事务）。

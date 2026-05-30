@@ -378,9 +378,9 @@ namespace GB_NewCadPlus_IV
             /// <returns></returns>
             static private string Path()
             {
-                string path = GetPath.GetSelftUserPath();//实例化本程序的自己的路径
+                string path = GetPath.AppPath;//实例化本程序的自己的路径
                 System.IO.Directory.CreateDirectory(path);//在本程序下创建文件夹
-                return System.IO.Path.Combine(GetPath.GetSelftUserPath(), "TuKu.txt");//返回本程序的自己路径； 
+                return System.IO.Path.Combine(GetPath.AppPath, "TuKu.txt");//返回本程序的自己路径； 
             }
             /// <summary>
             /// 读取本地设置路径下的配置文件
