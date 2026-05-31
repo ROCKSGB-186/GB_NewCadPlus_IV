@@ -15,13 +15,18 @@ using System.Data;
 using Autodesk.AutoCAD.ApplicationServices;
 using GB_NewCadPlus_IV.UniFiedStandards; // 引用 DeviceInfo
 using Microsoft.Win32; // 用于文件对话框
-using OfficeOpenXml;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using NPOI.SS.Util;
+using System.IO;
 using DataTable = System.Data.DataTable;
 using DataColumn = System.Data.DataColumn;
 using MessageBox = System.Windows.MessageBox;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
-using SaveFileDialog = Microsoft.Win32.SaveFileDialog; // 引用 EPPlus
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
+using BorderStyle = NPOI.SS.UserModel.BorderStyle;
+using Path = System.IO.Path; // 引用 EPPlus
 
 namespace GB_NewCadPlus_IV.DisplayPages
 {
@@ -46,8 +51,7 @@ namespace GB_NewCadPlus_IV.DisplayPages
         public PipeDriver_Tabel_WpfWindows()
         {
             InitializeComponent();
-            // 设置 EPPlus 许可证（如果尚未在全局设置）
-            //ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            
         }
         /// <summary>
         /// 初始化窗口，传入数据
@@ -79,26 +83,68 @@ namespace GB_NewCadPlus_IV.DisplayPages
             {
                 try
                 {
-                    using (var package = new ExcelPackage(new System.IO.FileInfo(openFileDialog.FileName)))
+                    IWorkbook workbook;
+                    using (FileStream fs = new FileStream(openFileDialog.FileName, FileMode.Open, FileAccess.Read))
                     {
-                        if (package.Workbook.Worksheets.Count == 0)
-                        {
-                            MessageBox.Show("Excel 文件中没有工作表。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                            return;
-                        }
-
-                        var worksheet = package.Workbook.Worksheets[0]; // 读取第一个 Sheet
-                        var dataTable = new DataTable();
-
-                        // 加载 Excel 到 DataTable (第一行作为表头)
-                        // 注意：ToDataTable 是 EPPlus 的扩展方法，确保引用了正确的命名空间
-                        dataTable = worksheet.Cells[worksheet.Dimension.Address].ToDataTable();
-
-                        _currentTableData = dataTable;
-                        DataGrid_PipeDriver.ItemsSource = _currentTableData.DefaultView;
-
-                        StatusText.Text = $"已加载: {System.IO.Path.GetFileName(openFileDialog.FileName)} ({dataTable.Rows.Count} 行)";
+                        workbook = new XSSFWorkbook(fs);   // 读取 .xlsx
                     }
+
+                    if (workbook.NumberOfSheets == 0)
+                    {
+                        MessageBox.Show("Excel 文件中没有工作表。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
+                    ISheet sheet = workbook.GetSheetAt(0);   // 第一个 Sheet
+                    if (sheet == null || sheet.LastRowNum < 0)
+                    {
+                        MessageBox.Show("工作表为空。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
+                    // 构建 DataTable，以第一行作为列名
+                    DataTable dataTable = new DataTable();
+                    DataFormatter formatter = new DataFormatter();
+
+                    IRow headerRow = sheet.GetRow(0);
+                    if (headerRow == null)
+                    {
+                        MessageBox.Show("表头行不存在。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
+                    // 创建列，以首行内容为 ColumnName
+                    int colCount = headerRow.LastCellNum; // 1‑based
+                    for (int c = 0; c < colCount; c++)
+                    {
+                        ICell cell = headerRow.GetCell(c);
+                        string colName = cell != null ? formatter.FormatCellValue(cell).Trim() : $"Column{c + 1}";
+                        if (string.IsNullOrWhiteSpace(colName)) colName = $"Column{c + 1}";
+                        dataTable.Columns.Add(colName);
+                    }
+
+                    // 填充数据行（从第2行开始）
+                    int rowCount = sheet.LastRowNum; // 0‑based
+                    for (int r = 1; r <= rowCount; r++)
+                    {
+                        IRow row = sheet.GetRow(r);
+                        if (row == null) continue;
+
+                        DataRow dr = dataTable.NewRow();
+                        for (int c = 0; c < colCount; c++)
+                        {
+                            ICell cell = row.GetCell(c);
+                            string cellValue = cell != null ? formatter.FormatCellValue(cell) : string.Empty;
+                            dr[c] = cellValue;
+                        }
+                        dataTable.Rows.Add(dr);
+                    }
+
+                    // 绑定到 UI
+                    _currentTableData = dataTable;
+                    DataGrid_PipeDriver.ItemsSource = _currentTableData.DefaultView;
+
+                    StatusText.Text = $"已加载: {System.IO.Path.GetFileName(openFileDialog.FileName)} ({dataTable.Rows.Count} 行)";
                 }
                 catch (Exception ex)
                 {
@@ -207,88 +253,220 @@ namespace GB_NewCadPlus_IV.DisplayPages
         {
             try
             {
-                var saveDialog = new SaveFileDialog();
-                saveDialog.Filter = "Excel Files (*.xlsx)|*.xlsx";
-                saveDialog.FileName = $"管道明细表_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
-
-                if (saveDialog.ShowDialog() == true)
-                {                    
-                    using (var package = new ExcelPackage())
-                    {
-                        var worksheet = package.Workbook.Worksheets.Add("Sheet1");
-
-                        // --- 第1行：大标题 (合并所有列) ---
-                        string title = TextBlock_TableTitle.Text; // 获取界面标题
-                        int totalCols = _dataTable.Columns.Count;
-                        worksheet.Cells[1, 1, 1, totalCols].Merge = true;
-                        worksheet.Cells[1, 1].Value = title;
-                        worksheet.Cells[1, 1].Style.Font.Bold = true;
-                        worksheet.Cells[1, 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-
-                        // --- 第2-3行：表头 (中文/英文) ---
-                        // 定义固定列的中英文对照 (根据 CreateDeviceTableWithType 逻辑)
-                        var headerMap = new Dictionary<string, string>
-                        {
-                            { "管道标题", "Pipe Title" },
-                            { "管段号", "Pipe No." },
-                            { "起点", "Start Point" },
-                            { "终点", "End Point" },
-                            { "管道等级", "Pipe Class" },
-                            { "介质名称", "Medium" },
-                            { "操作温度", "Op. Temp" },
-                            { "操作压力", "Op. Press" },
-                            { "隔热隔声代号", "Insulation Code" },
-                            { "是否防腐", "Anti-Corrosion" },
-                            { "名称", "Name" },
-                            { "材料", "Material" },
-                            { "图号或标准号", "DWG/STD No." },
-                            { "数量", "Qty" },
-                            { "泵前/后", "Pump Side" }
-                        };
-
-                        for (int col = 0; col < _dataTable.Columns.Count; col++)
-                        {
-                            string cnName = _dataTable.Columns[col].ColumnName;
-                            string enName = headerMap.ContainsKey(cnName) ? headerMap[cnName] : cnName; // 如果没有映射，就用原名
-
-                            // 第2行：中文
-                            worksheet.Cells[2, col + 1].Value = cnName;
-                            // 第3行：英文
-                            worksheet.Cells[3, col + 1].Value = enName;
-
-                            // 设置表头样式
-                            worksheet.Cells[2, col + 1].Style.Font.Bold = true;
-                            worksheet.Cells[3, col + 1].Style.Font.Bold = true;
-                            worksheet.Cells[2, col + 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                            worksheet.Cells[3, col + 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                        }
-
-                        // --- 第4行起：数据 ---
-                        // LoadFromDataTable 从指定单元格开始加载，不覆盖表头
-                        worksheet.Cells[4, 1].LoadFromDataTable(_dataTable, false); // false 表示不加载列头，因为我们要自己画
-
-                        // 自动调整列宽
-                        worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
-
-                        // 添加边框
-                        using (var range = worksheet.Cells[1, 1, worksheet.Dimension.Rows, worksheet.Dimension.Columns])
-                        {
-                            range.Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                            range.Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                            range.Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                            range.Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                        }
-
-                        package.SaveAs(new System.IO.FileInfo(saveDialog.FileName));
-                    }
-                    StatusText.Text = $"已导出到: {saveDialog.FileName}";
-                    MessageBox.Show("导出成功！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (_dataTable == null || _dataTable.Columns.Count == 0)
+                {
+                    MessageBox.Show("当前没有数据可以导出。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
+
+                var saveDialog = new SaveFileDialog
+                {
+                    Filter = "Excel 文件 (*.xlsx)|*.xlsx",
+                    FileName = $"管道明细表_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx"
+                };
+
+                if (saveDialog.ShowDialog() != true) return;
+
+                IWorkbook workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("Sheet1");
+
+                // ---------- 清除任何可能存在的初始合并（新 sheet 通常没有，但以防万一） ----------
+                RemoveAllMergedRegions(sheet);
+
+                // ---------- 创建样式 (省略部分重复代码，只保留关键结构) ----------
+                // 标题样式
+                ICellStyle titleStyle = workbook.CreateCellStyle();
+                titleStyle.Alignment = NPOI.SS.UserModel.HorizontalAlignment.Center;
+                titleStyle.VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment.Center;
+                IFont titleFont = workbook.CreateFont();
+                titleFont.IsBold = true;
+                titleFont.FontHeightInPoints = 14;
+                titleStyle.SetFont(titleFont);
+                SetBorderThin(titleStyle);
+
+                // 中文表头样式
+                ICellStyle headerCnStyle = workbook.CreateCellStyle();
+                headerCnStyle.Alignment = NPOI.SS.UserModel.HorizontalAlignment.Center;
+                headerCnStyle.VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment.Center;
+                IFont headerCnFont = workbook.CreateFont();
+                headerCnFont.IsBold = true;
+                headerCnFont.FontHeightInPoints = 11;
+                headerCnStyle.SetFont(headerCnFont);
+                SetBorderThin(headerCnStyle);
+
+                // 英文表头样式
+                ICellStyle headerEnStyle = workbook.CreateCellStyle();
+                headerEnStyle.Alignment = NPOI.SS.UserModel.HorizontalAlignment.Center;
+                headerEnStyle.VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment.Center;
+                IFont headerEnFont = workbook.CreateFont();
+                headerEnFont.IsBold = true;
+                headerEnFont.FontHeightInPoints = 10;
+                headerEnFont.IsItalic = true;
+                headerEnStyle.SetFont(headerEnFont);
+                SetBorderThin(headerEnStyle);
+
+                // 数据样式
+                ICellStyle dataStyle = workbook.CreateCellStyle();
+                dataStyle.Alignment = NPOI.SS.UserModel.HorizontalAlignment.Center;
+                dataStyle.VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment.Center;
+                SetBorderThin(dataStyle);
+
+                string title = TextBlock_TableTitle?.Text ?? "管道明细表";
+                int totalCols = _dataTable.Columns.Count;
+
+                // ---------- 第1行：标题（先写数据，再尝试合并） ----------
+                IRow titleRow = sheet.CreateRow(0);
+                for (int c = 0; c < totalCols; c++)
+                {
+                    ICell cell = titleRow.CreateCell(c);
+                    cell.CellStyle = titleStyle;
+                    if (c == 0) cell.SetCellValue(title);
+                }
+
+                // 尝试合并标题行，如果失败则保留未合并状态（至少文字居中且边框完整）
+                if (totalCols > 1)
+                {
+                    try
+                    {
+                        sheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(0, 0, 0, totalCols - 1));
+                    }
+                    catch (Exception exMerge)
+                    {
+                        // 记录合并失败，但不影响后续数据输出
+                        System.Diagnostics.Debug.WriteLine($"标题合并失败: {exMerge.Message}");
+                    }
+                }
+
+                // ---------- 第2行：中文表头 ----------
+                IRow headerCnRow = sheet.CreateRow(1);
+                // ---------- 第3行：英文表头 ----------
+                IRow headerEnRow = sheet.CreateRow(2);
+
+                var headerMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "管道标题", "Pipe Title" },
+            { "管段号", "Pipe No." },
+            { "起点", "Start Point" },
+            { "终点", "End Point" },
+            { "管道等级", "Pipe Class" },
+            { "介质名称", "Medium" },
+            { "操作温度", "Op. Temp" },
+            { "操作压力", "Op. Press" },
+            { "隔热隔声代号", "Insulation Code" },
+            { "是否防腐", "Anti-Corrosion" },
+            { "名称", "Name" },
+            { "材料", "Material" },
+            { "图号或标准号", "DWG/STD No." },
+            { "数量", "Qty" },
+            { "泵前/后", "Pump Side" }
+        };
+
+                for (int col = 0; col < totalCols; col++)
+                {
+                    string cnName = _dataTable.Columns[col].ColumnName;
+                    string enName = headerMap.TryGetValue(cnName, out var mapped) ? mapped : cnName;
+
+                    ICell cnCell = headerCnRow.CreateCell(col);
+                    cnCell.SetCellValue(cnName);
+                    cnCell.CellStyle = headerCnStyle;
+
+                    ICell enCell = headerEnRow.CreateCell(col);
+                    enCell.SetCellValue(enName);
+                    enCell.CellStyle = headerEnStyle;
+                }
+
+                // ---------- 从第4行开始填充数据 ----------
+                for (int i = 0; i < _dataTable.Rows.Count; i++)
+                {
+                    IRow dataRow = sheet.CreateRow(3 + i);
+                    for (int col = 0; col < totalCols; col++)
+                    {
+                        ICell cell = dataRow.CreateCell(col);
+                        string value = _dataTable.Rows[i][col]?.ToString() ?? string.Empty;
+                        cell.SetCellValue(value);
+                        cell.CellStyle = dataStyle;
+                    }
+                }
+
+                // ---------- 列宽 ----------
+                for (int col = 0; col < totalCols; col++)
+                {
+                    double maxLen = GetVisualCharWidth(title);
+                    string cnH = _dataTable.Columns[col].ColumnName;
+                    string enH = headerMap.TryGetValue(cnH, out var m) ? m : cnH;
+                    maxLen = Math.Max(maxLen, GetVisualCharWidth(cnH));
+                    maxLen = Math.Max(maxLen, GetVisualCharWidth(enH));
+                    int checkRows = Math.Min(200, _dataTable.Rows.Count);
+                    for (int r = 0; r < checkRows; r++)
+                    {
+                        string txt = _dataTable.Rows[r][col]?.ToString() ?? string.Empty;
+                        maxLen = Math.Max(maxLen, GetVisualCharWidth(txt));
+                    }
+                    int colWidth = (int)(maxLen * 256 * 1.15) + 512;
+                    colWidth = Math.Max(2048, Math.Min(colWidth, 255 * 256));
+                    sheet.SetColumnWidth(col, colWidth);
+                }
+
+                // ---------- 保存 ----------
+                string dir = Path.GetDirectoryName(saveDialog.FileName);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                using (FileStream fs = new FileStream(saveDialog.FileName, FileMode.Create, FileAccess.Write))
+                {
+                    workbook.Write(fs, false);
+                }
+
+                StatusText.Text = $"已导出到: {saveDialog.FileName}";
+                MessageBox.Show("导出成功！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"导出失败: {ex.Message}\n\n堆栈:\n{ex.StackTrace}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// 辅助：彻底删除所有合并区域
+        /// </summary>
+        /// <param name="sheet"></param>
+        private void RemoveAllMergedRegions(ISheet sheet)
+        {
+            while (sheet.NumMergedRegions > 0)
+            {
+                sheet.RemoveMergedRegion(sheet.NumMergedRegions - 1); // 倒序删除，索引0-based
+            }
+        }
+
+        /// <summary>
+        /// 辅助：设置细边框
+        /// </summary>
+        /// <param name="style"></param>
+        private void SetBorderThin(ICellStyle style)
+        {
+            style.BorderTop = NPOI.SS.UserModel.BorderStyle.Thin;
+            style.BorderBottom = NPOI.SS.UserModel.BorderStyle.Thin;
+            style.BorderLeft = NPOI.SS.UserModel.BorderStyle.Thin;
+            style.BorderRight = NPOI.SS.UserModel.BorderStyle.Thin;
+        }
+
+        /// <summary>
+        /// 辅助：文字视觉宽度
+        /// </summary>
+        /// <param name="text"></param>
+        /// <returns></returns>
+        private double GetVisualCharWidth(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            double w = 0;
+            foreach (char c in text)
+            {
+                if (c >= 0x4e00 && c <= 0x9fff || c >= 0x3000 && c <= 0x303f || c >= 0xff00 && c <= 0xffef)
+                    w += 2.0;
+                else
+                    w += 1.0;
+            }
+            return w;
         }
 
         /// <summary>

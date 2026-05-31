@@ -6,14 +6,21 @@ using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using IFoxCAD.Cad;
-using OfficeOpenXml;
-using OfficeOpenXml.Style;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;  // 仅用于创建 .xlsx 工作簿
+using NPOI.SS.Util;          // 用于 CellRangeAddress 等辅助类
+using System.IO;             // FileStream 必需
 using Org.BouncyCastle.Utilities;
 using System.Windows;
 using System.Windows.Forms.Integration;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Line = Autodesk.AutoCAD.DatabaseServices.Line;
 using Path = System.IO.Path;
+using BorderStyle = NPOI.SS.UserModel.BorderStyle;
+using HorizontalAlignment = NPOI.SS.UserModel.HorizontalAlignment;
+using VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment;
+using CellType = NPOI.SS.UserModel.CellType;
+using CellReference = NPOI.SS.Util.CellReference;
 
 /// <summary>
 /// CAD远行时自动运行 在菜单内加入工具
@@ -5645,91 +5652,126 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 保存：第一行表头 + 后续数据
                 List<List<string>> dataList = new List<List<string>>();
 
-                // 3) 读取Excel
-                using (var package = new ExcelPackage(new FileInfo(excelPath)))
+                // 3) NPOI 读取 Excel
+                IWorkbook workbook;
+                using (FileStream fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read))
                 {
-                    var worksheet = package.Workbook.Worksheets.FirstOrDefault();
-                    if (worksheet == null || worksheet.Dimension == null)
+                    workbook = new XSSFWorkbook(fs);
+                }
+
+                ISheet sheet = workbook.GetSheetAt(0);
+                if (sheet == null)
+                {
+                    Application.ShowAlertDialog("Excel工作表为空或无有效数据。");
+                    return;
+                }
+
+                // 获取总行数（1‑based）
+                int totalRows = sheet.LastRowNum + 1;
+                if (totalRows <= 0)
+                {
+                    Application.ShowAlertDialog("Excel工作表为空或无有效数据。");
+                    return;
+                }
+
+                // 获取总列数（取所有行中最大的列数，兼容不规则表格）
+                int colCount = 0;
+                for (int i = 0; i < totalRows; i++)
+                {
+                    IRow r = sheet.GetRow(i);
+                    if (r != null)
                     {
-                        Application.ShowAlertDialog("Excel工作表为空或无有效数据。");
-                        return;
+                        int cols = r.LastCellNum; // 1‑based
+                        if (cols > colCount) colCount = cols;
                     }
+                }
+                if (colCount == 0)
+                {
+                    Application.ShowAlertDialog("Excel工作表为空或无有效数据。");
+                    return;
+                }
 
-                    int rowCount = worksheet.Dimension.End.Row;
-                    int colCount = worksheet.Dimension.End.Column;
+                DataFormatter formatter = new DataFormatter();
 
-                    // 只在常见表头区间查找（保持你原有5~7行思路，同时做边界保护）
-                    int headerStart = Math.Max(1, 5);
-                    int headerEnd = Math.Min(7, rowCount);
+                // 辅助方法：获取单元格显示文本（模拟 EPPlus 的 .Text）
+                string GetCellText(int row1Based, int col1Based)
+                {
+                    if (row1Based < 1 || col1Based < 1) return string.Empty;
+                    IRow row = sheet.GetRow(row1Based - 1);
+                    if (row == null) return string.Empty;
+                    ICell cell = row.GetCell(col1Based - 1);
+                    if (cell == null) return string.Empty;
+                    return formatter.FormatCellValue(cell).Trim();
+                }
 
-                    // 字段 -> 列索引
-                    Dictionary<string, int> fieldColumnMap = new Dictionary<string, int>();
+                // 表头查找区间（第5~7行，做边界保护）
+                int headerStart = Math.Max(1, 5);
+                int headerEnd = Math.Min(7, totalRows);
 
-                    for (int r = headerStart; r <= headerEnd; r++)
+                // 字段 → 列索引（1‑based）
+                Dictionary<string, int> fieldColumnMap = new Dictionary<string, int>();
+
+                for (int r = headerStart; r <= headerEnd; r++)
+                {
+                    for (int c = 1; c <= colCount; c++)
                     {
-                        for (int c = 1; c <= colCount; c++)
-                        {
-                            string raw = worksheet.Cells[r, c].Text ?? string.Empty;
-                            string colName = raw.Replace("\r", "").Replace("\n", "").Trim();
-                            if (string.IsNullOrWhiteSpace(colName)) continue;
+                        string raw = GetCellText(r, c);
+                        string colName = raw.Replace("\r", "").Replace("\n", "").Trim();
+                        if (string.IsNullOrWhiteSpace(colName)) continue;
 
-                            // 按 targetFields 顺序匹配，避免字典顺序不稳定
-                            foreach (var target in targetFields)
+                        foreach (var target in targetFields)
+                        {
+                            if (!fieldColumnMap.ContainsKey(target) && colName.Contains(target))
                             {
-                                if (!fieldColumnMap.ContainsKey(target) && colName.Contains(target))
-                                {
-                                    fieldColumnMap[target] = c;
-                                    break;
-                                }
+                                fieldColumnMap[target] = c;
+                                break;
                             }
                         }
                     }
-
-                    if (!fieldColumnMap.ContainsKey(keyField))
-                    {
-                        Application.ShowAlertDialog("未找到“分类号”列，请检查Excel模板。");
-                        return;
-                    }
-
-                    // 按目标字段顺序输出，仅保留找到的列
-                    var orderedFields = targetFields.Where(f => fieldColumnMap.ContainsKey(f)).ToList();
-                    if (orderedFields.Count == 0)
-                    {
-                        Application.ShowAlertDialog("未识别到可导入列，请检查表头。");
-                        return;
-                    }
-
-                    // 表头
-                    dataList.Add(new List<string>(orderedFields));
-
-                    // 数据区起始行（沿用你原逻辑从第8行开始）
-                    int dataStartRow = 8;
-                    int keyCol = fieldColumnMap[keyField];
-
-                    for (int row = dataStartRow; row <= rowCount; row++)
-                    {
-                        string classifyValue = (worksheet.Cells[row, keyCol].Text ?? string.Empty).Trim();
-
-                        // 保持你现有行为：分类号非空即导入
-                        if (string.IsNullOrWhiteSpace(classifyValue)) continue;
-
-                        List<string> rowData = new List<string>(orderedFields.Count);
-                        foreach (var field in orderedFields)
-                        {
-                            int col = fieldColumnMap[field];
-                            rowData.Add((worksheet.Cells[row, col].Text ?? string.Empty).Trim());
-                        }
-                        dataList.Add(rowData);
-                    }
                 }
 
+                if (!fieldColumnMap.ContainsKey(keyField))
+                {
+                    Application.ShowAlertDialog("未找到“分类号”列，请检查Excel模板。");
+                    return;
+                }
+
+                // 仅保留找到的字段（保持顺序）
+                var orderedFields = targetFields.Where(f => fieldColumnMap.ContainsKey(f)).ToList();
+                if (orderedFields.Count == 0)
+                {
+                    Application.ShowAlertDialog("未识别到可导入列，请检查表头。");
+                    return;
+                }
+
+                // 表头行
+                dataList.Add(new List<string>(orderedFields));
+
+                // 数据从第8行开始
+                int dataStartRow = 8;
+                int keyCol = fieldColumnMap[keyField];
+
+                for (int row = dataStartRow; row <= totalRows; row++)
+                {
+                    string classifyValue = GetCellText(row, keyCol);
+                    if (string.IsNullOrWhiteSpace(classifyValue)) continue;   // 分类号为空则跳过
+
+                    List<string> rowData = new List<string>(orderedFields.Count);
+                    foreach (var field in orderedFields)
+                    {
+                        int col = fieldColumnMap[field];
+                        rowData.Add(GetCellText(row, col));
+                    }
+                    dataList.Add(rowData);
+                }
+
+                // 4) 后续逻辑与原先完全一致
                 if (dataList.Count <= 1)
                 {
                     Application.ShowAlertDialog("没有可导入的数据（分类号为空）。");
                     return;
                 }
 
-                // 4) 插入到CAD
                 var doc = Application.DocumentManager.MdiActiveDocument;
                 if (doc == null) return;
 
@@ -5738,7 +5780,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 {
                     TextFontsStyleHelper.TextStyleAndLayerInfo(tr, "S_设备", 1, "tJText");
 
-                    // 保持你原有展示顺序：数据倒序（表头会变到最后一行）
+                    // 保持原展示顺序：数据倒序（表头会变到最后一行）
                     dataList.Reverse();
 
                     PromptPointResult ppr = Env.Editor.GetPoint("\n请在CAD中指定表格插入点：");
@@ -5754,10 +5796,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     };
                     table.SetSize(rows, cols);
 
-                    // 统一单元格填充
                     for (int r = 0; r < rows; r++)
                     {
-                        bool isHeaderRow = (r == rows - 1); // 因为上面 Reverse 了
+                        bool isHeaderRow = (r == rows - 1); // Reverse 后表头在最后一行
                         for (int c = 0; c < cols; c++)
                         {
                             var cell = table.Cells[r, c];
@@ -5768,13 +5809,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         }
                     }
 
-                    // 行高
                     for (int r = 0; r < rows; r++)
-                    {
                         table.Rows[r].Height = (r == rows - 1) ? 5 * uiScale : 4.5 * uiScale;
-                    }
 
-                    // 列宽（按文本长度估算，并做上限保护）
                     for (int c = 0; c < cols; c++)
                     {
                         int maxLen = 1;
@@ -5783,8 +5820,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             var txt = dataList[r][c] ?? string.Empty;
                             if (txt.Length > maxLen) maxLen = txt.Length;
                         }
-
-                        // 经验值：每字符约180，最小600，最大6000，避免异常宽列
                         double width = Math.Min(60 * uiScale, Math.Max(6 * uiScale, maxLen * 1.8 * uiScale));
                         table.Columns[c].Width = width;
                     }
@@ -5792,22 +5827,17 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     table.GenerateLayout();
                     table.RecomputeTableBlock(true);
 
-                    // 添加表格
                     tr.CurrentSpace.AddEntity(table);
 
-                    // 保留你原逻辑：插入后分解为普通图元
+                    // 分解为普通图元（保持原行为）
                     DBObjectCollection explodedObjects = new DBObjectCollection();
                     table.Explode(explodedObjects);
                     foreach (DBObject obj in explodedObjects)
                     {
                         if (obj is Entity ent)
-                        {
                             tr.CurrentSpace.AddEntity(ent);
-                        }
                         else
-                        {
                             obj.Dispose();
-                        }
                     }
                     table.Erase();
 
@@ -6158,58 +6188,80 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <param name="filePath"></param>
         private void ExportToExcel(List<List<TableCell>> tableData, string filePath)
         {
-            using (ExcelPackage package = new ExcelPackage(new FileInfo(filePath)))
+            if (tableData == null || tableData.Count == 0) return;
+
+            IWorkbook workbook = new XSSFWorkbook();
+            ISheet sheet = workbook.CreateSheet("CAD表格数据");
+
+            // 创建通用边框样式（水平居中、垂直居中、细线边框）
+            ICellStyle borderStyle = workbook.CreateCellStyle();
+            borderStyle.Alignment = HorizontalAlignment.Center;
+            borderStyle.VerticalAlignment = VerticalAlignment.Center;
+            borderStyle.BorderTop = BorderStyle.Thin;
+            borderStyle.BorderBottom = BorderStyle.Thin;
+            borderStyle.BorderLeft = BorderStyle.Thin;
+            borderStyle.BorderRight = BorderStyle.Thin;
+
+            int rowCount = tableData.Count;
+            int colCount = rowCount > 0 ? tableData[0].Count : 0;
+
+            for (int row = 0; row < rowCount; row++)
             {
-                ExcelWorksheet worksheet = package.Workbook.Worksheets.Add("CAD表格数据");
-
-                // 获取表格的行列数
-                int rowCount = tableData.Count;
-                int colCount = rowCount > 0 ? tableData[0].Count : 0;
-
-                // 填充Excel表格并设置边框
-                for (int row = 0; row < rowCount; row++)
+                IRow excelRow = sheet.CreateRow(row); // NPOI 行索引从0开始
+                for (int col = 0; col < colCount; col++)
                 {
-                    for (int col = 0; col < colCount; col++)
+                    var cellData = tableData[row][col];
+                    if (cellData == null) continue;
+
+                    // 创建单元格
+                    ICell excelCell = excelRow.CreateCell(col);
+                    excelCell.SetCellValue(cellData.Text ?? string.Empty);
+                    excelCell.CellStyle = borderStyle;
+
+                    // 处理合并
+                    if (cellData.IsMerged && (cellData.MergeAcross > 0 || cellData.MergeDown > 0))
                     {
-                        var cell = tableData[row][col];
-
-                        if (cell != null && cell.IsMerged && (cell.MergeAcross > 0 || cell.MergeDown > 0))
-                        {
-                            // 合并单元格
-                            worksheet.Cells[row + 1, col + 1,
-                                           row + 1 + cell.MergeDown,
-                                           col + 1 + cell.MergeAcross].Merge = true;
-                        }
-
-                        // 设置单元格值
-                        if (cell != null)
-                        {
-                            worksheet.Cells[row + 1, col + 1].Value = cell.Text;
-                        }
-
-                        // 设置单元格边框
-                        SetCellBorder(worksheet.Cells[row + 1, col + 1]);
+                        // CellRangeAddress 参数：firstRow, lastRow, firstCol, lastCol（0-based）
+                        int firstRow = row;
+                        int lastRow = row + cellData.MergeDown;
+                        int firstCol = col;
+                        int lastCol = col + cellData.MergeAcross;
+                        sheet.AddMergedRegion(new CellRangeAddress(firstRow, lastRow, firstCol, lastCol));
                     }
                 }
-
-                // 自动调整列宽
-                worksheet.Cells.AutoFitColumns();
-
-                // 保存Excel文件
-                package.Save();
             }
+
+            // 自动调整列宽（NPOI 需手动设置，此处简单自适应）
+            for (int col = 0; col < colCount; col++)
+            {
+                sheet.AutoSizeColumn(col);
+            }
+
+            // 保存文件
+            using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+            {
+                workbook.Write(fs);
+            }
+
+            // 释放资源
+            workbook.Close();
         }
 
         /// <summary>
         /// 设置单元格边框
         /// </summary>
         /// <param name="cell"></param>
-        private void SetCellBorder(ExcelRange cell)
+        private void SetCellBorder(ICell cell)
         {
-            cell.Style.Border.Top.Style = ExcelBorderStyle.Thin;
-            cell.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
-            cell.Style.Border.Left.Style = ExcelBorderStyle.Thin;
-            cell.Style.Border.Right.Style = ExcelBorderStyle.Thin;
+            if (cell == null) return;
+            ICellStyle style = cell.Sheet.Workbook.CreateCellStyle();
+            // 复制原有样式 (简单起见，直接设置四个边框，同时保留原有对齐)
+            style.CloneStyleFrom(cell.CellStyle);
+            style.BorderTop = BorderStyle.Thin;
+            style.BorderBottom = BorderStyle.Thin;
+            style.BorderLeft = BorderStyle.Thin;
+            style.BorderRight = BorderStyle.Thin;
+            cell.CellStyle = style;
         }
 
         /// <summary>
@@ -6970,10 +7022,14 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     return;
                 }
 
-                // 2) 读取工作簿
-                using var package = new ExcelPackage(new FileInfo(excelPath));
-                var workbook = package.Workbook;
-                if (workbook == null || workbook.Worksheets.Count == 0)
+                // 2) 使用 NPOI 读取工作簿
+                IWorkbook workbook;
+                using (FileStream fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read))
+                {
+                    workbook = new XSSFWorkbook(fs);
+                }
+
+                if (workbook == null || workbook.NumberOfSheets == 0)
                 {
                     Application.ShowAlertDialog("Excel中没有可用工作表。");
                     return;
@@ -6993,14 +7049,16 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     sheetName = psr.StringResult.Trim();
                 }
 
-                var ws = workbook.Worksheets[sheetName];
-                if (ws == null)
+                // 尝试按名称获取工作表
+                ISheet sheet = workbook.GetSheet(sheetName);
+                if (sheet == null)
                 {
                     Application.ShowAlertDialog($"未找到工作表：{sheetName}");
                     return;
                 }
 
-                if (ws.Dimension == null)
+                // 检查工作表是否有数据
+                if (sheet.LastRowNum < 0)
                 {
                     Application.ShowAlertDialog($"工作表“{sheetName}”没有有效数据。");
                     return;
@@ -7014,25 +7072,76 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     return;
                 }
 
-                // 5) 导出：Address, Formula, Value
-                int rowStart = ws.Dimension.Start.Row;
-                int rowEnd = ws.Dimension.End.Row;
-                int colStart = ws.Dimension.Start.Column;
-                int colEnd = ws.Dimension.End.Column;
+                // 5) 计算实际使用的行列范围（模拟 EPPlus 的 Dimension）
+                int rowStart = sheet.FirstRowNum;   // 0‑based, 通常为 0
+                int rowEnd = sheet.LastRowNum;      // 0‑based
+                if (rowStart < 0 || rowEnd < 0)
+                {
+                    Application.ShowAlertDialog($"工作表“{sheetName}”没有有效数据。");
+                    return;
+                }
+
+                int colStart = 0;   // 先设为 0，后面会根据内容调整
+                int colEnd = 0;
+
+                // 第一次遍历：确定全局最小/最大列
+                for (int r = rowStart; r <= rowEnd; r++)
+                {
+                    IRow row = sheet.GetRow(r);
+                    if (row == null) continue;
+
+                    int firstCell = row.FirstCellNum; // 0‑based, -1 表示无单元格
+                    int lastCell = row.LastCellNum;   // 1‑based, 即最大列索引+1 (与 EPPlus 的 Column 一致)
+
+                    if (firstCell >= 0)
+                    {
+                        // firstCell 是 0‑based，换成 1‑based 的列号
+                        int minColThisRow = firstCell + 1;
+                        if (colStart == 0 || minColThisRow < colStart)
+                            colStart = minColThisRow;
+                    }
+
+                    if (lastCell > colEnd)
+                        colEnd = lastCell;  // lastCell 已经是 1‑based
+                }
+
+                // 如果还是没有找到列，设置为 1..1 避免空循环
+                if (colStart == 0) colStart = 1;
+                if (colEnd == 0) colEnd = 1;
+
+                // 准备 DataFormatter 以获得类似 EPPlus .Text 的显示值
+                DataFormatter formatter = new DataFormatter();
 
                 var sb = new System.Text.StringBuilder(1024 * 32);
                 sb.AppendLine("Address,Formula,Value");
 
                 int exportCount = 0;
-                for (int r = rowStart; r <= rowEnd; r++)
-                {
-                    for (int c = colStart; c <= colEnd; c++)
-                    {
-                        var cell = ws.Cells[r, c];
-                        if (cell == null) continue;
 
-                        string formula = cell.Formula ?? string.Empty;
-                        string value = cell.Text ?? string.Empty;
+                // 按原有逻辑遍历行列
+                for (int rowIdx = rowStart; rowIdx <= rowEnd; rowIdx++)
+                {
+                    IRow row = sheet.GetRow(rowIdx);
+                    // 如果整行为空，跳过行扫描以提高性能（但原逻辑仍会尝试访问每个单元格，此处保持一致）
+                    // 但若 row == null，所有列都视为空，因此可以 continue 直接进入下一行
+
+                    for (int colIdx = colStart; colIdx <= colEnd; colIdx++)
+                    {
+                        ICell cell = row?.GetCell(colIdx - 1); // NPOI 0‑based
+
+                        // 无单元格或空白单元格，跳过（保留原过滤逻辑）
+                        if (cell == null || cell.CellType == CellType.Blank)
+                        {
+                            // 但也要检查是否有公式（空白单元格也可能有公式？通常不会，但防止意外）
+                            if (cell != null && cell.CellType == CellType.Blank)
+                                continue;
+                            if (cell == null)
+                                continue;
+                        }
+
+                        // 获取公式（去掉 NPOI 自动添加的等号，保持与 EPPlus .Formula 一致）
+                        string formula = GetCellFormulaWithoutEquals(cell); // 辅助方法见下方
+                                                                            // 获取显示文本
+                        string value = formatter.FormatCellValue(cell);
 
                         // 只导出有值或有公式的单元格，减少噪音
                         if (string.IsNullOrWhiteSpace(formula) && string.IsNullOrWhiteSpace(value))
@@ -7040,10 +7149,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                         if (!string.IsNullOrWhiteSpace(formula))
                         {
-                            formula = "=" + formula;
+                            formula = "=" + formula; // EPPlus 原逻辑：为公式添加等号
                         }
 
-                        sb.Append(CsvEscape(cell.Address)).Append(',')
+                        // 生成地址（如 A1）
+                        string address = new CellReference(rowIdx, colIdx - 1).FormatAsString();
+
+                        sb.Append(CsvEscape(address)).Append(',')
                           .Append(CsvEscape(formula)).Append(',')
                           .Append(CsvEscape(value)).AppendLine();
 
@@ -7060,6 +7172,22 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 LogManager.Instance.LogInfo($"\n导出公式CSV失败：{ex.Message}");
                 Application.ShowAlertDialog($"导出失败：{ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// 获取公式单元格的公式字符串（不含开头的等号），与 EPPlus 的 .Formula 行为一致。
+        /// 如果单元格不是公式类型，返回空字符串。
+        /// </summary>
+        private static string GetCellFormulaWithoutEquals(ICell cell)
+        {
+            if (cell != null && cell.CellType == CellType.Formula)
+            {
+                string formula = cell.CellFormula;
+                if (formula != null && formula.StartsWith("="))
+                    return formula.Substring(1);
+                return formula ?? string.Empty;
+            }
+            return string.Empty;
         }
 
         private static string SelectSaveCsvPath(string excelPath, string sheetName)

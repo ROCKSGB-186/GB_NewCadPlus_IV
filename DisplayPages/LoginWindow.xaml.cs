@@ -1,7 +1,9 @@
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
-using OfficeOpenXml.FormulaParsing.Excel.Functions.Text;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using NPOI.SS.Util;
 using System;
 using System.Collections.Generic;
 using System.IO;

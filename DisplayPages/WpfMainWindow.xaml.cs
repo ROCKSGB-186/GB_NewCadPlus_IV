@@ -18,8 +18,9 @@ using Microsoft.Win32;
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using OfficeOpenXml;
-using OfficeOpenXml.Style;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;  // 仅用于创建 .xlsx 工作簿
+using NPOI.SS.Util;          // 用于 CellRangeAddress 等辅助类
 using Org.BouncyCastle.Asn1.Cms;
 using System;
 using System.CodeDom.Compiler;
@@ -81,6 +82,7 @@ using Point = System.Windows.Point;
 using SystemColors = System.Windows.SystemColors;
 using TextBox = System.Windows.Controls.TextBox;
 using UserControl = System.Windows.Controls.UserControl;
+using CellType = NPOI.SS.UserModel.CellType;
 
 namespace GB_NewCadPlus_IV
 {
@@ -1095,6 +1097,11 @@ namespace GB_NewCadPlus_IV
             // 内部方法已包含“有则返回，无则下载”的逻辑
             return await ServerFileService.EnsurePreviewCacheAsync(fileStorage, GetPath.PreviewCachePath);
         }
+
+        private System.Windows.VerticalAlignment GetVerticalAlignment()
+        {
+            return VerticalAlignment;
+        }
         #endregion
 
         #region 第三阶段：按钮与面板加载、动态按钮交互、分类/面板加载相关方法（带中文注释，直接替换相应区域）
@@ -1113,7 +1120,7 @@ namespace GB_NewCadPlus_IV
                 Height = 22,
                 Margin = new Thickness(0, 0, 5, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
+                VerticalAlignment = System.Windows.VerticalAlignment.Top,   // ✅ 使用完全限定名
                 Tag = new ButtonTagCommandInfo
                 {
                     Type = "FileStorage",
@@ -1555,7 +1562,7 @@ namespace GB_NewCadPlus_IV
                     var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
                     for (int j = 0; j < perRow && i + j < files.Count; j++)
                     {
-                        var btn = CreateFileButton(files[i + j]);
+                        var btn = CreateFileButton(files[i + j]);   // 不再传 GetVerticalAlignment()
                         row.Children.Add(btn);
                     }
                     targetPanel.Children.Add(row);
@@ -6816,37 +6823,70 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                // 使用EPPlus库导出Excel（推荐方式）
-                using (var package = new ExcelPackage())
+                IWorkbook workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("图元批量添加模板");
+
+                // 创建标题样式：加粗、水平居中、浅蓝背景
+                ICellStyle headerStyle = workbook.CreateCellStyle();
+                IFont headerFont = workbook.CreateFont();
+                headerFont.IsBold = true;
+                headerStyle.SetFont(headerFont);
+                headerStyle.Alignment = (NPOI.SS.UserModel.HorizontalAlignment)HorizontalAlignment.Center;
+                // 设置背景色为浅蓝 (NPOI 使用索引色或自定义颜色)
+                headerStyle.FillForegroundColor = IndexedColors.LightBlue.Index;
+                headerStyle.FillPattern = FillPattern.SolidForeground;
+
+                // 写入标题行
+                IRow headerRow = sheet.CreateRow(0);
+                for (int i = 0; i < dataTable.Columns.Count; i++)
                 {
-                    var worksheet = package.Workbook.Worksheets.Add("图元批量添加模板");
+                    ICell cell = headerRow.CreateCell(i);
+                    cell.SetCellValue(dataTable.Columns[i].ColumnName);
+                    cell.CellStyle = headerStyle;
+                }
 
-                    // 添加标题行
-                    for (int i = 0; i < dataTable.Columns.Count; i++)
+                // 写入数据行
+                for (int i = 0; i < dataTable.Rows.Count; i++)
+                {
+                    IRow dataRow = sheet.CreateRow(i + 1);
+                    for (int j = 0; j < dataTable.Columns.Count; j++)
                     {
-                        worksheet.Cells[1, i + 1].Value = dataTable.Columns[i].ColumnName;
-                        worksheet.Cells[1, i + 1].Style.Font.Bold = true;
-
-                        // 修复ExcelFillPatternType的引用问题
-                        worksheet.Cells[1, i + 1].Style.Fill.PatternType = ExcelFillStyle.Solid;
-                        worksheet.Cells[1, i + 1].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightBlue);
-                    }
-
-                    // 添加数据行
-                    for (int i = 0; i < dataTable.Rows.Count; i++)
-                    {
-                        for (int j = 0; j < dataTable.Columns.Count; j++)
+                        object value = dataTable.Rows[i][j];
+                        ICell cell = dataRow.CreateCell(j);
+                        // 根据数据类型写入，避免异常
+                        if (value == null || value == DBNull.Value)
                         {
-                            worksheet.Cells[i + 2, j + 1].Value = dataTable.Rows[i][j];
+                            cell.SetCellValue(string.Empty);
+                        }
+                        else if (value is double || value is float || value is decimal)
+                        {
+                            cell.SetCellValue(Convert.ToDouble(value));
+                        }
+                        else if (value is int || value is long || value is short)
+                        {
+                            cell.SetCellValue(Convert.ToDouble(value)); // NPOI 也支持 SetCellValue(double)
+                        }
+                        else if (value is DateTime dt)
+                        {
+                            cell.SetCellValue(dt);
+                        }
+                        else
+                        {
+                            cell.SetCellValue(value.ToString());
                         }
                     }
+                }
 
-                    // 自动调整列宽
-                    worksheet.Cells.AutoFitColumns();
+                // 自动调整列宽
+                for (int col = 0; col < dataTable.Columns.Count; col++)
+                {
+                    sheet.AutoSizeColumn(col);
+                }
 
-                    // 保存文件
-                    var fileInfo = new FileInfo(filePath);
-                    package.SaveAs(fileInfo);
+                // 保存文件
+                using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+                {
+                    workbook.Write(fs);
                 }
 
                 return true;
@@ -7328,7 +7368,8 @@ namespace GB_NewCadPlus_IV
         private void 导出表格_Click(object sender, RoutedEventArgs e)
         {
             Env.Document.SendStringToExecute("ExportTableToExcel ", false, false, false);
-
+            //Env.Document.SendStringToExecute("ExportTableToExcelFile ", false, false, false);
+            
         }
 
         private void 生成设备表_Click(object sender, RoutedEventArgs e)
@@ -7581,34 +7622,40 @@ namespace GB_NewCadPlus_IV
                 {
                     string filePath = Path.Combine(_workingDirectory, fileName);
 
-                    using (var package = new ExcelPackage())
+                    // 创建工作簿和工作表
+                    IWorkbook workbook = new XSSFWorkbook();
+                    ISheet sheet = workbook.CreateSheet("图层配置");
+
+                    // 写入表头
+                    IRow headerRow = sheet.CreateRow(0);
+                    headerRow.CreateCell(0).SetCellValue("序号");
+                    headerRow.CreateCell(1).SetCellValue("图层名称");
+                    headerRow.CreateCell(2).SetCellValue("开关");
+                    headerRow.CreateCell(3).SetCellValue("冻结");
+                    headerRow.CreateCell(4).SetCellValue("颜色索引");
+                    headerRow.CreateCell(5).SetCellValue("删除");
+
+                    // 写入数据行
+                    for (int i = 0; i < _layerInfo.Count; i++)
                     {
-                        var worksheet = package.Workbook.Worksheets.Add("图层配置");
+                        var layer = _layerInfo[i];
+                        IRow dataRow = sheet.CreateRow(i + 1);   // 第 i+1 行 (因为第0行是表头)
 
-                        worksheet.Cells[1, 1].Value = "序号";
-                        worksheet.Cells[1, 2].Value = "图层名称";
-                        worksheet.Cells[1, 3].Value = "开关";
-                        worksheet.Cells[1, 4].Value = "冻结";
-                        worksheet.Cells[1, 5].Value = "颜色索引";
-                        worksheet.Cells[1, 6].Value = "删除";
-
-                        for (int i = 0; i < _layerInfo.Count; i++)
-                        {
-                            var layer = _layerInfo[i];
-                            int row = i + 2;
-
-                            worksheet.Cells[row, 1].Value = layer.Index;
-                            worksheet.Cells[row, 2].Value = layer.LayerName;
-                            worksheet.Cells[row, 3].Value = layer.IsOn;
-                            worksheet.Cells[row, 4].Value = layer.IsFrozen;
-                            worksheet.Cells[row, 5].Value = layer.ColorIndex;
-                            worksheet.Cells[row, 6].Value = layer.IsDelete;
-                        }
-
-                        FileInfo fileInfo = new FileInfo(filePath);
-                        package.SaveAs(fileInfo);
-                        return true;
+                        dataRow.CreateCell(0).SetCellValue(layer.Index);
+                        dataRow.CreateCell(1).SetCellValue(layer.LayerName);
+                        dataRow.CreateCell(2).SetCellValue(layer.IsOn);
+                        dataRow.CreateCell(3).SetCellValue(layer.IsFrozen);
+                        dataRow.CreateCell(4).SetCellValue(layer.ColorIndex);
+                        dataRow.CreateCell(5).SetCellValue(layer.IsDelete);
                     }
+
+                    // 保存文件
+                    using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+                    {
+                        workbook.Write(fs);
+                    }
+
+                    return true;
                 }
                 catch (Exception ex)
                 {
@@ -7633,56 +7680,91 @@ namespace GB_NewCadPlus_IV
                         return new List<LayerInfo>();
                     }
 
-                    using (var package = new ExcelPackage(new FileInfo(filePath)))
+                    // 使用 NPOI 打开 Excel 文件
+                    IWorkbook workbook;
+                    using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
                     {
-                        var worksheet = package.Workbook.Worksheets[0];
-                        var layers = new List<LayerInfo>();
-
-                        int rowCount = worksheet.Dimension?.Rows ?? 0;
-                        if (rowCount <= 1) return new List<LayerInfo>();
-
-                        for (int row = 2; row <= rowCount; row++)
-                        {
-                            try
-                            {
-                                var index = Convert.ToInt32(worksheet.Cells[row, 1].Value ?? 0);
-                                var name = worksheet.Cells[row, 2].Value?.ToString() ?? "";
-                                var isOn = Convert.ToBoolean(worksheet.Cells[row, 3].Value ?? true);
-                                var isFrozen = Convert.ToBoolean(worksheet.Cells[row, 4].Value ?? false);
-                                var colorIndex = Convert.ToInt16(worksheet.Cells[row, 5].Value ?? 7);
-                                var toDelete = Convert.ToBoolean(worksheet.Cells[row, 6].Value ?? false);
-
-                                var layerInfo = new LayerInfo
-                                {
-                                    Index = index,
-                                    LayerName = name,
-                                    IsOn = isOn,
-                                    IsFrozen = isFrozen,
-                                    ColorIndex = colorIndex,
-                                    IsDelete = toDelete,
-                                    Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
-                                        Autodesk.AutoCAD.Colors.ColorMethod.ByAci, colorIndex)
-                                };
-                                layers.Add(layerInfo);
-                            }
-                            catch (Exception rowEx)
-                            {
-                                Editor ed = Application.DocumentManager.MdiActiveDocument?.Editor;
-                                ed?.WriteMessage($"\n读取第{row}行数据时出错: {rowEx.Message}");
-                            }
-                        }
-
-                        // 按名称排序
-                        layers.Sort((x, y) => string.Compare(x.LayerName, y.LayerName, StringComparison.OrdinalIgnoreCase));
-                        _layerInfo = new List<LayerInfo>(layers);
-                        return layers;
+                        workbook = new XSSFWorkbook(fs);
                     }
+
+                    // 获取第一个工作表
+                    ISheet sheet = workbook.GetSheetAt(0);
+                    if (sheet == null)
+                        return new List<LayerInfo>();
+
+                    var layers = new List<LayerInfo>();
+
+                    // 从第1行开始（索引0是表头，所以从索引1开始）
+                    int rowCount = sheet.LastRowNum; // 最后一行的索引
+                    if (rowCount < 1) return new List<LayerInfo>(); // 至少有一行数据
+
+                    for (int rowIdx = 1; rowIdx <= rowCount; rowIdx++) // rowIdx 从1开始，0为表头
+                    {
+                        IRow row = sheet.GetRow(rowIdx);
+                        if (row == null) continue; // 跳过空行
+
+                        try
+                        {
+                            // 注意：NPOI 的列索引从0开始，对应原 EPPlus 的 row, col (col从1开始)，所以要减1
+                            // 原EPPlus: worksheet.Cells[row, 1] -> NPOI: row.GetCell(0)
+                            int index = Convert.ToInt32(GetCellValue(row, 0) ?? 0);
+                            string name = GetCellValue(row, 1)?.ToString() ?? "";
+                            bool isOn = Convert.ToBoolean(GetCellValue(row, 2) ?? true);
+                            bool isFrozen = Convert.ToBoolean(GetCellValue(row, 3) ?? false);
+                            short colorIndex = Convert.ToInt16(GetCellValue(row, 4) ?? 7);
+                            bool toDelete = Convert.ToBoolean(GetCellValue(row, 5) ?? false);
+
+                            var layerInfo = new LayerInfo
+                            {
+                                Index = index,
+                                LayerName = name,
+                                IsOn = isOn,
+                                IsFrozen = isFrozen,
+                                ColorIndex = colorIndex,
+                                IsDelete = toDelete,
+                                Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                                    Autodesk.AutoCAD.Colors.ColorMethod.ByAci, colorIndex)
+                            };
+                            layers.Add(layerInfo);
+                        }
+                        catch (Exception rowEx)
+                        {
+                            Editor ed = Application.DocumentManager.MdiActiveDocument?.Editor;
+                            ed?.WriteMessage($"\n读取第{rowIdx + 1}行数据时出错: {rowEx.Message}");
+                        }
+                    }
+
+                    // 按名称排序
+                    layers.Sort((x, y) => string.Compare(x.LayerName, y.LayerName, StringComparison.OrdinalIgnoreCase));
+                    _layerInfo = new List<LayerInfo>(layers);
+                    return layers;
                 }
                 catch (Exception ex)
                 {
                     Editor ed = Application.DocumentManager.MdiActiveDocument?.Editor;
                     ed?.WriteMessage($"\n加载图层配置时出错: {ex.Message}");
                     return new List<LayerInfo>();
+                }
+            }
+
+            // 辅助方法：安全获取单元格值（兼容 null 单元格）
+            private object GetCellValue(IRow row, int colIndex)
+            {
+                ICell cell = row.GetCell(colIndex);
+                if (cell == null) return null;
+                switch (cell.CellType)
+                {
+                    case CellType.Numeric:
+                        return cell.NumericCellValue;
+                    case CellType.String:
+                        return cell.StringCellValue;
+                    case CellType.Boolean:
+                        return cell.BooleanCellValue;
+                    case CellType.Formula:
+                        // 公式单元格可根据需要返回计算值或公式字符串，这里返回其字符串表示
+                        return cell.ToString();
+                    default:
+                        return cell.ToString();
                 }
             }
 
@@ -10619,128 +10701,175 @@ namespace GB_NewCadPlus_IV
 
             var result = new List<ExcelCalcSection>();
 
-            using (var package = new ExcelPackage(new FileInfo(excelPath)))
+            IWorkbook workbook;
+            using (FileStream fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read))
             {
-                var ws = package.Workbook.Worksheets.FirstOrDefault();
-                if (ws == null || ws.Dimension == null)
-                    return result;
-
-                int headerRow = 1;
-                int rowStart = 2;
-                int rowEnd = ws.Dimension.End.Row;
-
-                int colDevice = FindExcelColumn(ws, headerRow, "设备", 1);
-                int colParamName = FindExcelColumn(ws, headerRow, "参数名称", 2);
-                int colValue = FindExcelColumn(ws, headerRow, "参数", 3);
-                int colUnit = FindExcelColumn(ws, headerRow, "单位", 4);
-                int colValueType = FindExcelColumn(ws, headerRow, "值类型", 5);
-                int colFormula = FindExcelColumn(ws, headerRow, "公式", 6);
-
-                string currentDevice = string.Empty;
-                ExcelCalcSection? currentSection = null;
-                int dynamicIndex = 1;
-
-                for (int r = rowStart; r <= rowEnd; r++)
-                {
-                    string cDevice = (ws.Cells[r, colDevice].Text ?? string.Empty).Trim();
-                    string cParamName = (ws.Cells[r, colParamName].Text ?? string.Empty).Trim();
-                    string cValue = (ws.Cells[r, colValue].Text ?? string.Empty).Trim();
-                    string cUnit = (ws.Cells[r, colUnit].Text ?? string.Empty).Trim();
-                    string cValueType = (ws.Cells[r, colValueType].Text ?? string.Empty).Trim();
-                    string cFormula = (ws.Cells[r, colFormula].Text ?? string.Empty).Trim();
-                    string cValueExcelFormula = (ws.Cells[r, colValue].Formula ?? string.Empty).Trim();
-
-                    bool isBlankRow =
-                        string.IsNullOrWhiteSpace(cDevice) &&
-                        string.IsNullOrWhiteSpace(cParamName) &&
-                        string.IsNullOrWhiteSpace(cValue) &&
-                        string.IsNullOrWhiteSpace(cUnit) &&
-                        string.IsNullOrWhiteSpace(cValueType) &&
-                        string.IsNullOrWhiteSpace(cFormula) &&
-                        string.IsNullOrWhiteSpace(cValueExcelFormula);
-
-                    if (isBlankRow)
-                    {
-                        if (currentSection != null && currentSection.Rows.Count > 0)
-                        {
-                            result.Add(currentSection);
-                            currentSection = null;
-                        }
-                        continue;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(cDevice))
-                        currentDevice = cDevice;
-
-                    if (string.IsNullOrWhiteSpace(currentDevice))
-                        continue;
-
-                    if (currentSection == null)
-                    {
-                        string gridName = NormalizeCalcGridNameToken(currentDevice);
-                        if (string.IsNullOrWhiteSpace(gridName) || !gridName.StartsWith("DataGrid_", StringComparison.OrdinalIgnoreCase))
-                            gridName = $"DataGrid_动态_{dynamicIndex++}";
-
-                        currentSection = new ExcelCalcSection
-                        {
-                            DeviceName = currentDevice,
-                            GridName = gridName,
-                            GroupHeader = currentDevice
-                        };
-                    }
-
-                    if (string.IsNullOrWhiteSpace(cParamName))
-                        continue;
-
-                    // 关键：地址/序号使用 Excel 原始行号，保证 C52/C76 这类引用正确
-                    int seq = r;
-                    string address = "C" + r;
-
-                    string valueType = NormalizeValueType(cValueType);
-
-                    // 公式优先：公式列 > 参数列自身公式
-                    string formulaRaw = !string.IsNullOrWhiteSpace(cFormula)
-                        ? cFormula
-                        : (!string.IsNullOrWhiteSpace(cValueExcelFormula) ? "=" + cValueExcelFormula : string.Empty);
-
-                    string normalizedFormula = NormalizeExcelFormulaToInternal(formulaRaw, currentSection.GridName);
-
-                    // 有公式强制 Calc
-                    if (!string.IsNullOrWhiteSpace(normalizedFormula))
-                        valueType = "Calc";
-
-                    // MultiSelect 选项
-                    var options = ParseMultiSelectOptions(cValue, valueType);
-                    string valueText = cValue;
-
-                    if (string.Equals(valueType, "MultiSelect", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (options.Count > 0 && !options.Contains(valueText, StringComparer.OrdinalIgnoreCase))
-                            valueText = options[0];
-
-                        normalizedFormula = string.Empty;
-                    }
-
-                    currentSection.Rows.Add(new CalcCsvTableRow
-                    {
-                        GridName = currentSection.GridName,
-                        Address = address,
-                        Sequence = seq,
-                        ParameterName = cParamName,
-                        ValueType = valueType,
-                        Formula = normalizedFormula,
-                        ValueText = valueText,
-                        Unit = cUnit,
-                        Description = "Excel导入",
-                        OptionValues = new ObservableCollection<string>(options)
-                    });
-                }
-
-                if (currentSection != null && currentSection.Rows.Count > 0)
-                    result.Add(currentSection);
+                workbook = new XSSFWorkbook(fs);
             }
 
+            ISheet ws = workbook.GetSheetAt(0);
+            if (ws == null || ws.LastRowNum < 0)
+                return result;
+
+            int headerRow = 1;          // Excel 第1行为标题（1‑based）
+            int rowStart = 2;          // 数据从第2行开始（1‑based）
+            int rowEnd = ws.LastRowNum + 1;  // 最大行号（1‑based）
+
+            // FindExcelColumn 返回 1‑based 列索引（前面已修改为接受 ISheet）
+            int colDevice = FindExcelColumn(ws, headerRow, "设备", 1);
+            int colParamName = FindExcelColumn(ws, headerRow, "参数名称", 2);
+            int colValue = FindExcelColumn(ws, headerRow, "参数", 3);
+            int colUnit = FindExcelColumn(ws, headerRow, "单位", 4);
+            int colValueType = FindExcelColumn(ws, headerRow, "值类型", 5);
+            int colFormula = FindExcelColumn(ws, headerRow, "公式", 6);
+
+            string currentDevice = string.Empty;
+            ExcelCalcSection? currentSection = null;
+            int dynamicIndex = 1;
+
+            DataFormatter formatter = new DataFormatter(); // 用于获取与 Excel 显示一致的文本
+
+            for (int r = rowStart; r <= rowEnd; r++)
+            {
+                // 转换为 0‑based 行号
+                IRow row = ws.GetRow(r - 1);
+                if (row == null) continue;
+
+                // 获取各列单元格
+                ICell cellDevice = row.GetCell(colDevice - 1);
+                ICell cellParamName = row.GetCell(colParamName - 1);
+                ICell cellValue = row.GetCell(colValue - 1);
+                ICell cellUnit = row.GetCell(colUnit - 1);
+                ICell cellValueType = row.GetCell(colValueType - 1);
+                ICell cellFormula = row.GetCell(colFormula - 1);
+
+                // 获取显示文本
+                string cDevice = GetCellDisplayText(cellDevice, formatter).Trim();
+                string cParamName = GetCellDisplayText(cellParamName, formatter).Trim();
+                string cValue = GetCellDisplayText(cellValue, formatter).Trim();
+                string cUnit = GetCellDisplayText(cellUnit, formatter).Trim();
+                string cValueType = GetCellDisplayText(cellValueType, formatter).Trim();
+                string cFormula = GetCellDisplayText(cellFormula, formatter).Trim();
+
+                // EPPlus 的 .Formula 返回不带等号的公式字符串，NPOI 返回带等号，需要还原
+                string cValueExcelFormula = GetCellFormulaWithoutEquals(cellValue).Trim();
+
+                // 空白行判断
+                bool isBlankRow =
+                    string.IsNullOrWhiteSpace(cDevice) &&
+                    string.IsNullOrWhiteSpace(cParamName) &&
+                    string.IsNullOrWhiteSpace(cValue) &&
+                    string.IsNullOrWhiteSpace(cUnit) &&
+                    string.IsNullOrWhiteSpace(cValueType) &&
+                    string.IsNullOrWhiteSpace(cFormula) &&
+                    string.IsNullOrWhiteSpace(cValueExcelFormula);
+
+                if (isBlankRow)
+                {
+                    if (currentSection != null && currentSection.Rows.Count > 0)
+                    {
+                        result.Add(currentSection);
+                        currentSection = null;
+                    }
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cDevice))
+                    currentDevice = cDevice;
+
+                if (string.IsNullOrWhiteSpace(currentDevice))
+                    continue;
+
+                if (currentSection == null)
+                {
+                    string gridName = NormalizeCalcGridNameToken(currentDevice);
+                    if (string.IsNullOrWhiteSpace(gridName) || !gridName.StartsWith("DataGrid_", StringComparison.OrdinalIgnoreCase))
+                        gridName = $"DataGrid_动态_{dynamicIndex++}";
+
+                    currentSection = new ExcelCalcSection
+                    {
+                        DeviceName = currentDevice,
+                        GridName = gridName,
+                        GroupHeader = currentDevice
+                    };
+                }
+
+                if (string.IsNullOrWhiteSpace(cParamName))
+                    continue;
+
+                // 地址/序号使用 Excel 原始行号（保持原来的逻辑）
+                int seq = r;               // 仍是 1‑based 的 Excel 行号
+                string address = "C" + r;
+
+                string valueType = NormalizeValueType(cValueType);
+
+                // 公式优先：公式列 > 参数列自身公式
+                string formulaRaw = !string.IsNullOrWhiteSpace(cFormula)
+                    ? cFormula
+                    : (!string.IsNullOrWhiteSpace(cValueExcelFormula)
+                        ? "=" + cValueExcelFormula   // NPOI 返回的公式已去掉等号，这里加回
+                        : string.Empty);
+
+                string normalizedFormula = NormalizeExcelFormulaToInternal(formulaRaw, currentSection.GridName);
+
+                if (!string.IsNullOrWhiteSpace(normalizedFormula))
+                    valueType = "Calc";
+
+                // MultiSelect 选项
+                var options = ParseMultiSelectOptions(cValue, valueType);
+                string valueText = cValue;
+
+                if (string.Equals(valueType, "MultiSelect", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (options.Count > 0 && !options.Contains(valueText, StringComparer.OrdinalIgnoreCase))
+                        valueText = options[0];
+                    normalizedFormula = string.Empty;
+                }
+
+                currentSection.Rows.Add(new CalcCsvTableRow
+                {
+                    GridName = currentSection.GridName,
+                    Address = address,
+                    Sequence = seq,
+                    ParameterName = cParamName,
+                    ValueType = valueType,
+                    Formula = normalizedFormula,
+                    ValueText = valueText,
+                    Unit = cUnit,
+                    Description = "Excel导入",
+                    OptionValues = new ObservableCollection<string>(options)
+                });
+            }
+
+            if (currentSection != null && currentSection.Rows.Count > 0)
+                result.Add(currentSection);
+
             return result;
+        }
+
+        /// <summary>
+        /// 获取与 Excel 显示一致的单元格文本（模拟 EPPlus 的 .Text）
+        /// </summary>
+        private static string GetCellDisplayText(ICell cell, DataFormatter formatter)
+        {
+            if (cell == null) return string.Empty;
+            // DataFormatter 会按照单元格格式（日期、数字等）返回显示值
+            return formatter.FormatCellValue(cell);
+        }
+
+        /// <summary>
+        /// 获取公式单元格的公式字符串（不含前面的等号），与 EPPlus 的 .Formula 行为一致
+        /// </summary>
+        private static string GetCellFormulaWithoutEquals(ICell cell)
+        {
+            if (cell != null && cell.CellType == CellType.Formula)
+            {
+                string formula = cell.CellFormula;
+                if (formula != null && formula.StartsWith("="))
+                    return formula.Substring(1);
+                return formula ?? string.Empty;
+            }
+            return string.Empty;
         }
 
         /// <summary>
@@ -10751,14 +10880,30 @@ namespace GB_NewCadPlus_IV
         /// <param name="headerName">列标题名称</param>
         /// <param name="fallback">未找到时的默认列号</param>
         /// <returns>列号</returns>
-        private static int FindExcelColumn(ExcelWorksheet ws, int headerRow, string headerName, int fallback)
+        private static int FindExcelColumn(ISheet ws, int headerRow, string headerName, int fallback)
         {
-            int endCol = ws.Dimension?.End.Column ?? fallback;
-            for (int c = 1; c <= endCol; c++)
+            // 原 EPPlus 的 headerRow 是 1-based；NPOI 行索引从 0 开始，此处转换为 0-based
+            int rowIndex = headerRow - 1;
+            if (rowIndex < 0) return fallback;
+
+            IRow row = ws.GetRow(rowIndex);
+            if (row == null) return fallback;
+
+            int endCol = row.LastCellNum; // 实际存在的最大列索引+1（即列数）
+            for (int c = 0; c < endCol; c++)
             {
-                string t = (ws.Cells[headerRow, c].Text ?? string.Empty).Trim();
-                if (string.Equals(t, headerName, StringComparison.OrdinalIgnoreCase))
-                    return c;
+                ICell cell = row.GetCell(c);
+                // 获取单元格的文本内容（优先取字符串，否则用 ToString）
+                string text = "";
+                if (cell != null)
+                {
+                    // 尝试以字符串类型读取，若单元格不是字符串也尽量获取其显示值
+                    text = cell.CellType == CellType.String ? cell.StringCellValue : cell.ToString();
+                    text = text ?? "";
+                }
+                text = text.Trim();
+                if (string.Equals(text, headerName, StringComparison.OrdinalIgnoreCase))
+                    return c + 1; // 转换为 1-based 列号，与原函数返回值一致
             }
             return fallback;
         }
@@ -12188,7 +12333,7 @@ namespace GB_NewCadPlus_IV
 
             var txt = new FrameworkElementFactory(typeof(TextBlock));
             txt.SetBinding(TextBlock.TextProperty, new Binding("ValueText"));
-            txt.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+            txt.SetValue(TextBlock.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
 
             var txtStyle = new Style(typeof(TextBlock));
             txtStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, global::System.Windows.Visibility.Visible));

@@ -67,39 +67,48 @@
                 Width="90"
                 Height="NaN"
                 Margin="0,10,201,3"
+                HorizontalAlignment="Right"
                 Click="Btn_同步到cad图元_Click"
-                Content="同步到cad图元" HorizontalAlignment="Right" />
+                Content="同步到cad图元" />
         </Grid>
-        <!-- 【新增】标题显示区域 -->
-        <Border Grid.Row="1" Background="#FFECECEC" BorderBrush="Gray" BorderThickness="1" Padding="5" Margin="0,0,0,2">
-            <!-- 关键：必须设置 x:Name="TextBlock_TableTitle" -->
-            <TextBlock x:Name="TextBlock_TableTitle" 
-                       Text="管道明细 - 设备材料明细表" 
-                       FontWeight="Bold" 
-                       FontSize="14" 
-                       HorizontalAlignment="Center"/>
+        <!--  【新增】标题显示区域  -->
+        <Border
+            Grid.Row="1"
+            Margin="0,0,0,2"
+            Padding="5"
+            Background="#FFECECEC"
+            BorderBrush="Gray"
+            BorderThickness="1">
+            <!--  关键：必须设置 x:Name="TextBlock_TableTitle"  -->
+            <TextBlock
+                x:Name="TextBlock_TableTitle"
+                HorizontalAlignment="Center"
+                FontSize="14"
+                FontWeight="Bold"
+                Text="管道明细 - 设备材料明细表" />
         </Border>
-        <!-- 数据表格 -->
-        <DataGrid x:Name="DataGrid_PipeDriver" 
-                  Grid.Row="2" 
-                  AutoGenerateColumns="True" 
-                  CanUserAddRows="False" 
-                  CanUserDeleteRows="False"
-                  HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto"
-                  GridLinesVisibility="All"
-                  HeadersVisibility="Column"
-                  SelectionMode="Single"
-                  SelectionUnit="CellOrRowHeader">
+        <!--  数据表格  -->
+        <DataGrid
+            x:Name="DataGrid_PipeDriver"
+            Grid.Row="2"
+            AutoGenerateColumns="True"
+            CanUserAddRows="False"
+            CanUserDeleteRows="False"
+            GridLinesVisibility="All"
+            HeadersVisibility="Column"
+            HorizontalScrollBarVisibility="Auto"
+            SelectionMode="Single"
+            SelectionUnit="CellOrRowHeader"
+            VerticalScrollBarVisibility="Auto">
             <DataGrid.Style>
                 <Style TargetType="DataGrid">
                     <Setter Property="ColumnHeaderStyle">
                         <Setter.Value>
                             <Style TargetType="DataGridColumnHeader">
-                                <Setter Property="Background" Value="#FFD3D3D3"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
-                                <Setter Property="Padding" Value="5"/>
-                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                <Setter Property="Background" Value="#FFD3D3D3" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                                <Setter Property="Padding" Value="5" />
+                                <Setter Property="HorizontalContentAlignment" Value="Center" />
                             </Style>
                         </Setter.Value>
                     </Setter>

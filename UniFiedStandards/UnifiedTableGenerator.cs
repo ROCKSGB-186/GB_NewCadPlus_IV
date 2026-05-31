@@ -3,7 +3,10 @@ using Autodesk.AutoCAD.DatabaseServices;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using Mysqlx.Crud;
-using OfficeOpenXml;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;  // 仅用于创建 .xlsx 工作簿
+using NPOI.SS.Util;          // 用于 CellRangeAddress 等辅助类
+using System.IO;             // FileStream 必需
 using System.Data;
 using System.Drawing;
 using System.Linq;
@@ -11,6 +14,9 @@ using System.Text.RegularExpressions;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using AttributeCollection = Autodesk.AutoCAD.DatabaseServices.AttributeCollection;
 using DataTable = System.Data.DataTable;
+using Table = Autodesk.AutoCAD.DatabaseServices.Table;
+using HorizontalAlignment = NPOI.SS.UserModel.HorizontalAlignment;
+using BorderStyle = NPOI.SS.UserModel.BorderStyle;
 
 
 /// 设备属性块信息类和统一表生成器类
@@ -4656,6 +4662,102 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //    }
         //}
 
+
+        //private void ExportTableToExcel(List<Table> tables, Editor ed)
+        //{
+        //    if (tables == null || tables.Count == 0) return;
+
+        //    // 让用户选择保存路径
+        //    var saveFileDialog = new SaveFileDialog
+        //    {
+        //        Filter = "Excel 文件 (*.xlsx)|*.xlsx",
+        //        Title = "导出表格到 Excel",
+        //        FileName = "设备材料表.xlsx"
+        //    };
+        //    if (saveFileDialog.ShowDialog() != DialogResult.OK) return;
+
+        //    //ExcelPackage.LicenseContext = LicenseContext.NonCommercial; // EPPlus 5+ 需要
+        //    using (var package = new ExcelPackage())
+        //    {
+        //        // 第一个表格放在 Sheet1，后续可新建 Sheet 或向下拼接
+        //        var ws = package.Workbook.Worksheets.Add("CAD Tables");
+        //        int currentExcelRow = 1;
+
+        //        foreach (var table in tables)
+        //        {
+        //            if (table == null) continue;
+        //            // ----- 先处理合并单元格信息 -----
+        //            // 用一个 HashSet 记录哪些单元格已经被处理过（跳过非左上角）
+        //            var processedCells = new HashSet<(int row, int col)>();
+
+        //            // 逐行逐列处理
+        //            for (int row = 0; row < table.Rows.Count; row++)
+        //            {
+        //                for (int col = 0; col < table.Columns.Count; col++)
+        //                {
+        //                    if (processedCells.Contains((row, col))) continue;
+
+        //                    // 获取单元格内容（先不管合并）
+        //                    var cell = table.Cells[row, col];
+        //                    string text = GetCellText(cell);
+
+        //                    // 获取该单元格的实际合并范围
+        //                    var range = table.GetCellExtents(row, col);
+        //                    int rowCount = range.BottomRow - range.TopRow + 1;
+        //                    int colCount = range.RightColumn - range.LeftColumn + 1;
+        //                    bool isMerged = (rowCount > 1 || colCount > 1);
+
+        //                    // 只有左上角单元格才需要输出
+        //                    if (row == range.TopRow && col == range.LeftColumn)
+        //                    {
+        //                        // 写入 Excel（注意 Excel 行列从 1 开始）
+        //                        int excelRowStart = currentExcelRow + row;
+        //                        int excelColStart = col + 1;
+        //                        var excelCell = ws.Cells[excelRowStart, excelColStart];
+        //                        excelCell.Value = text;
+
+        //                        // 应用简单样式（可选）
+        //                        excelCell.Style.Font.Name = "宋体";
+        //                        excelCell.Style.Font.Size = 9;
+        //                        excelCell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+        //                        excelCell.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+        //                        excelCell.Style.WrapText = cell.TextHeight > 0; // 根据 CAD 样式判断是否自动换行
+
+        //                        // 处理合并
+        //                        if (isMerged)
+        //                        {
+        //                            ws.Cells[excelRowStart, excelColStart,
+        //                                     excelRowStart + rowCount - 1, excelColStart + colCount - 1].Merge = true;
+        //                        }
+        //                    }
+
+        //                    // 不管是不是合并，标记整个范围内的单元格为已处理，避免重复写入
+        //                    for (int r = range.TopRow; r <= range.BottomRow; r++)
+        //                    {
+        //                        for (int c = range.LeftColumn; c <= range.RightColumn; c++)
+        //                        {
+        //                            processedCells.Add((r, c));
+        //                        }
+        //                    }
+        //                }
+        //            }
+
+        //            // 表格间留空行
+        //            currentExcelRow += table.Rows.Count + 2;
+        //        }
+
+        //        // 自动调整列宽（基于最宽内容粗略估算）
+        //        ws.Cells.AutoFitColumns(0); // 最小宽度 0
+
+        //        // 保存
+        //        package.SaveAs(new FileInfo(saveFileDialog.FileName));
+        //    }
+
+        //    ed.WriteMessage($"\n表格已成功导出至：{saveFileDialog.FileName}");
+        //}
+
+        
+
         /// <summary>
         /// 导出到Excel命令（支持多选表格并排导出）
         /// </summary>
@@ -4712,334 +4814,177 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         {
             if (tables == null || tables.Count == 0) return;
 
-            System.Windows.Forms.SaveFileDialog saveDialog = new System.Windows.Forms.SaveFileDialog();
-            saveDialog.Filter = "Excel文件|*.xlsx";
-            saveDialog.Title = "保存多个设备材料表汇总";
-            saveDialog.FileName = $"表格汇总_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            var saveDialog = new System.Windows.Forms.SaveFileDialog
+            {
+                Filter = "Excel文件|*.xlsx",
+                Title = "保存多个设备材料表汇总",
+                FileName = $"表格汇总_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx"
+            };
 
             if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+            {
+                ed.WriteMessage("\n用户取消了保存操作。");
                 return;
+            }
+
+            // 必须设置 EPPlus 许可证上下文（否则保存可能不工作）
+            //ExcelPackage.LicenseContext = LicenseContext.NonCommercial; // 如果是商业用途，请购买许可
 
             try
             {
-                using (ExcelPackage package = new ExcelPackage())
+                // 创建工作簿
+                IWorkbook workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("汇总表");
+
+                // 样式：在工作簿级别创建，循环外只创建一次，避免样式数量爆炸
+                ICellStyle headerStyle = workbook.CreateCellStyle();
+                headerStyle.Alignment = HorizontalAlignment.Center;
+                headerStyle.VerticalAlignment = VerticalAlignment.Center;
+                headerStyle.BorderTop = BorderStyle.Thin;
+                headerStyle.BorderBottom = BorderStyle.Thin;
+                headerStyle.BorderLeft = BorderStyle.Thin;
+                headerStyle.BorderRight = BorderStyle.Thin;
+                IFont headerFont = workbook.CreateFont();
+                headerFont.IsBold = true;
+                headerFont.FontName = "宋体";
+                headerStyle.SetFont(headerFont);
+
+                ICellStyle normalStyle = workbook.CreateCellStyle();
+                normalStyle.Alignment = HorizontalAlignment.Center;
+                normalStyle.VerticalAlignment = VerticalAlignment.Center;
+                normalStyle.BorderTop = BorderStyle.Thin;
+                normalStyle.BorderBottom = BorderStyle.Thin;
+                normalStyle.BorderLeft = BorderStyle.Thin;
+                normalStyle.BorderRight = BorderStyle.Thin;
+                IFont normalFont = workbook.CreateFont();
+                normalFont.FontName = "宋体";
+                normalStyle.SetFont(normalFont);
+
+                int currentStartCol = 0;          // NPOI 列索引从0开始
+                const int gapCols = 2;
+
+                foreach (var table in tables)
                 {
-                    ExcelWorksheet worksheet = package.Workbook.Worksheets.Add("汇总表");
-                    int currentStartCol = 1;
-                    int gapCols = 2; // 表格之间的间距列数
+                    int rows = table.Rows.Count;
+                    int cols = table.Columns.Count;
+                    var processed = new HashSet<(int row, int col)>();
 
-                    foreach (var table in tables)
+                    for (int r = 0; r < rows; r++)
                     {
-                        int rows = table.Rows.Count;
-                        int cols = table.Columns.Count;
-                        int excelRowCounter = 1; // 用于 Excel 的实际行号（避开空行）
-
-                        for (int r = 0; r < rows; r++)
+                        IRow excelRow = sheet.CreateRow(r);   // 创建行（0-based，直接按CAD行号）
+                        for (int c = 0; c < cols; c++)
                         {
-                            // 检查该行是否全是空内容，若是则跳过（解决空行多问题）
-                            bool isRowEmpty = true;
-                            var rowTexts = new List<string>();
-                            for (int c = 0; c < cols; c++)
+                            if (processed.Contains((r, c))) continue;
+
+                            string cellText = GetCleanCellText(table, r, c);
+                            bool hasContent = !string.IsNullOrWhiteSpace(cellText);
+
+                            if (!hasContent)
                             {
-                                // 获取单元格的值：优先取 Value 如果是数字或对象，否则取 TextString
-                                object rawCellValue = table.Cells[r, c].Value;
-                                string originalTxt = (rawCellValue != null ? rawCellValue.ToString() : table.Cells[r, c].TextString) ?? "";
-                                originalTxt = originalTxt.Trim();
-
-                                if (!string.IsNullOrEmpty(originalTxt)) isRowEmpty = false;
-
-                                // 清洗文字：处理多行变单行
-                                // 彻底解决内容分成多行或包含特殊占位符问题
-                                string cleanTxt = originalTxt;
-                                if (!string.IsNullOrEmpty(originalTxt))
-                                {
-                                    // 1. 处理 AutoCAD 特有的换行占位符 \P、\p、\X (MText 格式代码)
-                                    // 增加强制过滤器，替换常见 CAD 内部控制字符
-                                    cleanTxt = System.Text.RegularExpressions.Regex.Replace(originalTxt, @"\\[PpXx]", " ");
-
-                                    // 2. 移除常见的 MText 格式控制语法，如 {\fArial|b0|i0|c0|p34;文字} -> 文字
-                                    // 以及移除括号控制符 {} (例如 {D371J...})
-                                    cleanTxt = System.Text.RegularExpressions.Regex.Replace(cleanTxt, @"\{[^{}]*;\}", "");
-                                    cleanTxt = System.Text.RegularExpressions.Regex.Replace(cleanTxt, @"[{}]", "");
-
-                                    // 3. 替换分号（CAD 中常作为属性分段符）和标准换行符
-                                    cleanTxt = cleanTxt.Replace(";", " ").Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
-
-                                    // 4. 处理 Unicode 的物理换行符号和其他不可见空白符
-                                    cleanTxt = System.Text.RegularExpressions.Regex.Replace(cleanTxt, @"[\u0000-\u001F\u007F-\u009F]", " ");
-
-                                    // 5. 将连续的多个空格压缩为一个，并去除首尾空格
-                                    cleanTxt = System.Text.RegularExpressions.Regex.Replace(cleanTxt, @"\s+", " ").Trim();
-                                }
-                                rowTexts.Add(cleanTxt);
+                                processed.Add((r, c));
+                                continue;
                             }
 
-                            if (isRowEmpty) continue;
+                            // ------ 合并跨度探测 ------
+                            int rowSpan = 1;
+                            int colSpan = 1;
 
-                            // 写入 Excel
-                            for (int c = 0; c < cols; c++)
+                            // 向右探测
+                            while (c + colSpan < cols &&
+                                   string.IsNullOrWhiteSpace(GetCleanCellText(table, r, c + colSpan)))
+                                colSpan++;
+
+                            // 向下探测
+                            bool canExtendDown = true;
+                            while (r + rowSpan < rows && canExtendDown)
                             {
-                                var excelCell = worksheet.Cells[excelRowCounter, currentStartCol + c];
-                                excelCell.Value = rowTexts[c];
-
-                                // 强制数据行不换行，且水平居中
-                                excelCell.Style.WrapText = false;
-                                excelCell.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                excelCell.Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Center;
-
-                                // 基础边框
-                                excelCell.Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                                excelCell.Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                                excelCell.Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                                excelCell.Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                                excelCell.Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Center;
-
-                                // 标题行处理
-                                if (r == 0)
+                                for (int checkCol = c; checkCol < c + colSpan; checkCol++)
                                 {
-                                    excelCell.Style.Font.Bold = true;
-                                    excelCell.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                                    if (!string.IsNullOrWhiteSpace(GetCleanCellText(table, r + rowSpan, checkCol)))
+                                    {
+                                        canExtendDown = false;
+                                        break;
+                                    }
                                 }
+                                if (canExtendDown) rowSpan++;
                             }
-                            excelRowCounter++;
-                        }
 
-                        // 特殊处理：重新在 Excel 中合并第一行标题（如果列数大于1）
-                        if (cols > 1)
-                        {
-                            worksheet.Cells[1, currentStartCol, 1, currentStartCol + cols - 1].Merge = true;
-                        }
+                            // ------ 写入单元格内容 ------
+                            int excelColIndex = currentStartCol + c;   // 0-based 列索引
+                            ICell cell = excelRow.CreateCell(excelColIndex);
+                            cell.SetCellValue(cellText);
+                            cell.CellStyle = (r == 0) ? headerStyle : normalStyle;
 
-                        // 更新下一张表格起始列索引
-                        currentStartCol += (cols + gapCols);
+                            // ------ 处理合并 ------
+                            if (rowSpan > 1 || colSpan > 1)
+                            {
+                                // CellRangeAddress 参数：firstRow, lastRow, firstCol, lastCol（全部0-based）
+                                CellRangeAddress region = new CellRangeAddress(
+                                    r, r + rowSpan - 1,
+                                    excelColIndex, excelColIndex + colSpan - 1);
+                                sheet.AddMergedRegion(region);
+                            }
+
+                            // 标记已处理的单元格（防止重复写入）
+                            for (int mr = r; mr < r + rowSpan; mr++)
+                                for (int mc = c; mc < c + colSpan; mc++)
+                                    processed.Add((mr, mc));
+                        }
                     }
 
-                    // 全局调整
-                    worksheet.Cells.AutoFitColumns();
-                    worksheet.Cells.Style.Font.Name = "宋体";
-
-                    package.SaveAs(new FileInfo(saveDialog.FileName));
+                    // 下一张表格的起始列 = 当前起始列 + 表格列数 + 间隔
+                    currentStartCol += cols + gapCols;
                 }
 
-                ed.WriteMessage($"\n表格已导出到: {saveDialog.FileName}");
+                // 自动列宽（简单实现：根据内容自适应，可替换为更精确的计算）
+                for (int colIdx = 0; colIdx < currentStartCol; colIdx++)
+                {
+                    sheet.AutoSizeColumn(colIdx);
+                }
+
+                // 保存文件
+                using (FileStream fs = new FileStream(saveDialog.FileName, FileMode.Create, FileAccess.Write))
+                {
+                    workbook.Write(fs);
+                }
+
+                // 成功提示
+                ed.WriteMessage($"\n✅ 表格已成功导出到: {saveDialog.FileName}");
+                System.Windows.Forms.MessageBox.Show($"导出成功！\n文件位置：{saveDialog.FileName}",
+                    "导出Excel", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                ed.WriteMessage($"\n多表导出Excel失败: {ex.Message}");
+                ed.WriteMessage($"\n❌ 多表导出Excel失败: {ex.Message}");
+                System.Windows.Forms.MessageBox.Show($"导出失败：{ex.Message}",
+                    "错误", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
             }
         }
 
         /// <summary>
-        /// 导出表格到Excel文件（保留合并单元格与文本、简单样式）
-        /// 改进：合并检测改为严格检查候选矩形内所有单元格均未被标记为已合并且为空，以避免产生部分重叠的合并区域（解决 "Can't delete/overwrite merged cells" 错误）。
+        /// 获取单元格文本并清洗掉换行符等特殊字符，使内容保持在一行，适合Excel显示
         /// </summary>
-        private void ExportTableToExcelFile(Table table, Editor ed)
+        /// <param name="table"></param>
+        /// <param name="row"></param>
+        /// <param name="col"></param>
+        /// <returns></returns>
+        private string GetCleanCellText(Table table, int row, int col)
         {
-            // 获取保存路径
-            System.Windows.Forms.SaveFileDialog saveDialog = new System.Windows.Forms.SaveFileDialog();
-            saveDialog.Filter = "Excel文件|*.xlsx";
-            saveDialog.Title = "保存设备材料表";
-            saveDialog.FileName = $"设备材料表_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
-
-            if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
-                return;
-
-            try
-            {
-                // 创建Excel工作簿 使用EPPlus创建Excel文件
-                using (ExcelPackage package = new ExcelPackage())
-                {
-                    // 创建工作表
-                    ExcelWorksheet worksheet = package.Workbook.Worksheets.Add("设备材料表");
-                    // 获取行数和列数 设置默认列宽和行高
-                    int rows = table.Rows.Count;
-                    int cols = table.Columns.Count;
-
-                    // 先把所有文本写入单元格（仅文本，不处理合并）
-                    for (int r = 0; r < rows; r++)
-                    {
-                        for (int c = 0; c < cols; c++)
-                        {
-                            // 处理文本 读取单元格文本
-                            string cellText = table.Cells[r, c].TextString ?? string.Empty;
-                            worksheet.Cells[r + 1, c + 1].Value = string.IsNullOrEmpty(cellText) ? "" : cellText;
-                            worksheet.Cells[r + 1, c + 1].Style.WrapText = true;
-                        }
-                    }
-
-                    // 标记已被合并/处理的单元格，初始为 false
-                    var mergedMark = new bool[rows, cols];
-
-                    // 扫描每个单元格，找到非空且未处理的起始单元格后尝试扩展为矩形合并区域
-                    for (int r = 0; r < rows; r++)
-                    {
-                        for (int c = 0; c < cols; c++)
-                        {
-                            // 跳过已处理的单元格
-                            if (mergedMark[r, c])
-                                continue;
-
-                            // 读取当前单元格文本并跳过空单元格
-                            string txt = (table.Cells[r, c].TextString ?? string.Empty).Trim();
-                            if (string.IsNullOrEmpty(txt))
-                            {
-                                mergedMark[r, c] = true;
-                                continue;
-                            }
-
-                            // 计算最大水平扩展：要求右侧单元为空且未被标记
-                            int maxH = 1;
-                            while (c + maxH < cols)
-                            {
-                                if (mergedMark[r, c + maxH]) break;
-                                var rightTxt = (table.Cells[r, c + maxH].TextString ?? string.Empty).Trim();
-                                if (!string.IsNullOrEmpty(rightTxt)) break;
-                                maxH++;
-                            }
-
-                            // 计算最大垂直扩展：对于每一行，要求从 c..c+maxH-1 都为空且未被标记
-                            int maxV = 1;
-                            while (r + maxV < rows)
-                            {
-                                bool rowOk = true;
-                                for (int cc = c; cc < c + maxH; cc++)
-                                {
-                                    if (mergedMark[r + maxV, cc])
-                                    {
-                                        rowOk = false;
-                                        break;
-                                    }
-                                    var downTxt = (table.Cells[r + maxV, cc].TextString ?? string.Empty).Trim();
-                                    if (!string.IsNullOrEmpty(downTxt))
-                                    {
-                                        rowOk = false;
-                                        break;
-                                    }
-                                }
-                                if (!rowOk) break;
-                                maxV++;
-                            }
-
-                            // 规则变更：
-                            // - 保持第1-3行（0-based 0..2）原有合并逻辑
-                            // - 第4行及以后（r >= 3）禁止任何方向的合并（既禁止横向也禁止纵向）
-                            // - 若起始行在第1-3行，但合并会跨过第3行边界，则限制垂直合并使其不会跨入第4行（即 r+maxV-1 <= 2）
-                            if (r >= 3)
-                            {
-                                // 第4行以后的起始单元：禁止横向和纵向合并
-                                maxH = 1;
-                                maxV = 1;
-                            }
-                            else
-                            {
-                                // 起始行在 0..2：允许横向合并，但垂直合并不能跨入第4行（index >=3）
-                                int maxAllowedV = 3 - r; // 例如：r=0 -> maxAllowedV=3 (rows 0,1,2)，r=1 ->2, r=2 ->1
-                                if (maxV > maxAllowedV) maxV = maxAllowedV;
-                            }
-
-                            // 进一步确保矩形内部所有单元均未被标记（防止与先前合并产生部分重叠）
-                            bool rectangleClear = true;
-                            for (int rr = r; rr < r + maxV && rectangleClear; rr++)
-                            {
-                                for (int cc = c; cc < c + maxH; cc++)
-                                {
-                                    if (mergedMark[rr, cc])
-                                    {
-                                        rectangleClear = false;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (!rectangleClear)
-                            {
-                                // 如果候选矩形内部有已标记单元，则退回为单元格不合并（标记当前单元）
-                                mergedMark[r, c] = true;
-                                continue;
-                            }
-
-                            // 只有当矩形尺寸大于1才合并，否则单个单元标记为已处理
-                            if (maxH > 1 || maxV > 1)
-                            {
-                                int excelRow1 = r + 1; // Excel 行号 1-based
-                                int excelCol1 = c + 1;
-                                int excelRow2 = r + maxV;
-                                int excelCol2 = c + maxH;
-
-                                try
-                                {
-                                    worksheet.Cells[excelRow1, excelCol1, excelRow2, excelCol2].Merge = true;
-                                    worksheet.Cells[excelRow1, excelCol1, excelRow2, excelCol2].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                    worksheet.Cells[excelRow1, excelCol1, excelRow2, excelCol2].Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Center;
-                                }
-                                catch
-                                {
-                                    // 合并冲突时回退为不合并，保持单元格内容
-                                    worksheet.Cells[excelRow1, excelCol1].Value = worksheet.Cells[excelRow1, excelCol1].Value;
-                                }
-
-                                // 标记该矩形已被处理
-                                for (int rr = r; rr < r + maxV; rr++)
-                                    for (int cc = c; cc < c + maxH; cc++)
-                                        mergedMark[rr, cc] = true;
-                            }
-                            else
-                            {
-                                mergedMark[r, c] = true;
-                            }
-                        }
-                    }
-
-                    // 特殊处理：若第1行为标题并在 AutoCAD 中被合并（大多数场景是如此），确保 Excel 中也是合并并加粗居中
-                    try
-                    {
-                        string firstCell = (table.Cells[0, 0].TextString ?? string.Empty).Trim();
-                        bool otherEmpty = true;
-                        for (int cc = 1; cc < cols; cc++)
-                        {
-                            if (!string.IsNullOrWhiteSpace(table.Cells[0, cc].TextString ?? string.Empty))
-                            {
-                                otherEmpty = false;
-                                break;
-                            }
-                        }
-                        if (!string.IsNullOrEmpty(firstCell) && otherEmpty)
-                        {
-                            worksheet.Cells[1, 1, 1, cols].Merge = true;
-                            worksheet.Cells[1, 1].Style.Font.Bold = true;
-                            worksheet.Cells[1, 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                            worksheet.Cells[1, 1].Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Center;
-                        }
-                    }
-                    catch { /* 忽略 */ }
-
-                    // 自动调整列宽
-                    worksheet.Cells.AutoFitColumns();
-
-                    // 基本样式设置
-                    worksheet.Cells.Style.Font.Name = "宋体";
-                    if (rows > 0 && cols > 0)
-                    {
-                        worksheet.Cells[1, 1, rows, cols].Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                        worksheet.Cells[1, 1, rows, cols].Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                        worksheet.Cells[1, 1, rows, cols].Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                        worksheet.Cells[1, 1, rows, cols].Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
-                    }
-
-                    // 保存文件
-                    package.SaveAs(new FileInfo(saveDialog.FileName));
-                }
-
-                ed.WriteMessage($"\n设备材料表已成功导出到: {saveDialog.FileName}");
-            }
-            catch (Exception ex)
-            {
-                ed.WriteMessage($"\n导出Excel文件时发生错误: {ex.Message}");
-            }
+            // 直接取 TextString（已过滤格式码）
+            string txt = table.Cells[row, col].TextString ?? "";
+            // 处理 AutoCAD 换行符
+            txt = txt.Replace("\\P", " ").Replace("\\p", " ").Replace("\\X", " ");
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"\\[PpXx]", " ");
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"\{[^{}]*;\}", "");
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"[{}]", "");
+            txt = txt.Replace(";", " ").Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"[\u0000-\u001F\u007F-\u009F]", " ");
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"\s+", " ").Trim();
+            return txt;
         }
 
         #region 同步表格
-        
+
 
         /// <summary>
         /// 同步表格
@@ -5634,58 +5579,80 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     ofd.Title = "选择要导入的 Excel 文件";
                     if (ofd.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                     string filePath = ofd.FileName;
-                    if (string.IsNullOrWhiteSpace(filePath) || !System.IO.File.Exists(filePath))
+                    if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                     {
                         ed.WriteMessage("\n未找到选择的文件。");
                         return;
                     }
 
-                    // 读取 Excel 内容到内存（EPPlus）
+                    // ====== 使用 NPOI 读取 Excel 内容 ======
                     List<string[]> excelData = new List<string[]>();
-                    var mergedRanges = new List<(int r1, int c1, int r2, int c2)>();
+                    var mergedRanges = new List<(int r1, int c1, int r2, int c2)>(); // 存储合并区域(0-based)
                     int excelRows = 0, excelCols = 0;
-                    using (var package = new ExcelPackage(new System.IO.FileInfo(filePath)))
+
+                    IWorkbook workbook;
+                    using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
                     {
-                        if (package.Workbook.Worksheets.Count == 0)
-                        {
-                            ed.WriteMessage("\nExcel 文件中未找到工作表。");
-                            return;
-                        }
-                        var ws = package.Workbook.Worksheets[0]; // 使用第一个工作表
-                        if (ws.Dimension == null)
-                        {
-                            ed.WriteMessage("\n工作表为空。");
-                            return;
-                        }
+                        workbook = new XSSFWorkbook(fs);
+                    }
 
-                        excelRows = ws.Dimension.End.Row;
-                        excelCols = ws.Dimension.End.Column;
+                    if (workbook.NumberOfSheets == 0)
+                    {
+                        ed.WriteMessage("\nExcel 文件中未找到工作表。");
+                        return;
+                    }
 
-                        // 读取单元格文本
-                        for (int r = 1; r <= excelRows; r++)
+                    ISheet sheet = workbook.GetSheetAt(0); // 使用第一个工作表
+                    if (sheet == null || sheet.LastRowNum < 0)
+                    {
+                        ed.WriteMessage("\n工作表为空。");
+                        return;
+                    }
+
+                    // 计算实际数据区域：最大行号和最大列号
+                    excelRows = sheet.LastRowNum + 1;   // 0‑based 转 1‑based
+                                                        // 统计最大列数
+                    int maxCol = 0;
+                    for (int r = 0; r < excelRows; r++)
+                    {
+                        IRow row = sheet.GetRow(r);
+                        if (row != null)
                         {
-                            var rowArr = new string[excelCols];
-                            for (int c = 1; c <= excelCols; c++)
-                            {
-                                var cell = ws.Cells[r, c];
-                                string text = cell?.Text ?? string.Empty;
-                                rowArr[c - 1] = text;
-                            }
-                            excelData.Add(rowArr);
+                            int lastCellNum = row.LastCellNum; // 1‑based
+                            if (lastCellNum > maxCol)
+                                maxCol = lastCellNum;
                         }
+                    }
+                    excelCols = maxCol;
 
-                        // 收集合并单元格（Excel 地址如 "A1:C1"）
-                        foreach (var addr in ws.MergedCells)
+                    DataFormatter formatter = new DataFormatter();
+
+                    // 读取单元格文本
+                    for (int r = 0; r < excelRows; r++)
+                    {
+                        IRow row = sheet.GetRow(r);
+                        string[] rowArr = new string[excelCols];
+                        for (int c = 0; c < excelCols; c++)
                         {
-                            try
-                            {
-                                var a = new OfficeOpenXml.ExcelAddress(addr);
-                                mergedRanges.Add((a.Start.Row - 1, a.Start.Column - 1, a.End.Row - 1, a.End.Column - 1));
-                            }
-                            catch
-                            {
-                                // 忽略无法解析的合并范围
-                            }
+                            ICell cell = row?.GetCell(c);
+                            string text = cell != null ? formatter.FormatCellValue(cell) : string.Empty;
+                            rowArr[c] = text;
+                        }
+                        excelData.Add(rowArr);
+                    }
+
+                    // 收集合并单元格（直接使用 NPOI 的合并区域，所有索引已是 0‑based）
+                    for (int i = 0; i < sheet.NumMergedRegions; i++)
+                    {
+                        CellRangeAddress region = sheet.GetMergedRegion(i);
+                        int r1 = region.FirstRow;
+                        int c1 = region.FirstColumn;
+                        int r2 = region.LastRow;
+                        int c2 = region.LastColumn;
+                        // 只加入有效的合并区域（至少跨越两行/列）
+                        if (r1 <= r2 && c1 <= c2 && r1 >= 0 && c1 >= 0 && r2 < excelRows && c2 < excelCols)
+                        {
+                            mergedRanges.Add((r1, c1, r2, c2));
                         }
                     }
 
@@ -5711,32 +5678,33 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             int cadRows = table.Rows.Count;
                             int cadCols = table.Columns.Count;
 
-                            // 仅在重叠区域写入数据，避免调整表的行列数或样式
                             int maxR = Math.Min(cadRows, excelRows);
                             int maxC = Math.Min(cadCols, excelCols);
 
-                            // 处理 Excel 的合并区域：只写入合并区域的左上角单元格，跳过合并区域内的其余单元（避免覆盖已合并单元）
-                            var skipCell = new bool[excelRows, excelCols];
+                            // 构建“跳过”标记数组：用于处理 Excel 侧的合并单元格
+                            bool[,] skipCell = new bool[excelRows, excelCols];
                             foreach (var m in mergedRanges)
                             {
                                 int r1 = m.r1, c1 = m.c1, r2 = m.r2, c2 = m.c2;
+                                // 边界保护
                                 if (r1 < 0 || c1 < 0 || r2 >= excelRows || c2 >= excelCols) continue;
                                 for (int rr = r1; rr <= r2; rr++)
                                 {
                                     for (int cc = c1; cc <= c2; cc++)
                                     {
-                                        if (rr == r1 && cc == c1) continue; // 留下左上角可写
+                                        // 保留左上角可写，其余跳过
+                                        if (rr == r1 && cc == c1) continue;
                                         skipCell[rr, cc] = true;
                                     }
                                 }
                             }
 
-                            // 将重叠区域的数据写回 CAD 表格（谨慎写入每个单元，单元写入失败时忽略以保证不修改样式）
+                            // 将重叠区域的数据写回 CAD 表格
                             for (int r = 0; r < maxR; r++)
                             {
                                 for (int c = 0; c < maxC; c++)
                                 {
-                                    // 如果 Excel 在此处属于合并范围且不是左上角，则跳过写入（以免破坏 CAD 的合并格）
+                                    // 如果 Excel 此格属于合并区域且不是左上角，跳过
                                     if (r < excelRows && c < excelCols && skipCell[r, c])
                                         continue;
 
@@ -5746,36 +5714,22 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                                     try
                                     {
-                                        // 只改 TextString，不改对齐、行高、列宽、合并等
                                         table.Cells[r, c].TextString = val;
                                     }
                                     catch
                                     {
-                                        // 某些单元格可能属于 CAD 合并区域的次单元，写入会失败。忽略并继续。
-                                        continue;
+                                        // 某些单元格可能属于 CAD 侧的合并区域，写入失败则忽略
                                     }
                                 }
                             }
 
-                            // 如果 Excel 的第一行是合并标题并 CAD 侧已合并，则尽量保证左上角单元居中加粗，但不改变 CAD 合并结构或样式
-                            try
-                            {
-                                if (excelRows >= 1 && excelCols >= 1)
-                                {
-                                    string firstCellExcel = excelData.Count > 0 && excelData[0].Length > 0 ? (excelData[0][0] ?? string.Empty).Trim() : string.Empty;
-                                    if (!string.IsNullOrEmpty(firstCellExcel))
-                                    {
-                                        // 如果 CAD 表的第一行在视觉上是标题（例如大部分列为空），只更新左上角文本（已写入），不修改样式
-                                        // 不做合并/加粗/列宽/行高调整，完全保留 CAD 端样式
-                                    }
-                                }
-                            }
-                            catch { /* 忽略 */ }
+                            // 原逻辑：对标题行的轻微处理（不修改样式，仅保留文本已写入）
+                            // 此处不做额外操作
 
                             tr.Commit();
-                            ed.WriteMessage($"\n已将 Excel ({System.IO.Path.GetFileName(filePath)}) 的数据写入选中的表格（仅覆盖重叠单元，不改动表格样式/合并/尺寸）。");
+                            ed.WriteMessage($"\n已将 Excel ({Path.GetFileName(filePath)}) 的数据写入选中的表格（仅覆盖重叠单元，不改动表格样式/合并/尺寸）。");
                         }
-                        catch (System.Exception exInner)
+                        catch (Exception exInner)
                         {
                             tr.Abort();
                             ed.WriteMessage($"\n将 Excel 写入表格时出错: {exInner.Message}");
@@ -5783,9 +5737,9 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     }
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                doc.Editor.WriteMessage($"\n导入失败: {ex.Message}");
+                Application.DocumentManager.MdiActiveDocument?.Editor?.WriteMessage($"\n导入失败: {ex.Message}");
             }
         }
 
