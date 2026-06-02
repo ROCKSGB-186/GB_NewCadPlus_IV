@@ -373,117 +373,238 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         #endregion
 
         /// <summary>
-        /// 【优化版】高级自动调整表格列宽，考虑合并单元格和实际文本宽度
+        /// 自动调整表格所有列的宽度，使其能容纳单元格中的文本内容。
+        /// 原理：遍历每个单元格，估算文本宽度（区分中英文），取每列的最大宽度来设置列宽。
+        /// 忽略合并单元格的非左上角部分，避免重复计算。
         /// </summary>
-        /// <param name="table">要调整的表格对象</param>
+        /// <param name="table">要调整的CAD表格对象</param>
+        //private void AutoFitTableColumnsAdvanced(Table table)
+        //{
+        //    // 防御性检查：如果表格对象为空，直接返回，避免后续空引用异常
+        //    if (table == null) return;
+
+        //    // 获取表格的总行数和总列数
+        //    int numRows = table.Rows.Count;
+        //    int numCols = table.Columns.Count;
+        //    double textInputScale = AutoCadHelper.GetScale();
+
+        //    // 如果表格没有行或没有列，则无需调整，直接返回
+        //    if (numRows == 0 || numCols == 0) return;
+
+        //    // 获取典型文字高度（用于宽度估算时的基准单位），默认设为2.5
+        //    double textHeight = 2.5;
+        //    try
+        //    {
+        //        // 选择取样行：如果表格行数大于3（即有至少4行），取第4行（索引3），否则取第1行（索引0）
+        //        // 通常第1行是表头，第4行是数据行，数据行的文字高度更能代表实际内容
+        //        int sampleRow = numRows > 3 ? 3 : 0;
+        //        // 获取该行第1列单元格的文字高度属性
+        //        double row0TextHeight = Convert.ToDouble(table.Cells[sampleRow, 0].TextHeight);
+        //        // 如果获取到的高度大于0，则作为基准高度使用
+        //        if (row0TextHeight > 0&& row0TextHeight > textHeight) textHeight = row0TextHeight;
+        //    }
+        //    catch { } // 如果获取失败（例如单元格不存在），保持默认的2.5，不中断程序
+
+        //    // 开始逐列处理：每一列独立计算该列所有单元格所需的最大宽度
+        //    for (int col = 0; col < numCols; col++)
+        //    {
+        //        // 记录当前列遍历到的最大宽度（初始为0）
+        //        double maxWidthInCol = 0.0;
+
+        //        // 遍历当前列的所有行
+        //        for (int row = 0; row < numRows; row++)
+        //        {
+        //            // 获取当前行、当前列的单元格对象
+        //            var cell = table.Cells[row, col];
+
+        //            // 判断当前单元格是否属于合并区域（例如跨行、跨列）
+        //            bool isMerged = Convert.ToBoolean(cell.IsMerged);
+        //            // 标记是否需要跳过本次循环（即不参与宽度计算）
+        //            bool shouldSkip = false;
+
+        //            if (isMerged)
+        //            {
+        //                // 如果单元格是合并区域的一部分，我们只让“左上角”那个单元格来贡献宽度，
+        //                // 避免同一个合并区域被计算多次，导致宽度被放大。
+        //                bool isTopLeft = true;
+
+        //                // 向左检查：如果左边的单元格也存在（col>0）且也是合并状态，说明当前单元格不是合并区域的最左列
+        //                if (col > 0 && Convert.ToBoolean(table.Cells[row, col - 1].IsMerged))
+        //                {
+        //                    isTopLeft = false;
+        //                }
+
+        //                // 向上检查：如果上边的单元格也存在（row>0）且也是合并状态，说明当前单元格不是合并区域的最上行
+        //                if (row > 0 && Convert.ToBoolean(table.Cells[row - 1, col].IsMerged))
+        //                {
+        //                    isTopLeft = false;
+        //                }
+
+        //                // 如果不是左上角单元格，则跳过宽度计算（避免重复累加）
+        //                if (!isTopLeft)
+        //                {
+        //                    shouldSkip = true;
+        //                }
+        //            }
+
+        //            // 如果标记了跳过，则直接进入下一个单元格
+        //            if (shouldSkip) continue;
+
+        //            // 获取单元格的文本内容（字符串）
+        //            string cellText = cell.TextString;
+        //            // 如果文本为空或仅包含空白字符，则跳过该单元格（不贡献宽度）
+        //            if (string.IsNullOrWhiteSpace(cellText)) continue;
+
+        //            // 开始估算该单元格文本需要的宽度（以绘图单位表示）
+        //            double estimatedWidth = 0.0;
+
+        //            // 由于文本可能包含换行符，需要按行计算宽度，取最长的一行作为该单元格的宽度。
+        //            // 拆分文本为行数组（支持\n和\r两种换行符）
+        //            var lines = cellText.Split(new[] { "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
+        //            double maxLineWidth = 0.0;
+
+        //            foreach (var line in lines)
+        //            {
+        //                // 统计当前行中的中文字符数量（Unicode范围：4E00-9FFF）
+        //                int lineChineseCount = System.Text.RegularExpressions.Regex.Matches(line, @"[\u4e00-\u9fff]").Count;
+        //                // 统计当前行中的非中文字符数量（包括英文、数字、标点等）
+        //                int lineOtherCount = line.Length - lineChineseCount;
+
+        //                // 估算该行的绘制宽度：
+        //                // 中文每个字符占用 1.1 倍 textHeight，英文等占用 0.6 倍 textHeight。
+        //                // 这两个系数是经验值，可根据实际字体表现调整。
+        //                double lineWidth = (lineChineseCount * 1.1 + lineOtherCount * 0.6) * textHeight;
+
+        //                // 记录所有行中的最大值
+        //                if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
+        //            }
+
+        //            // 将最长行的宽度作为单元格的文本净宽度
+        //            estimatedWidth = maxLineWidth;
+
+        //            // 增加左右内边距（Padding）：左右各留出一个 textHeight 的空白，让文字不紧贴边框
+        //            double padding = textHeight * 5.0;
+        //            estimatedWidth += padding;
+
+        //            // 如果当前单元格的估算宽度大于之前在该列记录的最大宽度，则更新列的最大宽度
+        //            if (estimatedWidth > maxWidthInCol)
+        //            {
+        //                maxWidthInCol = estimatedWidth;
+        //            }
+        //        }
+
+        //        // 遍历完当前列的所有行后，maxWidthInCol 即为该列所需的最小宽度（保证能容纳所有单元格内容）
+
+        //        // 设置最小宽度保护：防止列宽过窄导致内容完全看不见。
+        //        // 最小宽度设为 2 倍 textHeight（例如至少能显示两个字符宽度的空白）
+        //        double minWidth = textHeight * 2.0;
+        //        if (maxWidthInCol < minWidth) maxWidthInCol = minWidth;
+
+        //        // 设置最大宽度限制：防止某些列文本极长而导致整个表格超出图纸范围。
+        //        // 最大宽度设为 60 倍 textHeight，可根据需要调整。
+        //        double maxWidthLimit = textHeight * 60.0;
+        //        if (maxWidthInCol > maxWidthLimit) maxWidthInCol = maxWidthLimit;
+
+        //        // 将计算好的最终宽度赋给当前列
+        //        table.Columns[col].Width = maxWidthInCol;
+        //    }
+
+        //    // 强制让CAD重新生成表格布局，使列宽调整立即生效
+        //    table.GenerateLayout();
+        //}
+
+        /// <summary>
+        /// 自动调整表格列宽、统一所有单元格的文字高度，并根据用户比例缩放所有尺寸
+        /// </summary>
+        /// <param name="table">CAD表格对象</param>
         private void AutoFitTableColumnsAdvanced(Table table)
         {
-            if (table == null) return;
+            // 1. 获取比例因子
+            double textInputScale = AutoCadHelper.GetScale();
 
+            if (table == null) return;
             int numRows = table.Rows.Count;
             int numCols = table.Columns.Count;
-
             if (numRows == 0 || numCols == 0) return;
 
-            // 获取典型文字高度：优先使用数据行（通常从第4行开始，索引3）的高度，如果没有则用第0行
-            double textHeight = 2.5;
+            // ==================== 第一步：强制按行设置固定字高（不读原有字高） ====================
+            double headerHeight = 3.0 * textInputScale;   // 第一行字高
+            double contentHeight = 2.5 * textInputScale;  // 其他行字高
+
             try
             {
-                // 尝试获取数据行第一格的高度，通常数据行高度更具代表性
-                int sampleRow = numRows > 3 ? 3 : 0;
-                var h = table.Cells[sampleRow, 0].TextHeight;
-                if (h > 0) textHeight = Convert.ToDouble(h);
+                for (int row = 0; row < numRows; row++)
+                {
+                    double rowTextHeight = (row == 0) ? headerHeight : contentHeight;
+                    for (int col = 0; col < numCols; col++)
+                    {
+                        var cell = table.Cells[row, col];
+                        if (cell != null)
+                            cell.TextHeight = rowTextHeight;
+                    }
+                }
             }
-            catch { }
+            catch { /* 忽略异常 */ }
 
-            // 遍历每一列
+            // ==================== 第二步：设置列宽（使用各自单元格的实际字高） ====================
             for (int col = 0; col < numCols; col++)
             {
                 double maxWidthInCol = 0.0;
-
-                // 遍历该列的每一行
                 for (int row = 0; row < numRows; row++)
                 {
                     var cell = table.Cells[row, col];
-
-                    // 1. 检查当前单元格是否被合并
+                    // 合并单元格跳过逻辑（同原代码）
                     bool isMerged = Convert.ToBoolean(cell.IsMerged);
                     bool shouldSkip = false;
-
                     if (isMerged)
                     {
-                        // 关键逻辑：如果是合并单元格，我们只计算“左上角”那个单元格的宽度贡献
                         bool isTopLeft = true;
-
-                        // 向左检查：如果左边的单元格也是合并状态，则当前格不是最左
                         if (col > 0 && Convert.ToBoolean(table.Cells[row, col - 1].IsMerged))
-                        {
                             isTopLeft = false;
-                        }
-
-                        // 向上检查：如果上面的单元格也是合并状态，则当前格不是最上
                         if (row > 0 && Convert.ToBoolean(table.Cells[row - 1, col].IsMerged))
-                        {
                             isTopLeft = false;
-                        }
-
-                        // 如果不是左上角单元格，跳过计算，避免重复累加宽度
-                        if (!isTopLeft)
-                        {
-                            shouldSkip = true;
-                        }
+                        if (!isTopLeft) shouldSkip = true;
                     }
-
                     if (shouldSkip) continue;
 
                     string cellText = cell.TextString;
                     if (string.IsNullOrWhiteSpace(cellText)) continue;
 
-                    // 计算文本估算宽度
-                    double estimatedWidth = 0.0;
+                    // 关键：读取该单元格已经设置好的字高（可能是 3.0 或 2.5 乘以比例）
+                    double cellTextHeight = Convert.ToDouble(cell.TextHeight);
+                    if (cellTextHeight <= 0) cellTextHeight = contentHeight; // 保底
 
-                    // 更精确的估算：区分中英文
-                    int chineseCount = System.Text.RegularExpressions.Regex.Matches(cellText, @"[\u4e00-\u9fff]").Count;
-                    int otherCount = cellText.Length - chineseCount;
-
-                    // 中文系数 1.0，英文/数字系数 0.6
-                    // 处理换行符，取各行中最宽的一行
+                    var lines = cellText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
                     double maxLineWidth = 0.0;
-                    var lines = cellText.Split(new[] { "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
                     foreach (var line in lines)
                     {
-                        int lineChineseCount = System.Text.RegularExpressions.Regex.Matches(line, @"[\u4e00-\u9fff]").Count;
-                        int lineOtherCount = line.Length - lineChineseCount;
-                        double lineWidth = (lineChineseCount * 1.1 + lineOtherCount * 0.6) * textHeight;
+                        int chnCount = System.Text.RegularExpressions.Regex.Matches(line, @"[\u4e00-\u9fff]").Count;
+                        int otherCount = line.Length - chnCount;
+                        double lineWidth = (chnCount * 1.1 + otherCount * 0.6) * cellTextHeight;
                         if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
                     }
-                    estimatedWidth = maxLineWidth;
-                    // 增加左右边距 (Padding)，减小边距让列更紧凑
-                    double padding = textHeight * 2.0;
-                    estimatedWidth += padding;
-
+                    double estimatedWidth = maxLineWidth + cellTextHeight * 5.0; // 边距基于该单元格字高
                     if (estimatedWidth > maxWidthInCol)
-                    {
                         maxWidthInCol = estimatedWidth;
-                    }
                 }
 
-                // 设置列宽，设置一个最小宽度以防万一
-                // 【修改点】减小最小宽度系数，从 4.0 改为 3.0，让短列更紧凑
-                double minWidth = textHeight * 2.0;
+                double minWidth = contentHeight * 2.0;
                 if (maxWidthInCol < minWidth) maxWidthInCol = minWidth;
-
-                // 设置最大宽度限制，防止某列特别长导致表格过宽
-                double maxWidthLimit = textHeight * 60.0; // 稍微增加最大限制，适应长文本
+                double maxWidthLimit = contentHeight * 60.0;
                 if (maxWidthInCol > maxWidthLimit) maxWidthInCol = maxWidthLimit;
-
                 table.Columns[col].Width = maxWidthInCol;
             }
 
-            // 强制更新表格布局
+            // ==================== 第三步：设置行高（基于各自行的字高） ====================
+            double rowHeightFactor = 1.5; // 可根据需要调整
+            for (int row = 0; row < numRows; row++)
+            {
+                double baseHeight = (row == 0) ? headerHeight : contentHeight;
+                table.Rows[row].Height = baseHeight * rowHeightFactor;
+            }
+
             table.GenerateLayout();
         }
-
 
         #region 新生成管道表\导出管道表方法
 
