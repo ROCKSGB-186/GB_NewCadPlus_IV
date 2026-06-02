@@ -10,6 +10,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Dm.util;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using AttributeCollection = Autodesk.AutoCAD.DatabaseServices.AttributeCollection;
 using DataTable = System.Data.DataTable;
@@ -452,8 +453,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
             }
         }
-
-
+        
         /// <summary>
         /// 设置动态块的起点和终点坐标
         /// </summary>
@@ -819,7 +819,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns>设备信息列表，包含从属性块中提取的所有设备数据</returns>
         public static (List<DeviceInfo> deviceList, ObjectId[] selectedIds) SelectAndAnalyzeBlocks(Editor ed, Database db)
         {
-            var deviceDict = new Dictionary<string, DeviceInfo>(StringComparer.OrdinalIgnoreCase);
+            var deviceList =new List<DeviceInfo>();
 
             // 与原 SelectAndAnalyzeBlocks 保持交互提示一致
             var opts = new PromptSelectionOptions
@@ -828,66 +828,56 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 AllowDuplicates = true
             };
 
-            var selRes = ed.GetSelection(opts);
-            if (selRes.Status != PromptStatus.OK || selRes.Value == null)
-                return (deviceDict.Values.ToList(), Array.Empty<ObjectId>());
+            var selcetElementS = ed.GetSelection(opts);// 获取选择图元实例
+            if (selcetElementS.Status != PromptStatus.OK || selcetElementS.Value == null)
+                return (deviceList, Array.Empty<ObjectId>());
 
-            var selIds = selRes.Value.GetObjectIds();
+            var selIds = selcetElementS.Value.GetObjectIds();// 获取选择图元实例Object的Id集合
             if (selIds == null || selIds.Length == 0)
-                return (deviceDict.Values.ToList(), Array.Empty<ObjectId>());
-
+                return (deviceList, Array.Empty<ObjectId>());
+            //开启事务
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                foreach (SelectedObject so in selRes.Value)
+                foreach (SelectedObject _selectElement in selcetElementS.Value)//循环每个实例
                 {
                     try
                     {
-                        if (so == null || so.ObjectId == ObjectId.Null) continue;
-                        var br = tr.GetObject(so.ObjectId, OpenMode.ForRead) as BlockReference;
-                        if (br == null) continue;
+                        if (_selectElement == null || _selectElement.ObjectId == ObjectId.Null) continue; // 如果这个选择的实例为空则跳过这个进行下一个实例
+                        var _elementBr = tr.GetObject(_selectElement.ObjectId, OpenMode.ForRead) as BlockReference; // 拿到这个图元实例的引用块
+                        if (_elementBr == null) continue;
 
-                        var btr = tr.GetObject(br.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
-                        if (btr == null) continue;
-
+                        var _elementBtr = tr.GetObject(_elementBr.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord; //拿到这个图元的块表记录
+                        if (_elementBtr == null) continue;
+                        // 初始化一个设备容器
                         var device = new DeviceInfo
                         {
-                            Name = btr.Name ?? string.Empty,
-                            Type = DetermineDeviceType(btr.Name),
-                            Attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                            EnglishNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                            Count = 1
+                            Name = _elementBtr.Name ?? string.Empty, //设备名称
+                            Type = DetermineDeviceType(_elementBtr.Name), // 类型
+                            Attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), //设备属性
+                            EnglishNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), //设备英文名
+                            Count = 1 //设备数量
                         };
 
                         // 读取静态属性
-                        foreach (ObjectId aid in br.AttributeCollection)
+                        foreach (ObjectId _elementAttribute in _elementBr.AttributeCollection) //循环每个图元属性集合,拿到集合中的一个属性值
                         {
                             try
                             {
-                                var ar = tr.GetObject(aid, OpenMode.ForRead) as AttributeReference;
-                                if (ar == null) continue;
-                                var tag = (ar.Tag ?? string.Empty).Trim();
-                                var val = (ar.TextString ?? string.Empty).Trim();
-                                if (!string.IsNullOrEmpty(tag))
+                                var _elementAttributeRef = tr.GetObject(_elementAttribute, OpenMode.ForRead) as AttributeReference; // 拿到图属性引用
+                                if (_elementAttributeRef == null) continue; // 如果这个图元属性引用为空则跳过进行下一下
+                                var eARTag = (_elementAttributeRef.Tag ?? string.Empty).Trim(); //拿到图元属性标题
+                                var eARVal = (_elementAttributeRef.TextString ?? string.Empty).Trim(); //拿到图元属性的文字
+                                if (!string.IsNullOrEmpty(eARTag))//如果图元属性标题不为空
                                 {
-                                    device.Attributes[tag] = val;
+                                    device.Attributes[eARTag] = eARVal; // 赋值这个设备的表标题
                                     // 如果有中英文字典则映射
-                                    device.EnglishNames[tag] = (DictionaryHelper.ChineseToEnglish.ContainsKey(tag) ? DictionaryHelper.ChineseToEnglish[tag] : tag);
+                                    device.EnglishNames[eARTag] = (DictionaryHelper.ChineseToEnglish.ContainsKey(eARTag) ? DictionaryHelper.ChineseToEnglish[eARTag] : eARTag);
                                 }
                             }
                             catch { /* 忽略单个属性读取失败 */ }
                         }
 
-                        // 动态属性解析（若项目已实现此方法）
-                        try { ProcessDynamicProperties(br, device); } catch { }
-
-                        if (device.Attributes.TryGetValue("介质", out var mv) && !device.Attributes.ContainsKey("介质名称"))
-                            device.Attributes["介质名称"] = mv;
-
-                        string key = GenerateDeviceKey(device);
-                        if (deviceDict.ContainsKey(key))
-                            deviceDict[key].Count++;
-                        else
-                            deviceDict[key] = device;
+                        deviceList.add(device);
                     }
                     catch
                     {
@@ -898,7 +888,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 tr.Commit();
             }
 
-            return (deviceDict.Values.ToList(), selIds);
+            return (deviceList, selIds);
         }
 
         /// <summary>
@@ -910,23 +900,23 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
-                // 获取动态块的所有动态属性集合
-                DynamicBlockReferencePropertyCollection dynProps = blockRef.DynamicBlockReferencePropertyCollection;
+                //// 获取动态块的所有动态属性集合
+                //DynamicBlockReferencePropertyCollection dynProps = blockRef.DynamicBlockReferencePropertyCollection;
 
-                // 遍历所有动态属性
-                foreach (DynamicBlockReferenceProperty dynProp in dynProps)
-                {
-                    // 跳过只读属性（通常为系统保留属性，不可修改）
-                    if (dynProp.ReadOnly) continue;
-                    // 获取属性名称（如"拉伸距离"、"旋转角度"）
-                    string propName = dynProp.PropertyName;
-                    // 获取属性值并转换为字符串（处理可能的空值）
-                    string propValue = dynProp.Value?.ToString() ?? "";
-                    // 将动态属性添加到设备信息中，使用"动态_"前缀以便与普通属性区分
-                    device.Attributes[$"动态_{propName}"] = propValue;
-                    // 设置英文名称，使用"Dyn_"前缀表示动态属性
-                    device.EnglishNames[$"动态_{propName}"] = $"Dyn_{propName}";
-                }
+                //// 遍历所有动态属性
+                //foreach (DynamicBlockReferenceProperty dynProp in dynProps)
+                //{
+                //    // 跳过只读属性（通常为系统保留属性，不可修改）
+                //    if (dynProp.ReadOnly) continue;
+                //    // 获取属性名称（如"拉伸距离"、"旋转角度"）
+                //    string propName = dynProp.PropertyName;
+                //    // 获取属性值并转换为字符串（处理可能的空值）
+                //    string propValue = dynProp.Value?.ToString() ?? "";
+                //    // 将动态属性添加到设备信息中，使用"动态_"前缀以便与普通属性区分
+                //    device.Attributes[$"动态_{propName}"] = propValue;
+                //    // 设置英文名称，使用"Dyn_"前缀表示动态属性
+                //    device.EnglishNames[$"动态_{propName}"] = $"Dyn_{propName}";
+                //}
             }
             catch (Exception ex)
             {

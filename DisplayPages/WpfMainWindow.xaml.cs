@@ -105,14 +105,6 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private string? _connectionString;
         /// <summary>
-        /// 预览图片本地缓存目录
-        /// </summary>
-        //private readonly string _previewCachePath;
-        /// <summary>
-        /// 预览图片本地缓存目录
-        /// </summary>
-        //private readonly string _dwgCachePath;
-        /// <summary>
         /// 本地选中的 DWG 文件路径（上传/插入）
         /// </summary>
         private string? _selectedFilePath;
@@ -395,7 +387,7 @@ namespace GB_NewCadPlus_IV
                 var clientVersion = entryAsm?.GetName().Version?.ToString() ?? execAsm?.GetName().Version?.ToString() ?? "未知";
                 if (FindName("TextBox客户端版本") is TextBox clientVersionBox)
                     clientVersionBox.Text = clientVersion;
-
+                AutoCadHelper.GetScale();//先拿到绘图比例;
                 // 读取服务器端版本号（通过 DatabaseManager）
                 var serverVersionText = "未连接";
                 try

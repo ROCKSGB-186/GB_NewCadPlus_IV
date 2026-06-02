@@ -151,7 +151,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 缓存比例
         /// </summary>
-        private static double _cachedScale = double.NaN;
+        private static double _cachedScale = 1.0;
 
         /// <summary>
         /// 缓存时间
@@ -181,6 +181,7 @@ namespace GB_NewCadPlus_IV.Helpers
             }
             else
             {
+                userScale = GetDrawingScaleFromWpf();// 先拿到wpf页面中的TextBox绘图比例中用户输入或默认的比例; 
                 // WPF 模式优先使用全局缓存的 wpfTextBoxScale（你要求的优先级）
                 if (VariableDictionary.wpfTextBoxScale > 0.0)
                 {
@@ -191,7 +192,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     // 若 wpfTextBoxScale 无效，再尝试实时从 WPF 文本框读取
                     userScale = GetDrawingScaleFromWpf();
                 }
-
+                
                 // 兜底再尝试 textBoxScale，避免某些旧流程仅写入 textBoxScale
                 if (userScale <= 0.0 && VariableDictionary.textBoxScale > 0.0)
                 {
@@ -475,8 +476,11 @@ namespace GB_NewCadPlus_IV.Helpers
 
             // 兜底1，读取WPF侧缓存值（由WPF代码维护）
             if (VariableDictionary.wpfTextBoxScale > 0.0)
+            {
+                VariableDictionary.textBoxScale = VariableDictionary.wpfTextBoxScale;
                 return VariableDictionary.wpfTextBoxScale;
-
+            }
+            
             // 兜底2，读取通用缓存值
             if (VariableDictionary.textBoxScale > 0.0)
                 return VariableDictionary.textBoxScale;
