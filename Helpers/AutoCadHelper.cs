@@ -19,20 +19,6 @@ namespace GB_NewCadPlus_IV.Helpers
     public static class AutoCadHelper
     {
         /// <summary>
-        /// 安全文件名
-        /// </summary>
-        /// <param name="name">要处理的文件名</param>
-        /// <returns></returns>
-        private static string SanitizeFileName(string name)
-        {
-            foreach (var c in Path.GetInvalidFileNameChars())
-            {
-                name = name.Replace(c, '_');
-            }
-            return name;
-        }
-        
-        /// <summary>
         /// 从外部 DWG 导入指定块定义到当前文档并在目标点插入一个 BlockReference（包含属性）
         /// 返回插入的 BlockReference 的 ObjectId，失败返回 ObjectId.Null。
         /// （保留原有实现，已做健壮性和注释增强）
@@ -142,7 +128,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
             }
         }
-        
+
         /// <summary>
         /// 缓存锁
         /// </summary>
@@ -176,8 +162,45 @@ namespace GB_NewCadPlus_IV.Helpers
             // 如果当前是 WinForm 状态，则优先读取 WinForm 比例缓存
             if (VariableDictionary.winForm_Status)
             {
-                // WinForm 模式下直接取 textBoxScale
-                userScale = VariableDictionary.textBoxScale;
+                if (VariableDictionary.textBoxScale > 0)
+                {
+                    userScale = VariableDictionary.textBoxScale;
+                }
+                else
+                {
+                    // 如果缓存无效，尝试从 WinForm 界面安全读取 textBox_Scale_比例（通过 Application.OpenForms + WinFormHelper）
+                    try
+                    {
+                        // 尝试通过打开的窗体集合找到 FormMain 的实例（兼容多实例或未直接传入实例的情况）
+                        var form = System.Windows.Forms.Application.OpenForms
+                            .OfType<FormMain>()
+                            .FirstOrDefault(); // 找不到返回 null
+
+                        if (form != null)
+                        {
+                            // 调用你要求的辅助方法从指定 Form 实例中读取 TextBox 文本值
+                            string txt = GetWinFormTextBoxValue(form, "textBox_Scale_比例");
+
+                            // 如果读取到非空文本则尝试解析为 double（先用 InvariantCulture 再用默认）
+                            if (!string.IsNullOrWhiteSpace(txt))
+                            {
+                                if (double.TryParse(txt, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed) ||
+                                    double.TryParse(txt, out parsed))
+                                {
+                                    // 解析成功后同步到全局缓存并作为最终比例
+                                    VariableDictionary.textBoxScale = parsed;
+                                    userScale = parsed;
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // 读取窗体或反射过程中出现异常则忽略，继续走后续回退逻辑
+                        LogManager.Instance.LogWarning("读取 WinForm TextBox 值时发生异常。");
+                    }
+                }
+
             }
             else
             {
@@ -192,7 +215,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     // 若 wpfTextBoxScale 无效，再尝试实时从 WPF 文本框读取
                     userScale = GetDrawingScaleFromWpf();
                 }
-                
+
                 // 兜底再尝试 textBoxScale，避免某些旧流程仅写入 textBoxScale
                 if (userScale <= 0.0 && VariableDictionary.textBoxScale > 0.0)
                 {
@@ -393,7 +416,108 @@ namespace GB_NewCadPlus_IV.Helpers
             }
             catch { return default(double); }
         }
-        
+
+        /// <summary>
+        /// 从指定 WinForm 窗体中获取名为 textBoxName 的 TextBox 的文本值（找不到返回空字符串）
+        /// </summary>
+        /// <param name="form">目标窗体实例（例如：FormMain 的实例）</param>
+        /// <param name="textBoxName">要查找的控件名，比如 "textBox_Scale_比例"</param>
+        /// <returns>控件的 Text 值，找不到或出错返回空字符串</returns>
+        public static string GetWinFormTextBoxValue(Form form, string textBoxName)
+        {
+            // 输入保护：窗体或名字为空则返回空字符串
+            if (form == null || string.IsNullOrWhiteSpace(textBoxName))
+                return string.Empty;
+
+            try
+            {
+                // 取得窗体类型，用于反射查找字段/属性
+                Type formType = form.GetType();
+
+                // 1. 尝试按字段名查找（包含非公开字段，兼容 designer 生成的 private 字段）
+                FieldInfo field = formType.GetField(textBoxName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    object? fieldVal = field.GetValue(form); // 获取字段值（可能为 Control）
+                    if (fieldVal is TextBox tbField) // 若字段本身就是 TextBox，直接返回 Text
+                        return tbField.Text ?? string.Empty;
+                    // 若字段是自定义控件或包装类，则尝试读取其 Text 属性
+                    if (fieldVal != null)
+                    {
+                        PropertyInfo? textProp = fieldVal.GetType().GetProperty("Text", BindingFlags.Instance | BindingFlags.Public);
+                        if (textProp != null)
+                        {
+                            var v = textProp.GetValue(fieldVal);
+                            return v?.ToString() ?? string.Empty;
+                        }
+                    }
+                }
+
+                // 2. 尝试按属性名查找（少见，但兼容）
+                PropertyInfo prop = formType.GetProperty(textBoxName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (prop != null)
+                {
+                    object? propVal = prop.GetValue(form);
+                    if (propVal is TextBox tbProp)
+                        return tbProp.Text ?? string.Empty;
+                    if (propVal != null)
+                    {
+                        PropertyInfo? textProp = propVal.GetType().GetProperty("Text", BindingFlags.Instance | BindingFlags.Public);
+                        if (textProp != null)
+                        {
+                            var v = textProp.GetValue(propVal);
+                            return v?.ToString() ?? string.Empty;
+                        }
+                    }
+                }
+
+                // 3. 递归在 Controls 集合中按 Name 查找（最通用）
+                string? recursiveResult = FindControlTextRecursive(form, textBoxName);
+                if (!string.IsNullOrEmpty(recursiveResult))
+                    return recursiveResult;
+
+                // 未找到则返回空字符串
+                return string.Empty;
+            }
+            catch
+            {
+                // 出错时保持安全性，返回空字符串（调用方可根据需要做兜底处理）
+                return string.Empty;
+            }
+        }
+
+        // 私有递归辅助：在 parent 控件及其子控件中按 Name 查找并返回 Text（找不到返回 null）
+        private static string? FindControlTextRecursive(Control parent, string name)
+        {
+            if (parent == null) return null;
+
+            foreach (Control c in parent.Controls)
+            {
+                if (c == null) continue;
+
+                // 名称匹配（忽略大小写）
+                if (string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    // 如果是 TextBox，直接返回 Text
+                    if (c is TextBox tb) return tb.Text ?? string.Empty;
+
+                    // 否则尝试通过反射读取 Text 属性
+                    var p = c.GetType().GetProperty("Text", BindingFlags.Instance | BindingFlags.Public);
+                    if (p != null)
+                    {
+                        var val = p.GetValue(c);
+                        if (val != null) return val.ToString() ?? string.Empty;
+                    }
+                }
+
+                // 递归查找子控件
+                string? sub = FindControlTextRecursive(c, name);
+                if (!string.IsNullOrEmpty(sub)) return sub;
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// 从WPF界面获取用户输入的绘图比例
         /// </summary>
@@ -480,7 +604,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 VariableDictionary.textBoxScale = VariableDictionary.wpfTextBoxScale;
                 return VariableDictionary.wpfTextBoxScale;
             }
-            
+
             // 兜底2，读取通用缓存值
             if (VariableDictionary.textBoxScale > 0.0)
                 return VariableDictionary.textBoxScale;
@@ -542,7 +666,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 if (res != null) return res;
             }
             return null;
-        }              
+        }
 
         /// <summary>
         /// 安全的日志记录方法，防止并发访问问题
@@ -629,6 +753,6 @@ namespace GB_NewCadPlus_IV.Helpers
             }
         }
 
-    
+
     }
 }

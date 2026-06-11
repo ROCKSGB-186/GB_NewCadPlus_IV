@@ -234,15 +234,15 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 图元、图块比例
         /// </summary>
-        public static double blockScale = 1;
+        public static double blockScale = 0;
         /// <summary>
         /// 文本框输入比例
         /// </summary>
-        public static double textBoxScale = 1;
+        public static double textBoxScale = 0;
         /// <summary>
         /// 文本框输入比例
         /// </summary>
-        public static double wpfTextBoxScale = 1;
+        public static double wpfTextBoxScale = 0;
         /// <summary>
         /// 条件按键
         /// </summary>

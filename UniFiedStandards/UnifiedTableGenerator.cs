@@ -371,238 +371,169 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         #endregion
-
-        /// <summary>
-        /// 自动调整表格所有列的宽度，使其能容纳单元格中的文本内容。
-        /// 原理：遍历每个单元格，估算文本宽度（区分中英文），取每列的最大宽度来设置列宽。
-        /// 忽略合并单元格的非左上角部分，避免重复计算。
-        /// </summary>
-        /// <param name="table">要调整的CAD表格对象</param>
-        //private void AutoFitTableColumnsAdvanced(Table table)
-        //{
-        //    // 防御性检查：如果表格对象为空，直接返回，避免后续空引用异常
-        //    if (table == null) return;
-
-        //    // 获取表格的总行数和总列数
-        //    int numRows = table.Rows.Count;
-        //    int numCols = table.Columns.Count;
-        //    double textInputScale = AutoCadHelper.GetScale();
-
-        //    // 如果表格没有行或没有列，则无需调整，直接返回
-        //    if (numRows == 0 || numCols == 0) return;
-
-        //    // 获取典型文字高度（用于宽度估算时的基准单位），默认设为2.5
-        //    double textHeight = 2.5;
-        //    try
-        //    {
-        //        // 选择取样行：如果表格行数大于3（即有至少4行），取第4行（索引3），否则取第1行（索引0）
-        //        // 通常第1行是表头，第4行是数据行，数据行的文字高度更能代表实际内容
-        //        int sampleRow = numRows > 3 ? 3 : 0;
-        //        // 获取该行第1列单元格的文字高度属性
-        //        double row0TextHeight = Convert.ToDouble(table.Cells[sampleRow, 0].TextHeight);
-        //        // 如果获取到的高度大于0，则作为基准高度使用
-        //        if (row0TextHeight > 0&& row0TextHeight > textHeight) textHeight = row0TextHeight;
-        //    }
-        //    catch { } // 如果获取失败（例如单元格不存在），保持默认的2.5，不中断程序
-
-        //    // 开始逐列处理：每一列独立计算该列所有单元格所需的最大宽度
-        //    for (int col = 0; col < numCols; col++)
-        //    {
-        //        // 记录当前列遍历到的最大宽度（初始为0）
-        //        double maxWidthInCol = 0.0;
-
-        //        // 遍历当前列的所有行
-        //        for (int row = 0; row < numRows; row++)
-        //        {
-        //            // 获取当前行、当前列的单元格对象
-        //            var cell = table.Cells[row, col];
-
-        //            // 判断当前单元格是否属于合并区域（例如跨行、跨列）
-        //            bool isMerged = Convert.ToBoolean(cell.IsMerged);
-        //            // 标记是否需要跳过本次循环（即不参与宽度计算）
-        //            bool shouldSkip = false;
-
-        //            if (isMerged)
-        //            {
-        //                // 如果单元格是合并区域的一部分，我们只让“左上角”那个单元格来贡献宽度，
-        //                // 避免同一个合并区域被计算多次，导致宽度被放大。
-        //                bool isTopLeft = true;
-
-        //                // 向左检查：如果左边的单元格也存在（col>0）且也是合并状态，说明当前单元格不是合并区域的最左列
-        //                if (col > 0 && Convert.ToBoolean(table.Cells[row, col - 1].IsMerged))
-        //                {
-        //                    isTopLeft = false;
-        //                }
-
-        //                // 向上检查：如果上边的单元格也存在（row>0）且也是合并状态，说明当前单元格不是合并区域的最上行
-        //                if (row > 0 && Convert.ToBoolean(table.Cells[row - 1, col].IsMerged))
-        //                {
-        //                    isTopLeft = false;
-        //                }
-
-        //                // 如果不是左上角单元格，则跳过宽度计算（避免重复累加）
-        //                if (!isTopLeft)
-        //                {
-        //                    shouldSkip = true;
-        //                }
-        //            }
-
-        //            // 如果标记了跳过，则直接进入下一个单元格
-        //            if (shouldSkip) continue;
-
-        //            // 获取单元格的文本内容（字符串）
-        //            string cellText = cell.TextString;
-        //            // 如果文本为空或仅包含空白字符，则跳过该单元格（不贡献宽度）
-        //            if (string.IsNullOrWhiteSpace(cellText)) continue;
-
-        //            // 开始估算该单元格文本需要的宽度（以绘图单位表示）
-        //            double estimatedWidth = 0.0;
-
-        //            // 由于文本可能包含换行符，需要按行计算宽度，取最长的一行作为该单元格的宽度。
-        //            // 拆分文本为行数组（支持\n和\r两种换行符）
-        //            var lines = cellText.Split(new[] { "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
-        //            double maxLineWidth = 0.0;
-
-        //            foreach (var line in lines)
-        //            {
-        //                // 统计当前行中的中文字符数量（Unicode范围：4E00-9FFF）
-        //                int lineChineseCount = System.Text.RegularExpressions.Regex.Matches(line, @"[\u4e00-\u9fff]").Count;
-        //                // 统计当前行中的非中文字符数量（包括英文、数字、标点等）
-        //                int lineOtherCount = line.Length - lineChineseCount;
-
-        //                // 估算该行的绘制宽度：
-        //                // 中文每个字符占用 1.1 倍 textHeight，英文等占用 0.6 倍 textHeight。
-        //                // 这两个系数是经验值，可根据实际字体表现调整。
-        //                double lineWidth = (lineChineseCount * 1.1 + lineOtherCount * 0.6) * textHeight;
-
-        //                // 记录所有行中的最大值
-        //                if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
-        //            }
-
-        //            // 将最长行的宽度作为单元格的文本净宽度
-        //            estimatedWidth = maxLineWidth;
-
-        //            // 增加左右内边距（Padding）：左右各留出一个 textHeight 的空白，让文字不紧贴边框
-        //            double padding = textHeight * 5.0;
-        //            estimatedWidth += padding;
-
-        //            // 如果当前单元格的估算宽度大于之前在该列记录的最大宽度，则更新列的最大宽度
-        //            if (estimatedWidth > maxWidthInCol)
-        //            {
-        //                maxWidthInCol = estimatedWidth;
-        //            }
-        //        }
-
-        //        // 遍历完当前列的所有行后，maxWidthInCol 即为该列所需的最小宽度（保证能容纳所有单元格内容）
-
-        //        // 设置最小宽度保护：防止列宽过窄导致内容完全看不见。
-        //        // 最小宽度设为 2 倍 textHeight（例如至少能显示两个字符宽度的空白）
-        //        double minWidth = textHeight * 2.0;
-        //        if (maxWidthInCol < minWidth) maxWidthInCol = minWidth;
-
-        //        // 设置最大宽度限制：防止某些列文本极长而导致整个表格超出图纸范围。
-        //        // 最大宽度设为 60 倍 textHeight，可根据需要调整。
-        //        double maxWidthLimit = textHeight * 60.0;
-        //        if (maxWidthInCol > maxWidthLimit) maxWidthInCol = maxWidthLimit;
-
-        //        // 将计算好的最终宽度赋给当前列
-        //        table.Columns[col].Width = maxWidthInCol;
-        //    }
-
-        //    // 强制让CAD重新生成表格布局，使列宽调整立即生效
-        //    table.GenerateLayout();
-        //}
+        
 
         /// <summary>
         /// 自动调整表格列宽、统一所有单元格的文字高度，并根据用户比例缩放所有尺寸
         /// </summary>
         /// <param name="table">CAD表格对象</param>
+        /// <summary>
+        /// 自动调整CAD表格：统一设置字高（第一行3倍比例，其余行2.5倍比例），
+        /// 并根据文本内容自动调整列宽，同时设置合适的行高。
+        /// </summary>
+        /// <param name="table">要处理的CAD表格对象</param>
         private void AutoFitTableColumnsAdvanced(Table table)
         {
-            // 1. 获取比例因子
+            // 1. 获取用户设定的全局缩放比例（例如：1.0=原大小，2.0=放大一倍）
             double textInputScale = AutoCadHelper.GetScale();
 
+            // 2. 如果传入的表格对象为空，则直接返回，避免后续操作出错
             if (table == null) return;
+
+            // 3. 获取表格的总行数和总列数
             int numRows = table.Rows.Count;
             int numCols = table.Columns.Count;
+
+            // 4. 如果表格没有任何行或列，无需调整，直接返回
             if (numRows == 0 || numCols == 0) return;
 
-            // ==================== 第一步：强制按行设置固定字高（不读原有字高） ====================
-            double headerHeight = 3.0 * textInputScale;   // 第一行字高
-            double contentHeight = 2.5 * textInputScale;  // 其他行字高
+            // ==================== 第一步：强制按行设置固定字高（不读取表格原有字高） ====================
+            // 5. 定义第一行（表头）的基础字高为3.0，并乘以比例因子得到最终字高
+            double headerHeight = 3.0 * textInputScale;   // 第一行字高（缩放后）
+                                                          // 6. 定义其余行（内容行）的基础字高为2.5，并乘以比例因子得到最终字高
+            double contentHeight = 2.5 * textInputScale;  // 其他行字高（缩放后）
 
+            // 7. 尝试执行字高设置操作，如果出现异常（如单元格只读）则忽略，继续后续步骤
             try
             {
+                // 8. 遍历所有行
                 for (int row = 0; row < numRows; row++)
                 {
+                    // 9. 根据行索引决定当前行应该使用的字高：第一行用 headerHeight，否则用 contentHeight
                     double rowTextHeight = (row == 0) ? headerHeight : contentHeight;
+
+                    // 10. 遍历当前行的所有列
                     for (int col = 0; col < numCols; col++)
                     {
+                        // 11. 获取指定行、列的单元格对象
                         var cell = table.Cells[row, col];
+
+                        // 12. 如果单元格存在（不为空），则设置其文字高度
                         if (cell != null)
                             cell.TextHeight = rowTextHeight;
                     }
                 }
             }
-            catch { /* 忽略异常 */ }
+            catch { /* 忽略异常：例如表格被锁定或某些单元格无法设置，不影响后续列宽计算 */ }
 
-            // ==================== 第二步：设置列宽（使用各自单元格的实际字高） ====================
+            // ==================== 第二步：设置列宽（使用每个单元格实际已经设置好的字高） ====================
+            // 13. 逐列处理，每一列独立计算所需的最大宽度
             for (int col = 0; col < numCols; col++)
             {
+                // 14. 用于记录当前列中所有单元格所需的最大宽度（初始为0）
                 double maxWidthInCol = 0.0;
+
+                // 15. 遍历当前列的所有行
                 for (int row = 0; row < numRows; row++)
                 {
+                    // 16. 获取当前单元格对象
                     var cell = table.Cells[row, col];
-                    // 合并单元格跳过逻辑（同原代码）
+
+                    // ---------- 合并单元格处理：只让合并区域的左上角参与宽度计算，避免重复 ----------
+                    // 17. 判断当前单元格是否属于合并区域
                     bool isMerged = Convert.ToBoolean(cell.IsMerged);
-                    bool shouldSkip = false;
+                    bool shouldSkip = false;   // 标记是否跳过本次宽度计算
+
                     if (isMerged)
                     {
+                        // 18. 假设当前单元格是合并区域的左上角，然后向左、向上验证
                         bool isTopLeft = true;
+
+                        // 19. 如果左边有列，且左边单元格也是合并状态，说明当前单元格不是最左列
                         if (col > 0 && Convert.ToBoolean(table.Cells[row, col - 1].IsMerged))
                             isTopLeft = false;
+
+                        // 20. 如果上边有行，且上边单元格也是合并状态，说明当前单元格不是最上行
                         if (row > 0 && Convert.ToBoolean(table.Cells[row - 1, col].IsMerged))
                             isTopLeft = false;
+
+                        // 21. 如果不是左上角，则标记跳过，不参与宽度计算
                         if (!isTopLeft) shouldSkip = true;
                     }
+
+                    // 22. 如果需要跳过（非左上角的合并单元格），直接进入下一个单元格
                     if (shouldSkip) continue;
 
+                    // 23. 获取单元格的文本内容
                     string cellText = cell.TextString;
+
+                    // 24. 如果文本为空或仅包含空白字符，则跳过此单元格（不贡献宽度）
                     if (string.IsNullOrWhiteSpace(cellText)) continue;
 
-                    // 关键：读取该单元格已经设置好的字高（可能是 3.0 或 2.5 乘以比例）
+                    // 25. 关键：获取该单元格已经被设置好的实际字高（可能是 headerHeight 或 contentHeight）
                     double cellTextHeight = Convert.ToDouble(cell.TextHeight);
-                    if (cellTextHeight <= 0) cellTextHeight = contentHeight; // 保底
 
+                    // 26. 如果获取的字高无效（<=0），则使用内容行的字高作为保底值
+                    if (cellTextHeight <= 0) cellTextHeight = contentHeight;
+
+                    // 27. 文本可能包含换行符，需要按行计算宽度，取最长的一行
                     var lines = cellText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-                    double maxLineWidth = 0.0;
+                    double maxLineWidth = 0.0;  // 记录当前单元格中最长行的宽度
+
+                    // 28. 遍历每一行文本
                     foreach (var line in lines)
                     {
+                        // 29. 统计当前行中的中文字符数量（Unicode范围：4E00-9FFF）
                         int chnCount = System.Text.RegularExpressions.Regex.Matches(line, @"[\u4e00-\u9fff]").Count;
+
+                        // 30. 统计非中文字符数量（包括英文、数字、标点、空格等）
                         int otherCount = line.Length - chnCount;
+
+                        // 31. 估算该行的绘图宽度：中文按1.1倍字高，其他字符按0.6倍字高，再乘以该单元格的实际字高
                         double lineWidth = (chnCount * 1.1 + otherCount * 0.6) * cellTextHeight;
+
+                        // 32. 保留所有行中的最大宽度
                         if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
                     }
-                    double estimatedWidth = maxLineWidth + cellTextHeight * 5.0; // 边距基于该单元格字高
+
+                    // 33. 单元格总宽度 = 最长行宽度 + 左右内边距（左右各2.5倍字高，合计5倍字高）
+                    double estimatedWidth = maxLineWidth + cellTextHeight * 5.0;
+
+                    // 34. 如果当前单元格的估算宽度大于当前列之前记录的最大宽度，则更新列的最大宽度
                     if (estimatedWidth > maxWidthInCol)
                         maxWidthInCol = estimatedWidth;
                 }
 
+                // 35. 列宽保护：设置最小宽度（2倍内容字高），防止列过窄
                 double minWidth = contentHeight * 2.0;
                 if (maxWidthInCol < minWidth) maxWidthInCol = minWidth;
+
+                // 36. 列宽保护：设置最大宽度（60倍内容字高），防止单列过宽导致表格超出图纸
                 double maxWidthLimit = contentHeight * 60.0;
                 if (maxWidthInCol > maxWidthLimit) maxWidthInCol = maxWidthLimit;
+
+                // 37. 将最终计算出的列宽赋值给当前列
                 table.Columns[col].Width = maxWidthInCol;
             }
 
-            // ==================== 第三步：设置行高（基于各自行的字高） ====================
-            double rowHeightFactor = 1.5; // 可根据需要调整
+            // ==================== 第三步：统一设置行高（基于各自行的字高） ====================
+            // 38. 定义行高系数（字高的倍数），1.5表示行高是字高的1.5倍，可根据实际效果调整
+            double rowHeightFactor = 1.5;
+
+            // 39. 逐行设置行高
             for (int row = 0; row < numRows; row++)
             {
+                // 40. 根据行索引获取该行的基准字高：第一行用 headerHeight，其余用 contentHeight
                 double baseHeight = (row == 0) ? headerHeight : contentHeight;
-                table.Rows[row].Height = baseHeight * rowHeightFactor;
+
+                // 41. 计算该行的最终高度 = 基准字高 × 行高系数
+                double rowHeight = baseHeight * rowHeightFactor;
+
+                // 42. 将计算出的高度赋值给表格的对应行
+                table.Rows[row].Height = rowHeight;
             }
 
+            // 43. 最后强制刷新表格布局，使所有属性（字高、列宽、行高）的修改立即生效
             table.GenerateLayout();
         }
 
@@ -3453,14 +3384,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
 
         #endregion
-
-
-
+        
         /// <summary>
         /// 辅助：把属性定义中存在或不存在的 Tag 设置/新增值
         /// </summary>
         private void SetOrAddAttr(List<AttributeDefinition> attDefs, string tag, string text, ref int extraIndex, double yOffsetBase, double attHeight)
         {
+            // 参数保护
             var existing = attDefs.FirstOrDefault(a => string.Equals(a.Tag, tag, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
             {
@@ -5150,326 +5080,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 catch { }
             }
         }
-        /// <summary>
-        /// 获取数据库的缩放因子
-        /// </summary>
-        /// <param name="db"></param>
-        /// <param name="roundToCommon"></param>
-        /// <returns></returns>
-        //private double GetScaleDenominatorForDatabase(Database db, bool roundToCommon = false)
-        //{
-        //    try
-        //    {
-        //        // 优先读取视口 scale factor（0.01 表示 1:100）
-        //        double vpScaleFactor = GetActiveViewportScaleFactor(db);
-        //        // Delegate to FontsStyleHelper.DetermineScaleDenominator 做归一化与容错
-        //        return FontsStyleHelper.DetermineScaleDenominator(viewportScaleFactor: vpScaleFactor, scaleString: null, roundToCommon: roundToCommon);
-        //    }
-        //    catch
-        //    {
-        //        return 1.0;
-        //    }
-        //}
-
-
-        //private void ExportTableToExcel(List<Table> tables, Editor ed)
-        //{
-        //    if (tables == null || tables.Count == 0) return;
-
-        //    // 让用户选择保存路径
-        //    var saveFileDialog = new SaveFileDialog
-        //    {
-        //        Filter = "Excel 文件 (*.xlsx)|*.xlsx",
-        //        Title = "导出表格到 Excel",
-        //        FileName = "设备材料表.xlsx"
-        //    };
-        //    if (saveFileDialog.ShowDialog() != DialogResult.OK) return;
-
-        //    //ExcelPackage.LicenseContext = LicenseContext.NonCommercial; // EPPlus 5+ 需要
-        //    using (var package = new ExcelPackage())
-        //    {
-        //        // 第一个表格放在 Sheet1，后续可新建 Sheet 或向下拼接
-        //        var ws = package.Workbook.Worksheets.Add("CAD Tables");
-        //        int currentExcelRow = 1;
-
-        //        foreach (var table in tables)
-        //        {
-        //            if (table == null) continue;
-        //            // ----- 先处理合并单元格信息 -----
-        //            // 用一个 HashSet 记录哪些单元格已经被处理过（跳过非左上角）
-        //            var processedCells = new HashSet<(int row, int col)>();
-
-        //            // 逐行逐列处理
-        //            for (int row = 0; row < table.Rows.Count; row++)
-        //            {
-        //                for (int col = 0; col < table.Columns.Count; col++)
-        //                {
-        //                    if (processedCells.Contains((row, col))) continue;
-
-        //                    // 获取单元格内容（先不管合并）
-        //                    var cell = table.Cells[row, col];
-        //                    string text = GetCellText(cell);
-
-        //                    // 获取该单元格的实际合并范围
-        //                    var range = table.GetCellExtents(row, col);
-        //                    int rowCount = range.BottomRow - range.TopRow + 1;
-        //                    int colCount = range.RightColumn - range.LeftColumn + 1;
-        //                    bool isMerged = (rowCount > 1 || colCount > 1);
-
-        //                    // 只有左上角单元格才需要输出
-        //                    if (row == range.TopRow && col == range.LeftColumn)
-        //                    {
-        //                        // 写入 Excel（注意 Excel 行列从 1 开始）
-        //                        int excelRowStart = currentExcelRow + row;
-        //                        int excelColStart = col + 1;
-        //                        var excelCell = ws.Cells[excelRowStart, excelColStart];
-        //                        excelCell.Value = text;
-
-        //                        // 应用简单样式（可选）
-        //                        excelCell.Style.Font.Name = "宋体";
-        //                        excelCell.Style.Font.Size = 9;
-        //                        excelCell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-        //                        excelCell.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
-        //                        excelCell.Style.WrapText = cell.TextHeight > 0; // 根据 CAD 样式判断是否自动换行
-
-        //                        // 处理合并
-        //                        if (isMerged)
-        //                        {
-        //                            ws.Cells[excelRowStart, excelColStart,
-        //                                     excelRowStart + rowCount - 1, excelColStart + colCount - 1].Merge = true;
-        //                        }
-        //                    }
-
-        //                    // 不管是不是合并，标记整个范围内的单元格为已处理，避免重复写入
-        //                    for (int r = range.TopRow; r <= range.BottomRow; r++)
-        //                    {
-        //                        for (int c = range.LeftColumn; c <= range.RightColumn; c++)
-        //                        {
-        //                            processedCells.Add((r, c));
-        //                        }
-        //                    }
-        //                }
-        //            }
-
-        //            // 表格间留空行
-        //            currentExcelRow += table.Rows.Count + 2;
-        //        }
-
-        //        // 自动调整列宽（基于最宽内容粗略估算）
-        //        ws.Cells.AutoFitColumns(0); // 最小宽度 0
-
-        //        // 保存
-        //        package.SaveAs(new FileInfo(saveFileDialog.FileName));
-        //    }
-
-        //    ed.WriteMessage($"\n表格已成功导出至：{saveFileDialog.FileName}");
-        //}
-
-
-
-        /// <summary>
-        /// 导出到Excel命令（支持多选表格并排导出）
-        /// </summary>
-        //[CommandMethod(nameof(ExportTableToExcel))]
-        //public void ExportTableToExcel()
-        //{
-        //    Document doc = Application.DocumentManager.MdiActiveDocument;
-        //    Database db = doc.Database;
-        //    Editor ed = doc.Editor;
-
-        //    try
-        //    {
-        //        // 修改为多选表格
-        //        TypedValue[] filter = { new TypedValue((int)DxfCode.Start, "ACAD_TABLE") };
-        //        SelectionFilter sf = new SelectionFilter(filter);
-        //        PromptSelectionOptions pso = new PromptSelectionOptions { MessageForAdding = "\n请选择要导出的一个或多个表格：" };
-        //        PromptSelectionResult psr = ed.GetSelection(pso, sf);
-
-        //        if (psr.Status != PromptStatus.OK || psr.Value == null) return;
-
-        //        var tableIds = psr.Value.GetObjectIds();
-        //        if (tableIds.Length == 0) return;
-
-        //        using (Transaction trans = db.TransactionManager.StartTransaction())
-        //        {
-        //            var tables = new List<Table>();
-        //            foreach (var id in tableIds)
-        //            {
-        //                Table table = trans.GetObject(id, OpenMode.ForRead) as Table;
-        //                if (table != null) tables.Add(table);
-        //            }
-
-        //            if (tables.Count == 0) return;
-
-        //            // 按坐标排序（X轴从左到右，Y轴从上到下），模拟CAD中的“并排”展示顺序
-        //            var sortedTables = tables.OrderBy(t => t.Position.X).ThenByDescending(t => t.Position.Y).ToList();
-
-        //            // 调用支持多表的导出方法
-        //            ExportMultipleTablesToExcelFile(sortedTables, ed);
-        //            trans.Commit();
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        ed.WriteMessage($"\n导出Excel时发生错误: {ex.Message}");
-        //    }
-        //}
-
-        /// <summary>
-        /// 导出多个表格到同一Excel Sheet中，水平并排排列
-        /// 2024-05-20优化：过滤空行，清洗单元格内换行符使内容保持在一行
-        /// </summary>
-        private void ExportMultipleTablesToExcelFile(List<Table> tables, Editor ed)
-        {
-            if (tables == null || tables.Count == 0) return;
-
-            var saveDialog = new System.Windows.Forms.SaveFileDialog
-            {
-                Filter = "Excel文件|*.xlsx",
-                Title = "保存多个设备材料表汇总",
-                FileName = $"表格汇总_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx"
-            };
-
-            if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
-            {
-                ed.WriteMessage("\n用户取消了保存操作。");
-                return;
-            }
-
-            // 必须设置 EPPlus 许可证上下文（否则保存可能不工作）
-            //ExcelPackage.LicenseContext = LicenseContext.NonCommercial; // 如果是商业用途，请购买许可
-
-            try
-            {
-                // 创建工作簿
-                IWorkbook workbook = new XSSFWorkbook();
-                ISheet sheet = workbook.CreateSheet("汇总表");
-
-                // 样式：在工作簿级别创建，循环外只创建一次，避免样式数量爆炸
-                ICellStyle headerStyle = workbook.CreateCellStyle();
-                headerStyle.Alignment = HorizontalAlignment.Center;
-                headerStyle.VerticalAlignment = VerticalAlignment.Center;
-                headerStyle.BorderTop = BorderStyle.Thin;
-                headerStyle.BorderBottom = BorderStyle.Thin;
-                headerStyle.BorderLeft = BorderStyle.Thin;
-                headerStyle.BorderRight = BorderStyle.Thin;
-                IFont headerFont = workbook.CreateFont();
-                headerFont.IsBold = true;
-                headerFont.FontName = "宋体";
-                headerStyle.SetFont(headerFont);
-
-                ICellStyle normalStyle = workbook.CreateCellStyle();
-                normalStyle.Alignment = HorizontalAlignment.Center;
-                normalStyle.VerticalAlignment = VerticalAlignment.Center;
-                normalStyle.BorderTop = BorderStyle.Thin;
-                normalStyle.BorderBottom = BorderStyle.Thin;
-                normalStyle.BorderLeft = BorderStyle.Thin;
-                normalStyle.BorderRight = BorderStyle.Thin;
-                IFont normalFont = workbook.CreateFont();
-                normalFont.FontName = "宋体";
-                normalStyle.SetFont(normalFont);
-
-                int currentStartCol = 0;          // NPOI 列索引从0开始
-                const int gapCols = 2;
-
-                foreach (var table in tables)
-                {
-                    int rows = table.Rows.Count;
-                    int cols = table.Columns.Count;
-                    var processed = new HashSet<(int row, int col)>();
-
-                    for (int r = 0; r < rows; r++)
-                    {
-                        IRow excelRow = sheet.CreateRow(r);   // 创建行（0-based，直接按CAD行号）
-                        for (int c = 0; c < cols; c++)
-                        {
-                            if (processed.Contains((r, c))) continue;
-
-                            string cellText = GetCleanCellText(table, r, c);
-                            bool hasContent = !string.IsNullOrWhiteSpace(cellText);
-
-                            if (!hasContent)
-                            {
-                                processed.Add((r, c));
-                                continue;
-                            }
-
-                            // ------ 合并跨度探测 ------
-                            int rowSpan = 1;
-                            int colSpan = 1;
-
-                            // 向右探测
-                            while (c + colSpan < cols &&
-                                   string.IsNullOrWhiteSpace(GetCleanCellText(table, r, c + colSpan)))
-                                colSpan++;
-
-                            // 向下探测
-                            bool canExtendDown = true;
-                            while (r + rowSpan < rows && canExtendDown)
-                            {
-                                for (int checkCol = c; checkCol < c + colSpan; checkCol++)
-                                {
-                                    if (!string.IsNullOrWhiteSpace(GetCleanCellText(table, r + rowSpan, checkCol)))
-                                    {
-                                        canExtendDown = false;
-                                        break;
-                                    }
-                                }
-                                if (canExtendDown) rowSpan++;
-                            }
-
-                            // ------ 写入单元格内容 ------
-                            int excelColIndex = currentStartCol + c;   // 0-based 列索引
-                            ICell cell = excelRow.CreateCell(excelColIndex);
-                            cell.SetCellValue(cellText);
-                            cell.CellStyle = (r == 0) ? headerStyle : normalStyle;
-
-                            // ------ 处理合并 ------
-                            if (rowSpan > 1 || colSpan > 1)
-                            {
-                                // CellRangeAddress 参数：firstRow, lastRow, firstCol, lastCol（全部0-based）
-                                CellRangeAddress region = new CellRangeAddress(
-                                    r, r + rowSpan - 1,
-                                    excelColIndex, excelColIndex + colSpan - 1);
-                                sheet.AddMergedRegion(region);
-                            }
-
-                            // 标记已处理的单元格（防止重复写入）
-                            for (int mr = r; mr < r + rowSpan; mr++)
-                                for (int mc = c; mc < c + colSpan; mc++)
-                                    processed.Add((mr, mc));
-                        }
-                    }
-
-                    // 下一张表格的起始列 = 当前起始列 + 表格列数 + 间隔
-                    currentStartCol += cols + gapCols;
-                }
-
-                // 自动列宽（简单实现：根据内容自适应，可替换为更精确的计算）
-                for (int colIdx = 0; colIdx < currentStartCol; colIdx++)
-                {
-                    sheet.AutoSizeColumn(colIdx);
-                }
-
-                // 保存文件
-                using (FileStream fs = new FileStream(saveDialog.FileName, FileMode.Create, FileAccess.Write))
-                {
-                    workbook.Write(fs);
-                }
-
-                // 成功提示
-                ed.WriteMessage($"\n✅ 表格已成功导出到: {saveDialog.FileName}");
-                System.Windows.Forms.MessageBox.Show($"导出成功！\n文件位置：{saveDialog.FileName}",
-                    "导出Excel", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                ed.WriteMessage($"\n❌ 多表导出Excel失败: {ex.Message}");
-                System.Windows.Forms.MessageBox.Show($"导出失败：{ex.Message}",
-                    "错误", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
-            }
-        }
-
+    
         /// <summary>
         /// 获取单元格文本并清洗掉换行符等特殊字符，使内容保持在一行，适合Excel显示
         /// </summary>
@@ -5493,8 +5104,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
         #region 同步表格
-
-
+         
         /// <summary>
         /// 同步表格
         /// </summary>
@@ -6289,8 +5899,9 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     // 使用反射获取TextBox_绘图比例控件
                     var textBoxField = wpfWindow.GetType().GetField("TextBox_绘图比例",
                         System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (textBoxField != null)
+                    if (textBoxField != null) // 确保字段存在
                     {
+                        // 获取TextBox控件实例并读取文本
                         var textBox = textBoxField.GetValue(wpfWindow) as System.Windows.Controls.TextBox;
                         if (textBox != null &&
                             double.TryParse(textBox.Text, out double scale) &&

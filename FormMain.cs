@@ -50,7 +50,6 @@ namespace GB_NewCadPlus_IV
         private void InitializePlaceholders()
         {
             AttachPlaceholder(textBox_荷载数据, "输入荷载数据");
-            // 示例：对其他 TextBox 启用占位符
             AttachPlaceholder(textBox_排水沟_深, "请输入深");
             AttachPlaceholder(textBox_排水沟_宽, "请输入宽");
             AttachPlaceholder(textBox_排风百分比, "排风百分比");
@@ -75,8 +74,6 @@ namespace GB_NewCadPlus_IV
             AttachPlaceholder(textBoxA_左右开洞, "请输入功率");
             AttachPlaceholder(textBoxA_上下开洞, "请输入功率");
             AttachPlaceholder(textBoxA_左右开洞, "请输入功率");
-
-
         }
 
         // 2. 新增初始化方法 (将原 AttachToggleableRadioButtons 中的头部逻辑移到这里)
@@ -1932,19 +1929,11 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.winForm_Status = true;
             VariableDictionary.entityRotateAngle = 0;
             VariableDictionary.btnFileName = "JZTJ_排水沟";
-            //VariableDictionary.buttonText = "JZTJ_排水沟";
-            //VariableDictionary.btnFileName_blockName = "$TWTSYS$00000508";
-            //VariableDictionary.btnBlockLayer = "TJ(建筑专业J)";
-            //VariableDictionary.layerColorIndex = 30;//设置为被插入的图层颜色
+             VariableDictionary.buttonText = "JZTJ_排水沟";
             VariableDictionary.dimString_JZ_宽 = Convert.ToDouble(textBox_排水沟_宽.Text);
             VariableDictionary.dimString_JZ_深 = Convert.ToDouble(textBox_排水沟_深.Text);
-            VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
-            //VariableDictionary.btnBlockLayer = VariableDictionary.btnFileName;
-            //VariableDictionary.resourcesFile = Resources.PTJ_消火栓;
-            //Env.Document.SendStringToExecute("Rec2PolyLine_3 ", false, false, false);
             var command = UnifiedCommandManager.GetCommand("排水沟");
             command?.Invoke();
-            VariableDictionary.winForm_Status = false;
         }
 
         public void button_JZ_房间号_Click(object sender, EventArgs e)
@@ -1954,7 +1943,6 @@ namespace GB_NewCadPlus_IV
             VariableDictionary.btnFileName = textBox_楼层号.Text + "-" + textBox_洁净区1_2.Text + textBox_系统分区.Text + textBox_房间号副号.Text;
             VariableDictionary.btnBlockLayer = "TJ(房间编号)";//设置为被插入的图层名
             VariableDictionary.layerName = "TJ(房间编号)";
-            VariableDictionary.textBoxScale = Convert.ToDouble(textBox_Scale_比例.Text);
             if (textBox_楼层号.Text == "1" && textBox_洁净区1_2.Text == "1" && textBox_系统分区.Text == "1")
             {
                 VariableDictionary.layerColorIndex = 64;

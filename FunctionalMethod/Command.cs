@@ -686,18 +686,17 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
-                //using var tr = new DBTrans();
-
+                // 如果用户指定了颜色索引且有效，则使用它；否则解析默认颜色。
                 short textColor = layerColorIndex > 0 ? Convert.ToInt16(layerColorIndex) : LayerControlHelper.ResolveLayerColor();
+                // 确保目标图层存在，并获取图层名称。
                 string targetLayer = LayerControlHelper.GetOrCreateTargetLayer(
-                    tr,
-                    VariableDictionary.layerName ?? VariableDictionary.btnBlockLayer,
-                    textColor);
-
+                    tr, VariableDictionary.layerName ?? VariableDictionary.btnBlockLayer,textColor);
+                // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
                 string content = BuildContextualDimText(dimString, dimString2, jztjUseMeter: false, includeDeviceCode: true);
-
+                // 用户指定标注第一点，并转换到 UCS 坐标系，准备创建标注。
                 var userPoint1 = Env.Editor.GetPoint("\n请指定标注第一点");
                 if (userPoint1.Status != PromptStatus.OK) return;
+                // 将用户指定的点从 WCS 转换到 UCS，并将 Z 坐标设置为 20，以确保标注在正确的高度显示，避免与其他对象重叠。
                 var ucsUserPoint1 = userPoint1.Value.Wcs2Ucs().Z20();
 
                 double uiScale = AutoCadHelper.GetScale(true); // 读取当前界面比例
@@ -721,7 +720,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     return;
                 }
 
-                //tr.Commit();
+                //刷新页面
                 Env.Editor.Redraw();
                 VariableDictionary.dimString = null;
             }
@@ -4422,7 +4421,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 var layerName = VariableDictionary.btnBlockLayer;
-                var textBoxScale = VariableDictionary.textBoxScale == null ? VariableDictionary.textBoxScale : 1;
+                var textBoxScale = AutoCadHelper.GetScale();
                 // 计算矢量差（拖动时基于参考点的偏移量）  
                 var delta = new Vector3d(0, 0, 0);
                 Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 0); // 设置图层颜色索引
