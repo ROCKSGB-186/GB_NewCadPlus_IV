@@ -58,18 +58,18 @@ namespace GB_NewCadPlus_IV.Helpers
             {
                 // 绝对防御：如果 localPath 是一个现有文件夹，先删除
                 EnsureIsNotDirectory(localPath);
-
+                // 构建 URL 并下载
                 string url = BuildDownloadUrl(storageId, type);
-                var response = await _httpClient.GetAsync(url);
-                response.EnsureSuccessStatusCode();
-
+                var response = await _httpClient.GetAsync(url); // 可能抛出异常（网络问题、超时等）
+                response.EnsureSuccessStatusCode(); // 如果服务器返回错误状态码，会抛出异常
+                // 确保本地目录存在
                 string? dir = Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
-
+                // 将响应流写入本地文件
                 using var stream = await response.Content.ReadAsStreamAsync();
-                using var fileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                await stream.CopyToAsync(fileStream);
+                using var fileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None);// 可能抛出异常（磁盘问题、权限问题等）
+                await stream.CopyToAsync(fileStream);// 可能抛出异常
                 return true;
             }
             catch (Exception ex)
@@ -132,8 +132,8 @@ namespace GB_NewCadPlus_IV.Helpers
         public static async Task<string?> EnsureDwgCacheAsync(FileStorage fileStorage, string dwgCacheDir)
         {
             if (fileStorage == null) return null;
-            
-            // 2. 基于 FileHash 的最终路径
+
+            // 2. 基于 FileHash 的最终路径（与预览逻辑一致）
             string finalPath = BuildCacheFilePath(fileStorage, dwgCacheDir, "", ".dwg");
 
             // 3. 如果本地已有有效文件，直接返回（不下载）
@@ -142,6 +142,34 @@ namespace GB_NewCadPlus_IV.Helpers
                 LogManager.Instance.LogInfo($"[DWG] 使用已有缓存: {finalPath},文件名: {fileStorage.FileName}");
                 return finalPath;
             }
+
+            // 4. 本地不存在时，尝试从服务器下载 DWG（与 EnsurePreviewCacheAsync 的实现风格一致）
+            try
+            {
+                EnsureIsNotDirectory(finalPath); // 防止同名目录影响写入
+                if (File.Exists(finalPath)) File.Delete(finalPath);
+
+                string tempPath = finalPath + ".tmp"; // 临时文件，下载成功后再替换为最终文件
+
+                bool ok = await DownloadFileToLocalAsync(fileStorage.Id, "file", tempPath);
+                if (ok && File.Exists(tempPath) && new FileInfo(tempPath).Length > 0)
+                {
+                    // 原子替换到最终路径（内部会处理已存在目录/文件问题）
+                    SafeReplaceFile(tempPath, finalPath);
+                    LogManager.Instance.LogInfo($"[DWG] 已下载并缓存: {finalPath}, 文件名: {fileStorage.FileName}");
+                    return finalPath;
+                }
+                else
+                {
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"[ServerFileService] 下载 DWG 失败 (ID={fileStorage?.Id}): {ex.Message}");
+                try { if (File.Exists(finalPath)) File.Delete(finalPath); } catch { }
+            }
+
             return null;
         }
 

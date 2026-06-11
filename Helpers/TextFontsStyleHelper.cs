@@ -214,7 +214,7 @@ namespace GB_NewCadPlus_IV.Helpers
             try
             {
                 if (dbText == null) return;
-                EnsureTitleTextStyle(tr);
+                EnsureTitleTextStyle(tr);// 确保样式存在
                 dbText.TextStyleId = tr.TextStyleTable["_TitleStyle"];
                 dbText.WidthFactor = 0.75;
                 // 根据比例设置字高：基准 3.5 -> 按分母计算（1:100 => 350）

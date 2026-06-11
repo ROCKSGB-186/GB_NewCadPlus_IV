@@ -455,5 +455,130 @@ namespace GB_NewCadPlus_IV.Helpers
             { "SafetyValveModel", "安全阀型号" },
             { "FlexibleJointModel", "柔性接头型号" },
         };
+
+        // 常用字段的优先级映射（数值越小越靠前显示）
+        private static readonly Dictionary<string, int> _priorityOverrides = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            // 常用设备表列优先级定义（越小越靠前）
+            { "名称", 10 }, // 名称第一
+            { "设备名称", 10 }, // 设备名称同等优先
+            { "规格", 20 }, // 规格靠前
+            { "规格型号", 20 }, // 规格型号同等
+            { "材料", 30 }, // 材料靠前
+            { "材质", 30 }, // 材质同义词
+            { "数量", 40 }, // 数量靠前
+            { "数", 40 }, // 简写保护
+            { "图号或标准号", 50 }, // 图号/标准号靠前
+            { "图号", 50 }, // 图号同义
+            { "标准号", 50 }, // 标准号同义
+            { "DWG.No./STD.No.", 50 }, // 英文样式
+            { "管段号", 60 }, // 管段号
+            { "管道标题", 60 }, // 管道标题
+            { "介质", 70 }, // 介质
+            { "介质名称", 70 }, // 介质名称
+            { "起点", 80 }, // 起点/终点靠后
+            { "终点", 80 }, // 终点
+            { "长度", 90 }, // 长度类字段靠后
+            { "Length", 90 } // 英文长度
+        }; // end _priorityOverrides
+
+        // 常用字段的显示别名映射（对输入键做友好显示）
+        private static readonly Dictionary<string, string> _displayAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "名称", "名称" }, // 原样显示
+            { "设备名称", "名称" }, // 设备名称显示为“名称”
+            { "规格", "规格" }, // 规格
+            { "规格型号", "规格" }, // 规格型号显示为“规格”
+            { "材料", "材料" }, // 材料
+            { "材质", "材料" }, // 材质别名也显示为“材料”
+            { "数量", "数量" }, // 数量
+            { "图号或标准号", "图号或标准号" }, // 图号或标准号
+            { "图号", "图号或标准号" }, // 图号映射到“图号或标准号”
+            { "标准号", "图号或标准号" }, // 标准号映射到“图号或标准号”
+            { "DWG.No./STD.No.", "图号或标准号" }, // 英文映射
+            { "管段号", "管段号" }, // 管段号
+            { "管道标题", "管道标题" }, // 管道标题
+            { "介质", "介质" }, // 介质
+            { "介质名称", "介质" }, // 介质名称
+            { "起点", "起点" }, // 起点
+            { "终点", "终点" }, // 终点
+            { "长度", "长度" }, // 长度
+            { "Length", "长度" } // 英文长度显示为“长度”
+        }; // end _displayAliases
+
+        /// <summary>
+        /// 获取管道属性的排序优先级（数值越小越靠前）
+        /// </summary>
+        /// <param name="key">属性键名（可能为中文或英文）</param>
+        /// <returns>返回一个整数优先级，默认较大的值表示靠后</returns>
+        public static int GetPipeAttributeSortPriority(string key)
+        {
+            // 防御性检查：空键给出最大优先级（靠后显示）
+            if (string.IsNullOrWhiteSpace(key)) return int.MaxValue / 2;
+
+            // 标准化键：去前后空白并小写以便匹配
+            string k = key.Trim(); // 保留原字符串但去空白
+
+            // 1）精确匹配优先级字典
+            if (_priorityOverrides.TryGetValue(k, out int pExact))
+            {
+                return pExact; // 命中直接返回预定义的优先级
+            }
+
+            // 2）宽松包含匹配（支持“材质/材料”、“图号/标准”等多种写法）
+            string lower = k.ToLowerInvariant(); // 小写用于包含判断
+            if (lower.Contains("名称") || lower.Contains("name") || lower.Contains("tag")) return 10; // 名称类靠前
+            if (lower.Contains("规格") || lower.Contains("型号") || lower.Contains("spec")) return 20; // 规格类
+            if (lower.Contains("材质") || lower.Contains("材料") || lower.Contains("material")) return 30; // 材料类
+            if (lower.Contains("数") && !lower.Contains("标准")) return 40; // 数量类（排除“标准”包含“数”的特殊）
+            if (lower.Contains("图号") || lower.Contains("标准") || lower.Contains("dwg") || lower.Contains("std")) return 50; // 图号/标准
+            if (lower.Contains("管段") || lower.Contains("pipe") || lower.Contains("pipeline")) return 60; // 管段/管道号类
+            if (lower.Contains("介质")) return 70; // 介质
+            if (lower.Contains("起点") || lower.Contains("终点") || lower.Contains("from") || lower.Contains("to")) return 80; // 起终点
+            if (lower.Contains("长") || lower.Contains("长度") || lower.Contains("length")) return 90; // 长度类
+
+            // 3）兜底：未识别的字段给一个稳定且靠后的优先级（以长度与首字符保证稳定性）
+            int basePriority = 500; // 基础靠后数值
+            int stableOffset = (k.Length % 100); // 长度作为偏移，保证排序稳定但可分散
+            return basePriority + stableOffset; // 返回稳定的默认优先级
+        } // end GetPipeAttributeSortPriority
+
+        /// <summary>
+        /// 获取属性在界面中显示的别名（若有映射则返回映射值，否则返回原键或简化后的显示）
+        /// </summary>
+        /// <param name="key">原始属性键</param>
+        /// <returns>返回用于界面显示的友好名称</returns>
+        public static string GetPipeAttributeDisplayAlias(string key)
+        {
+            // 防御性检查：空键直接返回空字符串
+            if (string.IsNullOrWhiteSpace(key)) return string.Empty;
+
+            // 去除多余空白
+            string k = key.Trim();
+
+            // 1）优先精确映射
+            if (_displayAliases.TryGetValue(k, out string aliasExact))
+            {
+                return aliasExact; // 命中直接返回别名
+            }
+
+            // 2）宽松包含匹配，兼容各种写法
+            string lower = k.ToLowerInvariant();
+            if (lower.Contains("名称") || lower.Contains("name") || lower.Contains("tag")) return "名称";
+            if (lower.Contains("规格") || lower.Contains("型号") || lower.Contains("spec")) return "规格";
+            if (lower.Contains("材质") || lower.Contains("材料") || lower.Contains("material")) return "材料";
+            if (lower.Contains("数量") || lower == "qty" || lower == "qun" || lower.Contains("数")) return "数量";
+            if (lower.Contains("图号") || lower.Contains("标准") || lower.Contains("dwg") || lower.Contains("std")) return "图号或标准号";
+            if (lower.Contains("管段") || lower.Contains("pipe") || lower.Contains("pipeline")) return "管段号";
+            if (lower.Contains("介质")) return "介质";
+            if (lower.Contains("起点") || lower.Contains("from")) return "起点";
+            if (lower.Contains("终点") || lower.Contains("to")) return "终点";
+            if (lower.Contains("长度") || lower.Contains("length")) return "长度";
+
+            // 3）兜底：如键含英文可尝试做大小写友好化，否则原样返回（尽量保持原键以免丢信息）
+            //    如果键包含下划线或点，替换为空格以便显示更友好
+            string normalized = k.Replace('_', ' ').Replace('.', ' ').Trim();
+            return normalized; // 返回处理后的原始键作为显示名称
+        } // end GetPipeAttributeDisplayAlias
     }
 }
