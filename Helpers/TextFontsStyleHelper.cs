@@ -91,7 +91,7 @@ namespace GB_NewCadPlus_IV.Helpers
             }
             else
             {
-                /// 更新已有的 _FontsStyle
+                // 更新已有的 _FontsStyle
                 tr.TextStyleTable.Change("_FontsStyle", ttr =>
                 {
                     ttr.FileName = "gbenor.shx";
