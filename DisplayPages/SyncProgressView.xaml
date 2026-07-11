@@ -105,7 +105,7 @@
                 IsIndeterminate="{Binding IsProgressIndeterminate}"
                 Maximum="100"
                 Minimum="0"
-                Value="{Binding ProgressValue}" />
+                Value="{Binding ProgressValue, Mode=OneWay}" />
 
             <TextBlock
                 Grid.Column="1"
@@ -163,7 +163,7 @@
                         Foreground="#FF444444"
                         HorizontalScrollBarVisibility="Disabled"
                         IsReadOnly="True"
-                        Text="{Binding DetailsText}"
+                        Text="{Binding DetailsText, Mode=OneWay}"
                         TextWrapping="Wrap"
                         VerticalScrollBarVisibility="Auto" />
                 </Border>

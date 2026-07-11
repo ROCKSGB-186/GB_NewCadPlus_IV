@@ -2,7 +2,7 @@
   "profiles": {
     "GB_NewCadPlus_IV": {
       "commandName": "Executable",
-      "executablePath": "D:\\Program Files\\Autodesk\\AutoCAD 2021\\acad.exe",
+      "executablePath": "C:\\Program Files\\Autodesk\\AutoCAD 2024\\acad.exe",
       "commandLineArgs": "/nologo",
       "nativeDebugging": false
     }

@@ -55,8 +55,8 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         #endregion
 
         #region 建筑专业
-        { "吊顶", () => ExecuteBuildingCommand("TextBox_吊顶高度", "JZTJ_吊顶", "TJ(建筑吊顶)", 30) },
-        { "不吊顶", () => ExecuteBuildingCommand("不吊顶", "JZTJ_不吊顶", "TJ(建筑吊顶)", 30) },
+        { "吊顶", () => ExecuteBuildingCommand("TextBox_吊顶高度", "吊顶", "TJ(建筑吊顶_排水沟)", 30) },
+        { "不吊顶", () => ExecuteBuildingCommand("不吊顶", "不吊顶", "TJ(建筑吊顶_排水沟)", 30) },
         { "防撞护板", () => ExecuteBuildingCommand("TextBox_防撞护板", "JZTJ_防撞护板", "TJ(建筑专业J)", 30) },
         { "房间编号", () => ExecuteRoomNumberCommand() },
         { "编号检查", () => ExecuteBuildingCommand("编号检查", "JZTJ_编号检查", "TJ(建筑专业J)", 30) },
@@ -156,8 +156,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             try
             {
                 VariableDictionary.entityRotateAngle = 0.0;
-                //var resourcesFile = VariableDictionary.resourcesFile;
-                //VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
                 // 根据图元类型和方向设置角度
                 if (VariableDictionary.btnFileName != null && VariableDictionary.btnFileName.Contains("摄像机"))
                 {
@@ -173,7 +171,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 // 立即广播方向变化，通知可能存在的 Jig 进行实时预览旋转
                 try
                 {
-                    // Command.NotifyDirectionChanged 会同步 VariableDictionary 并触发事件
                     Command.NotifyDirectionChanged(VariableDictionary.entityRotateAngle);
                 }
                 catch (Exception evEx)
@@ -237,19 +234,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             /// </summary>
             public static double GetAdjustedAngleForDirection(string direction, bool isCamera = false)
             {
-                //switch (direction)
-                //{
-                //    case "上": return Math.PI * 0;
-                //    case "右上": return Math.PI * 1.75;
-                //    case "右": return Math.PI * 1.5;
-                //    case "右下": return Math.PI * 1.25;
-                //    case "下": return Math.PI * 1;
-                //    case "左下": return Math.PI * 0.75;
-                //    case "左": return Math.PI * 0.5;
-                //    case "左上": return Math.PI * 0.25;
-                //    default: return 0;
-                //}
-
                 if (isCamera)
                 {
                     // 摄像机的特殊角度处理
@@ -280,7 +264,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         case "左上": return Math.PI * 0.25;
                         default: return 0;
                     }
-                    //return GetAngleForDirection(direction);
                 }
             }
         }
@@ -363,6 +346,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 VariableDictionary.btnFileName = fileName;
                 VariableDictionary.btnBlockLayer = layerName;
                 VariableDictionary.layerColorIndex = colorIndex;
+                VariableDictionary.layerName= layerName;
                 //VariableDictionary.winFormDiaoDingHeight = textBox_吊顶高文字.Text;
 
                 if (commandName == "TextBox_吊顶高度" || commandName == "不吊顶")
@@ -372,7 +356,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         VariableDictionary.wpfDiaoDingHeight = UnifiedUIManager.GetTextBoxValue(commandName);
                     }
 
-                    Env.Document.SendStringToExecute("Line2Polyline ", false, false, false);
+                    Env.Document.SendStringToExecute("DiaoDingPolyline ", false, false, false);
                 }
                 else if (commandName == "TextBox_防撞护板")
                 {
@@ -486,10 +470,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 VariableDictionary.btnFileName = "JZTJ_排水沟";
                 VariableDictionary.buttonText = "JZTJ_排水沟";
                 //VariableDictionary.btnFileName_blockName = "$TWTSYS$00000508";
-                VariableDictionary.btnBlockLayer = "TJ(建筑专业J)";
+                VariableDictionary.btnBlockLayer = "TJ(建筑吊顶_排水沟)";
                 VariableDictionary.layerColorIndex = 30;//设置为被插入的图层颜色
                 VariableDictionary.layerName = VariableDictionary.btnBlockLayer;
-                Env.Document.SendStringToExecute("Rec2PolyLine_3 ", false, false, false);
+                Env.Document.SendStringToExecute("ARCH_PolyLineREC_3 ", false, false, false);
             }
             catch (Exception ex)
             {

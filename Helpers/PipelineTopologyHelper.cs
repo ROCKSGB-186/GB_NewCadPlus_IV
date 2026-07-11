@@ -456,28 +456,28 @@ namespace GB_NewCadPlus_IV.Helpers // 命名空间与原文件保持一致 // �
 
             try
             {
-                // 遍历当前空间实体 // 中文注释
+                // 遍历当前空间实体 
                 foreach (ObjectId id in tr.CurrentSpace)
                 {
-                    // 跳过空ID // 中文注释
+                    // 跳过空ID 
                     if (id == ObjectId.Null) continue;
-                    // 跳过自身 // 中文注释
+                    // 跳过自身 
                     if (id == selfId) continue;
 
-                    // 先尝试读取为实体 // 中文注释
+                    // 先尝试读取为实体 
                     var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    // 非实体跳过 // 中文注释
+                    // 非实体跳过 
                     if (ent == null) continue;
-                    // 已删除跳过 // 中文注释
+                    // 已删除跳过 
                     if (ent.IsErased) continue;
-                    // 只处理块参照（你的管线对象模型） // 中文注释
+                    // 只处理块参照（你的管线对象模型） 
                     if (!(ent is BlockReference)) continue;
 
-                    // 尝试获取候选轴线 // 中文注释
+                    // 尝试获取候选轴线 
                     if (!TryGetPipeAxisAndMeta(tr, id, out Point3d bStart, out Point3d bEnd, out Dictionary<string, string> _))
                         continue;
 
-                    // 计算候选轴线包围盒 // 中文注释
+                    // 计算候选轴线包围盒 
                     double bMinX = Math.Min(bStart.X, bEnd.X);
                     double bMinY = Math.Min(bStart.Y, bEnd.Y);
                     double bMinZ = Math.Min(bStart.Z, bEnd.Z);
@@ -485,138 +485,138 @@ namespace GB_NewCadPlus_IV.Helpers // 命名空间与原文件保持一致 // �
                     double bMaxY = Math.Max(bStart.Y, bEnd.Y);
                     double bMaxZ = Math.Max(bStart.Z, bEnd.Z);
 
-                    // 粗筛：包围盒相交才入候选 // 中文注释
+                    // 粗筛：包围盒相交才入候选 
                     if (!IntersectsAabb(minX, minY, minZ, maxX, maxY, maxZ, bMinX, bMinY, bMinZ, bMaxX, bMaxY, bMaxZ))
                         continue;
 
-                    // 加入候选 // 中文注释
+                    // 加入候选 
                     result.Add(id);
                 }
             }
             catch (Exception ex)
             {
-                // 出错时记录日志并返回已有结果 // 中文注释
+                // 出错时记录日志并返回已有结果
                 LogManager.Instance.LogInfo($"\nFindNearbyPipes 执行异常: {ex.Message}");
             }
 
-            // 返回候选列表 // 中文注释
+            // 返回候选列表
             return result;
         }
 
-        // 判定“端点接触 + 近似共线 + 业务可并” // 中文注释
+        // 判定“端点接触 + 近似共线 + 业务可并” 
         private static bool CanMergeAtEndpoint(Point3d a1, Point3d a2, Point3d b1, Point3d b2, Dictionary<string, string> ma, Dictionary<string, string> mb)
         {
-            // ========================= 基础容差参数（第一批先写死，后续可迁移到 AutoCadHelper） ========================= // 中文注释
-            double endpointTol = 20; // 端点接触容差：两端点距离小于等于该值视为“接触” // 中文注释
-            double angleTolDeg = 1.0; // 共线角度容差（度）：允许 1 度以内偏差 // 中文注释
-            double angleTolRad = angleTolDeg * Math.PI / 180.0; // 把角度容差从度转换为弧度 // 中文注释
-            double cosTol = Math.Cos(angleTolRad); // 角度阈值转为点积阈值，便于快速判断方向夹角 // 中文注释
+            // ========================= 基础容差参数（第一批先写死，后续可迁移到 AutoCadHelper） =========================
+            double endpointTol = 20; // 端点接触容差：两端点距离小于等于该值视为“接触”
+            double angleTolDeg = 1.0; // 共线角度容差（度）：允许 1 度以内偏差
+            double angleTolRad = angleTolDeg * Math.PI / 180.0; // 把角度容差从度转换为弧度 
+            double cosTol = Math.Cos(angleTolRad); // 角度阈值转为点积阈值，便于快速判断方向夹角
 
-            // ========================= 防御性处理：空字典兜底，避免空引用 ========================= // 中文注释
-            ma ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // 若 ma 为空则补一个空字典 // 中文注释
-            mb ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // 若 mb 为空则补一个空字典 // 中文注释
+            // ========================= 防御性处理：空字典兜底，避免空引用 ========================= 
+            ma ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // 若 ma 为空则补一个空字典
+            mb ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // 若 mb 为空则补一个空字典 
 
-            // ========================= 第一步：轴线有效性判断（避免零长度线段参与计算） ========================= // 中文注释
-            if (a1.DistanceTo(a2) <= 1e-8) return false; // A 管线起终点重合，判定无效不可并 // 中文注释
-            if (b1.DistanceTo(b2) <= 1e-8) return false; // B 管线起终点重合，判定无效不可并 // 中文注释
+            // ========================= 第一步：轴线有效性判断（避免零长度线段参与计算） ========================= 
+            if (a1.DistanceTo(a2) <= 1e-8) return false; // A 管线起终点重合，判定无效不可并 
+            if (b1.DistanceTo(b2) <= 1e-8) return false; // B 管线起终点重合，判定无效不可并
 
-            // ========================= 第二步：端点接触判断（至少有一组端点需要贴合） ========================= // 中文注释
-            double d11 = a1.DistanceTo(b1); // A起点 到 B起点 的距离 // 中文注释
-            double d12 = a1.DistanceTo(b2); // A起点 到 B终点 的距离 // 中文注释
-            double d21 = a2.DistanceTo(b1); // A终点 到 B起点 的距离 // 中文注释
-            double d22 = a2.DistanceTo(b2); // A终点 到 B终点 的距离 // 中文注释
-            double minEndpointDist = Math.Min(Math.Min(d11, d12), Math.Min(d21, d22)); // 取四组端点距离中的最小值 // 中文注释
-            if (minEndpointDist > endpointTol) return false; // 最小端点距离超容差，说明不是端点相接，不能并线 // 中文注释
+            // ========================= 第二步：端点接触判断（至少有一组端点需要贴合） ========================= 
+            double d11 = a1.DistanceTo(b1); // A起点 到 B起点 的距离 
+            double d12 = a1.DistanceTo(b2); // A起点 到 B终点 的距离 
+            double d21 = a2.DistanceTo(b1); // A终点 到 B起点 的距离 
+            double d22 = a2.DistanceTo(b2); // A终点 到 B终点 的距离 
+            double minEndpointDist = Math.Min(Math.Min(d11, d12), Math.Min(d21, d22)); // 取四组端点距离中的最小值 
+            if (minEndpointDist > endpointTol) return false; // 最小端点距离超容差，说明不是端点相接，不能并线 
 
-            // ========================= 第三步：近似共线判断（方向要平行或反向平行） ========================= // 中文注释
-            Vector3d va = (a2 - a1).GetNormal(); // 计算 A 管线方向单位向量 // 中文注释
-            Vector3d vb = (b2 - b1).GetNormal(); // 计算 B 管线方向单位向量 // 中文注释
-            double absDot = Math.Abs(va.DotProduct(vb)); // 方向点积绝对值，越接近 1 越平行 // 中文注释
-            if (absDot < cosTol) return false; // 小于阈值说明夹角过大，不满足近似共线 // 中文注释
+            // ========================= 第三步：近似共线判断（方向要平行或反向平行） ========================= 
+            Vector3d va = (a2 - a1).GetNormal(); // 计算 A 管线方向单位向量 
+            Vector3d vb = (b2 - b1).GetNormal(); // 计算 B 管线方向单位向量 
+            double absDot = Math.Abs(va.DotProduct(vb)); // 方向点积绝对值，越接近 1 越平行
+            if (absDot < cosTol) return false; // 小于阈值说明夹角过大，不满足近似共线 
 
-            // ========================= 第四步：业务规则兼容判断（角色/图层/关键属性） ========================= // 中文注释
+            // ========================= 第四步：业务规则兼容判断（角色/图层/关键属性） ========================= 
 
-            // 本地函数：按“候选键名列表”读取第一个非空值（兼容 ATT: 前缀和无前缀） // 中文注释
+            // 本地函数：按“候选键名列表”读取第一个非空值（兼容 ATT: 前缀和无前缀）
             string GetFirstMeta(Dictionary<string, string> map, params string[] keys)
             {
-                // 遍历所有候选键名 // 中文注释
+                // 遍历所有候选键名 
                 foreach (string key in keys)
                 {
-                    // 字典中存在该键才继续 // 中文注释
+                    // 字典中存在该键才继续 
                     if (!map.TryGetValue(key, out string v)) continue;
-                    // 去掉首尾空白后再判空 // 中文注释
+                    // 去掉首尾空白后再判空
                     string s = (v ?? string.Empty).Trim();
-                    // 非空即返回 // 中文注释
+                    // 非空即返回 
                     if (!string.IsNullOrWhiteSpace(s)) return s;
                 }
-                // 所有候选都没值则返回空串 // 中文注释
+                // 所有候选都没值则返回空串
                 return string.Empty;
             }
 
-            // 本地函数：如果双方都给了值则必须相等；只要有一方没给值就放行（第一批策略） // 中文注释
+            // 本地函数：如果双方都给了值则必须相等；只要有一方没给值就放行（第一批策略）
             bool IsCompatible(string v1, string v2)
             {
-                // 一方缺失信息时先放行，避免首版过严导致无法并线 // 中文注释
+                // 一方缺失信息时先放行，避免首版过严导致无法并线
                 if (string.IsNullOrWhiteSpace(v1) || string.IsNullOrWhiteSpace(v2)) return true;
-                // 双方都有值时必须完全一致（忽略大小写） // 中文注释
+                // 双方都有值时必须完全一致（忽略大小写） 
                 return string.Equals(v1.Trim(), v2.Trim(), StringComparison.OrdinalIgnoreCase);
             }
 
-            // 读取角色（进口/出口） // 中文注释
-            string roleA = GetFirstMeta(ma, "PipeRole", "ATT:PipeRole", "角色", "ATT:角色"); // 从 A 元数据读取角色 // 中文注释
-            string roleB = GetFirstMeta(mb, "PipeRole", "ATT:PipeRole", "角色", "ATT:角色"); // 从 B 元数据读取角色 // 中文注释
-            if (!IsCompatible(roleA, roleB)) return false; // 双方角色同时存在且不一致，则不允许并线 // 中文注释
+            // 读取角色（进口/出口） 
+            string roleA = GetFirstMeta(ma, "PipeRole", "ATT:PipeRole", "角色", "ATT:角色"); // 从 A 元数据读取角色 
+            string roleB = GetFirstMeta(mb, "PipeRole", "ATT:PipeRole", "角色", "ATT:角色"); // 从 B 元数据读取角色 
+            if (!IsCompatible(roleA, roleB)) return false; // 双方角色同时存在且不一致，则不允许并线  
 
-            // 读取图层（可选约束：双方都有图层时要求一致） // 中文注释
-            string layerA = GetFirstMeta(ma, "Layer"); // 读取 A 图层 // 中文注释
-            string layerB = GetFirstMeta(mb, "Layer"); // 读取 B 图层 // 中文注释
-            if (!IsCompatible(layerA, layerB)) return false; // 双方图层同时存在且不一致，则不允许并线 // 中文注释
+            // 读取图层（可选约束：双方都有图层时要求一致）
+            string layerA = GetFirstMeta(ma, "Layer"); // 读取 A 图层 
+            string layerB = GetFirstMeta(mb, "Layer"); // 读取 B 图层 
+            if (!IsCompatible(layerA, layerB)) return false; // 双方图层同时存在且不一致，则不允许并线
 
-            // 读取关键业务属性：系统 // 中文注释
-            string sysA = GetFirstMeta(ma, "PipeSystem", "ATT:PipeSystem", "系统", "ATT:系统"); // 读取 A 系统字段 // 中文注释
-            string sysB = GetFirstMeta(mb, "PipeSystem", "ATT:PipeSystem", "系统", "ATT:系统"); // 读取 B 系统字段 // 中文注释
-            if (!IsCompatible(sysA, sysB)) return false; // 系统冲突则不允许并线 // 中文注释
+            // 读取关键业务属性：系统  
+            string sysA = GetFirstMeta(ma, "PipeSystem", "ATT:PipeSystem", "系统", "ATT:系统"); // 读取 A 系统字段  
+            string sysB = GetFirstMeta(mb, "PipeSystem", "ATT:PipeSystem", "系统", "ATT:系统"); // 读取 B 系统字段  
+            if (!IsCompatible(sysA, sysB)) return false; // 系统冲突则不允许并线  
 
-            // 读取关键业务属性：规格 // 中文注释
-            string specA = GetFirstMeta(ma, "Spec", "ATT:Spec", "规格", "ATT:规格"); // 读取 A 规格字段 // 中文注释
-            string specB = GetFirstMeta(mb, "Spec", "ATT:Spec", "规格", "ATT:规格"); // 读取 B 规格字段 // 中文注释
-            if (!IsCompatible(specA, specB)) return false; // 规格冲突则不允许并线 // 中文注释
+            // 读取关键业务属性：规格  
+            string specA = GetFirstMeta(ma, "Spec", "ATT:Spec", "规格", "ATT:规格"); // 读取 A 规格字段 
+            string specB = GetFirstMeta(mb, "Spec", "ATT:Spec", "规格", "ATT:规格"); // 读取 B 规格字段 
+            if (!IsCompatible(specA, specB)) return false; // 规格冲突则不允许并线  
 
-            // 读取关键业务属性：管径 // 中文注释
-            string dnA = GetFirstMeta(ma, "DN", "ATT:DN", "管径", "ATT:管径"); // 读取 A 管径字段 // 中文注释
-            string dnB = GetFirstMeta(mb, "DN", "ATT:DN", "管径", "ATT:管径"); // 读取 B 管径字段 // 中文注释
-            if (!IsCompatible(dnA, dnB)) return false; // 管径冲突则不允许并线 // 中文注释
+            // 读取关键业务属性：管径 
+            string dnA = GetFirstMeta(ma, "DN", "ATT:DN", "管径", "ATT:管径"); // 读取 A 管径字段  
+            string dnB = GetFirstMeta(mb, "DN", "ATT:DN", "管径", "ATT:管径"); // 读取 B 管径字段  
+            if (!IsCompatible(dnA, dnB)) return false; // 管径冲突则不允许并线  
 
-            // ========================= 所有检查通过，允许端点并线 ========================= // 中文注释
-            return true; // 返回 true 表示满足“端点接触 + 近似共线 + 业务可并” // 中文注释
-        }
-
-        // 执行并线：重算一条块的参数（基于 keep 块定义内主 Polyline 重写首末点），删除另一条 // 中文注释
+            // ========================= 所有检查通过，允许端点并线 =========================  
+            return true; // 返回 true 表示满足“端点接触 + 近似共线 + 业务可并”    
+        }                                                                                      
+                                                                                               
+        // 执行并线：重算一条块的参数（基于 keep 块定义内主 Polyline 重写首末点），删除另一条  
         private static bool TryMergePipes(DBTrans tr, ObjectId keepId, ObjectId eraseId, Point3d mergedStart, Point3d mergedEnd)
         {
-            // 判空保护 // 中文注释
+            // 判空保护 
             if (tr == null) return false;
-            // ID 判空保护 // 中文注释
+            // ID 判空保护  
             if (keepId == ObjectId.Null || eraseId == ObjectId.Null) return false;
-            // 自己和自己合并无意义 // 中文注释
+            // 自己和自己合并无意义  
             if (keepId == eraseId) return false;
 
             try
             {
-                // 打开保留对象（可写） // 中文注释
+                // 打开保留对象（可写） 
                 var keepBr = tr.GetObject(keepId, OpenMode.ForWrite) as BlockReference;
-                // 打开删除对象（可写） // 中文注释
+                // 打开删除对象（可写） 
                 var eraseEnt = tr.GetObject(eraseId, OpenMode.ForWrite) as Entity;
 
-                // 基础有效性检查 // 中文注释
+                // 基础有效性检查  
                 if (keepBr == null || eraseEnt == null) return false;
                 if (keepBr.IsErased || eraseEnt.IsErased) return false;
 
-                // 打开 keep 的块定义（可写） // 中文注释
+                // 打开 keep 的块定义（可写）  
                 var keepBtr = tr.GetObject(keepBr.BlockTableRecord, OpenMode.ForWrite) as BlockTableRecord;
                 if (keepBtr == null) return false;
 
-                // 保护：若该块定义被多个参照共享，直接返回 false，避免影响其它管线 // 中文注释
+                // 保护：若该块定义被多个参照共享，直接返回 false，避免影响其它管线 
                 try
                 {
                     var refs = keepBtr.GetBlockReferenceIds(true, false);
@@ -628,10 +628,10 @@ namespace GB_NewCadPlus_IV.Helpers // 命名空间与原文件保持一致 // �
                 }
                 catch
                 {
-                    // 忽略引用计数异常，继续尝试 // 中文注释
+                    // 忽略引用计数异常，继续尝试 
                 }
 
-                // 在 keep 块定义中找“主体 Polyline”（长度最大） // 中文注释
+                // 在 keep 块定义中找“主体 Polyline”（长度最大） 
                 Polyline bodyPl = null;
                 double maxLen = -1.0;
 
@@ -650,81 +650,86 @@ namespace GB_NewCadPlus_IV.Helpers // 命名空间与原文件保持一致 // �
                     }
                 }
 
-                // 没找到主体线则失败 // 中文注释
+                // 没找到主体线则失败 
                 if (bodyPl == null) return false;
 
-                // 把世界坐标的合并端点转换到 keep 块局部坐标 // 中文注释
+                // 把世界坐标的合并端点转换到 keep 块局部坐标 
                 Matrix3d inv = keepBr.BlockTransform.Inverse();
                 Point3d localStart = inv * mergedStart;
                 Point3d localEnd = inv * mergedEnd;
 
-                // 打开主体 Polyline 为可写 // 中文注释
+                // 打开主体 Polyline 为可写  
                 var bodyPlWrite = tr.GetObject(bodyPl.ObjectId, OpenMode.ForWrite) as Polyline;
                 if (bodyPlWrite == null) return false;
 
-                // 清空原有顶点 // 中文注释
+                // 清空原有顶点 
                 while (bodyPlWrite.NumberOfVertices > 0)
                 {
                     bodyPlWrite.RemoveVertexAt(bodyPlWrite.NumberOfVertices - 1);
                 }
 
-                // 使用两点重建为单段轴线 // 中文注释
+                // 使用两点重建为单段轴线  
                 bodyPlWrite.AddVertexAt(0, new Point2d(localStart.X, localStart.Y), 0.0, 0.0, 0.0);
                 bodyPlWrite.AddVertexAt(1, new Point2d(localEnd.X, localEnd.Y), 0.0, 0.0, 0.0);
                 bodyPlWrite.Closed = false;
 
-                // 删除被合并对象 // 中文注释
+                // 删除被合并对象  
                 eraseEnt.Erase();
 
-                // 成功 // 中文注释
+                // 成功 
                 return true;
             }
             catch (Exception ex)
             {
-                // 记录异常 // 中文注释
+                // 记录异常  
                 LogManager.Instance.LogInfo($"\nTryMergePipes 执行异常: {ex.Message}");
                 return false;
             }
         }
 
-        // 合并属性：将来源字典写入目标块（同名优先，空值不覆盖非空值） // 中文注释
+        /// <summary>
+        /// 合并属性：将来源字典写入目标块（同名优先，空值不覆盖非空值） 
+        /// </summary>
+        /// <param name="tr"> 事件</param>
+        /// <param name="targetId"> 属性块id</param>
+        /// <param name="fromMap"> 属性</param>
         private static void MergePipeProperties(DBTrans tr, ObjectId targetId, Dictionary<string, string> fromMap)
         {
-            // 判空保护 // 中文注释
+            // 判空保护 
             if (tr == null) return;
             if (targetId == ObjectId.Null) return;
             if (fromMap == null || fromMap.Count == 0) return;
 
             try
             {
-                // 打开目标实体 // 中文注释
-                var ent = tr.GetObject(targetId, OpenMode.ForWrite) as Entity;
-                if (ent == null || ent.IsErased) return;
+                // 打开目标实体  
+                var ent = tr.GetObject(targetId, OpenMode.ForWrite) as Entity; // 通过属性块的 ObjectId 获取实体对象，并设置为可写模式
+                if (ent == null || ent.IsErased) return; // 实体无效或已删除则直接返回
 
-                // 优先写块属性（AttributeReference） // 中文注释
+                // 优先写块属性（AttributeReference）  
                 if (ent is BlockReference br)
                 {
-                    foreach (ObjectId attId in br.AttributeCollection)
+                    foreach (ObjectId attId in br.AttributeCollection) // 循环遍历块参照的属性集合
                     {
-                        var ar = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
-                        if (ar == null) continue;
-
+                        var ar = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference; // 获取属性引用对象，并设置为可写模式
+                        if (ar == null) continue; // 如果属性引用对象为空，则跳过当前循环
+                        // 读取并清洗 Tag 
                         string tag = (ar.Tag ?? string.Empty).Trim();
-                        if (string.IsNullOrWhiteSpace(tag)) continue;
-
+                        if (string.IsNullOrWhiteSpace(tag)) continue; // 如果 Tag 为空，则跳过当前循环
+                        // 从来源字典中获取对应的值，如果不存在则跳过当前循环
                         if (!fromMap.TryGetValue(tag, out string srcVal)) continue;
                         srcVal = srcVal ?? string.Empty;
 
-                        // 策略：目标已有值且非空时不覆盖；目标为空时才填充 // 中文注释
+                        // 策略：目标已有值且非空时不覆盖；目标为空时才填充  
                         string cur = ar.TextString ?? string.Empty;
-                        if (string.IsNullOrWhiteSpace(cur) && !string.IsNullOrWhiteSpace(srcVal))
+                        if (string.IsNullOrWhiteSpace(cur) && !string.IsNullOrWhiteSpace(srcVal)) // 仅当当前值为空且来源值非空时才写入
                         {
-                            ar.TextString = srcVal;
+                            ar.TextString = srcVal; // 把来源值写入属性引用对象的文本字符串
                         }
                     }
                 }
 
-                // 再写扩展字典同名键（仅更新已有键，避免首版引入新键结构） // 中文注释
+                // 再写扩展字典同名键（仅更新已有键，避免首版引入新键结构） 
                 if (ent.ExtensionDictionary != ObjectId.Null)
                 {
                     var dict = tr.GetObject(ent.ExtensionDictionary, OpenMode.ForWrite) as DBDictionary;

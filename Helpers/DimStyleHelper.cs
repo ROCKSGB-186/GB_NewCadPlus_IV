@@ -28,7 +28,7 @@ namespace GB_NewCadPlus_IV.Helpers
             DBTrans tr,
             string styleName,
             short layerColorIndex,
-            double textBoxScale,
+            double winformTextBoxScale,
             ObjectId textStyleId)
         {
             if (tr == null) throw new ArgumentNullException(nameof(tr));
@@ -39,7 +39,7 @@ namespace GB_NewCadPlus_IV.Helpers
             if (string.IsNullOrEmpty(styleName))
                 throw new ArgumentException("样式名不能为空", nameof(styleName));
 
-            if (double.IsNaN(textBoxScale) || textBoxScale <= 0) textBoxScale = 1.0;
+            if (double.IsNaN(winformTextBoxScale) || winformTextBoxScale <= 0) winformTextBoxScale = 1.0;
 
             // 如果 DBTrans 指向的数据库不是当前活动文档的数据库，
             // 为避免样式写入到错误的库，改为在活动文档数据库中创建/更新样式并返回其 ObjectId。
@@ -51,7 +51,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 AutoCadHelper.LogWithSafety($"DimStyleHelper: 检测到 tr.Database != ActiveDocument.Database，改为在活动文档创建/更新样式 '{styleName}'");
 
                 // 在活动文档数据库内执行创建/更新逻辑（独立事务）
-                return EnsureOrCreateDimStyleInActiveDatabase(activeDb, styleName, layerColorIndex, textBoxScale, textStyleId);
+                return EnsureOrCreateDimStyleInActiveDatabase(activeDb, styleName, layerColorIndex, winformTextBoxScale, textStyleId);
             }
 
             // 原始路径：在传入的 tr（DBTrans）所在数据库上操作（保持原实现）
@@ -68,7 +68,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 var existRec = tr.GetObject(existId, OpenMode.ForWrite) as DimStyleTableRecord;
                 if (existRec != null)
                 {
-                    ApplyDimStyleParameters(existRec, layerColorIndex, textBoxScale, textStyleId);
+                    ApplyDimStyleParameters(existRec, layerColorIndex, winformTextBoxScale, textStyleId);
                     return existId;
                 }
             }
@@ -85,7 +85,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         var recW = tr.GetObject(id, OpenMode.ForWrite) as DimStyleTableRecord;
                         if (recW != null)
                         {
-                            ApplyDimStyleParameters(recW, layerColorIndex, textBoxScale, textStyleId);
+                            ApplyDimStyleParameters(recW, layerColorIndex, winformTextBoxScale, textStyleId);
                             AutoCadHelper.LogWithSafety($"DimStyleHelper: 找到近似样式 '{rec.Name}' 并已更新（请求名: '{styleName}'）。");
                             return id;
                         }
@@ -102,7 +102,7 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             var newRec = new DimStyleTableRecord { Name = styleName };
-            ApplyDimStyleParameters(newRec, layerColorIndex, textBoxScale, textStyleId);
+            ApplyDimStyleParameters(newRec, layerColorIndex, winformTextBoxScale, textStyleId);
 
             ObjectId newId = ObjectId.Null;
             try
@@ -124,7 +124,7 @@ namespace GB_NewCadPlus_IV.Helpers
             Database activeDb,
             string styleName,
             short layerColorIndex,
-            double textBoxScale,
+            double winformTextBoxScale,
             ObjectId textStyleId)
         {
             if (activeDb == null) return ObjectId.Null;
@@ -137,7 +137,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 styleName = styleName.Replace('\u00A0', ' ').Trim();
                 if (string.IsNullOrEmpty(styleName)) return activeDb.Dimstyle;
 
-                if (double.IsNaN(textBoxScale) || textBoxScale <= 0) textBoxScale = 1.0;
+                if (double.IsNaN(winformTextBoxScale) || winformTextBoxScale <= 0) winformTextBoxScale = 1.0;
                 if (textStyleId == ObjectId.Null) textStyleId = activeDb.Textstyle;
 
                 var dimStyleTable = t.GetObject(activeDb.DimStyleTableId, OpenMode.ForRead) as DimStyleTable;
@@ -150,7 +150,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     var existRec = t.GetObject(existId, OpenMode.ForWrite) as DimStyleTableRecord;
                     if (existRec != null)
                     {
-                        ApplyDimStyleParameters(existRec, layerColorIndex, textBoxScale, textStyleId);
+                        ApplyDimStyleParameters(existRec, layerColorIndex, winformTextBoxScale, textStyleId);
                         t.Commit();
                         return existId;
                     }
@@ -169,7 +169,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             var recW = t.GetObject(id, OpenMode.ForWrite) as DimStyleTableRecord;
                             if (recW != null)
                             {
-                                ApplyDimStyleParameters(recW, layerColorIndex, textBoxScale, textStyleId);
+                                ApplyDimStyleParameters(recW, layerColorIndex, winformTextBoxScale, textStyleId);
                                 AutoCadHelper.LogWithSafety($"DimStyleHelper: 在活动文档找到近似样式 '{rec.Name}' 并已更新（请求名: '{styleName}'）。");
                                 t.Commit();
                                 return id;
@@ -182,7 +182,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 // 创建新记录
                 dimStyleTable = t.GetObject(activeDb.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
                 var newRec = new DimStyleTableRecord { Name = styleName };
-                ApplyDimStyleParameters(newRec, layerColorIndex, textBoxScale, textStyleId);
+                ApplyDimStyleParameters(newRec, layerColorIndex, winformTextBoxScale, textStyleId);
 
                 ObjectId newId = ObjectId.Null;
                 try
@@ -206,7 +206,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 把关键的 DimStyle 参数统一应用到记录（复用函数，避免重复代码）
         /// 说明：本函数不会 Commit 或改变事务，仅在传入 DimStyleTableRecord 的写模式下调用。
         /// </summary>
-        private static void ApplyDimStyleParameters(DimStyleTableRecord dimStyleRec, short layerColorIndex, double textBoxScale, ObjectId textStyleId)
+        private static void ApplyDimStyleParameters(DimStyleTableRecord dimStyleRec, short layerColorIndex, double winformTextBoxScale, ObjectId textStyleId)
         {
             if (dimStyleRec == null) return;
 
@@ -214,21 +214,21 @@ namespace GB_NewCadPlus_IV.Helpers
             const double baseTextHeight = 3.5;
 
             // 防护：确保 uiScale 合法
-            if (double.IsNaN(textBoxScale) || textBoxScale <= 0) textBoxScale = 1.0;
+            if (double.IsNaN(winformTextBoxScale) || winformTextBoxScale <= 0) winformTextBoxScale = 1.0;
 
             // 将 Dimtxt 存为：baseHeight * uiScale （在样式管理器中将显示“放大值”，例如 3.5 * 100 = 350）
-            dimStyleRec.Dimtxt = Math.Max(MinTextSize, baseTextHeight * textBoxScale);
+            dimStyleRec.Dimtxt = Math.Max(MinTextSize, baseTextHeight * winformTextBoxScale);
 
             // 文字/箭头/偏移等按比例写入样式（存为放大值）
-            dimStyleRec.Dimasz = Math.Max(MinTextSize, 2.0 * textBoxScale);     // 箭头（放大值）
-            dimStyleRec.Dimexo = Math.Max(0.1, 3.0 * textBoxScale);             // 界线偏移（放大值）
-            dimStyleRec.Dimgap = Math.Max(0.1, 2.0 * textBoxScale);             // 文字与尺寸线间隙（放大值）
+            dimStyleRec.Dimasz = Math.Max(MinTextSize, 2.0 * winformTextBoxScale);     // 箭头（放大值）
+            dimStyleRec.Dimexo = Math.Max(0.1, 3.0 * winformTextBoxScale);             // 界线偏移（放大值）
+            dimStyleRec.Dimgap = Math.Max(0.1, 2.0 * winformTextBoxScale);             // 文字与尺寸线间隙（放大值）
 
             // Dimlfac 保存注释缩放因子，使得实际显示高度 = Dimtxt * Dimlfac = baseTextHeight
             double dimlfac;
             try
             {
-                dimlfac = (textBoxScale > 0.0) ? (1.0 / textBoxScale) : 1.0;
+                dimlfac = (winformTextBoxScale > 0.0) ? (1.0 / winformTextBoxScale) : 1.0;
             }
             catch
             {

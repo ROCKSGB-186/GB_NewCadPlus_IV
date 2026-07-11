@@ -94,30 +94,33 @@
                     Content="取消"
                     IsCancel="True" />
             </StackPanel>
-            <DataGrid
-                x:Name="PropertiesGrid"
-                AutoGenerateColumns="False"
-                CanUserAddRows="False"
-                ItemsSource="{Binding}">
+            <DataGrid x:Name="PropertiesGrid" 
+                      AutoGenerateColumns="False" 
+                      CanUserAddRows="False" 
+                      ItemsSource="{Binding}"
+                      HorizontalScrollBarVisibility="Auto"
+                      RowHeight="NaN">
                 <DataGrid.Columns>
-                    <DataGridTextColumn
-                        Width="80"
-                        Binding="{Binding PropertyName1}"
-                        Header="属性名"
-                        IsReadOnly="True" />
-                    <DataGridTextColumn
-                        Width="*"
-                        Binding="{Binding PropertyValue1}"
-                        Header="属性值" />
-                    <DataGridTextColumn
-                        Width="80"
-                        Binding="{Binding PropertyName2}"
-                        Header="属性名"
-                        IsReadOnly="True" />
-                    <DataGridTextColumn
-                        Width="*"
-                        Binding="{Binding PropertyValue2}"
-                        Header="属性值" />
+                    <DataGridTextColumn Width="120" MinWidth="60" 
+                                        Binding="{Binding PropertyName1}" Header="属性名" IsReadOnly="True" />
+                    <DataGridTextColumn Width="*" MinWidth="100" 
+                                        Binding="{Binding PropertyValue1}" Header="属性值">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Width="120" MinWidth="60" 
+                                        Binding="{Binding PropertyName2}" Header="属性名" IsReadOnly="True" />
+                    <DataGridTextColumn Width="*" MinWidth="100" 
+                                        Binding="{Binding PropertyValue2}" Header="属性值">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                 </DataGrid.Columns>
             </DataGrid>
         </DockPanel>

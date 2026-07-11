@@ -225,7 +225,7 @@ namespace GB_NewCadPlus_IV.DisplayPages
                 }
 
                 // 获取比例分母 (可以从主窗口传递过来，或者重新获取)
-                double scaleDenom = GB_NewCadPlus_IV.Helpers.AutoCadHelper.GetScale();
+                double scaleDenom = VariableDictionary.wpfTextBoxScale;
 
                 // 实例化生成器
                 var generator = new UnifiedTableGenerator();

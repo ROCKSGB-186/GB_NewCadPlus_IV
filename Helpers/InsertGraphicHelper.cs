@@ -1250,7 +1250,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 if (VariableDictionary.resourcesFile != null && VariableDictionary.resourcesFile.Length > 0)
                 {
                     _lastCopyDwgBytes = (byte[])VariableDictionary.resourcesFile.Clone();// 把用户按键指定的文件克隆一份字节数组，避免后续被修改
-                   
+
                     _lastCopyDwgFileNameBase = string.IsNullOrWhiteSpace(VariableDictionary.btnFileName)
                         ? "GB_CopyDwgAllFast"
                         : VariableDictionary.btnFileName; // 使用用户指定的按钮名作为基础文件名，避免重复执行时文件名过长或包含非法字符
@@ -1288,8 +1288,8 @@ namespace GB_NewCadPlus_IV.Helpers
             try
             {
                 string? tempFilePath = null;
-                VariableDictionary.textBoxScale = AutoCadHelper.GetScale();// 同步最新图纸比例，避免用户忘了更新导致插入图元过大过小
-                VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
+                //VariableDictionary.winformTextBoxScale = AutoCadHelper.GetScale();// 同步最新图纸比例，避免用户忘了更新导致插入图元过大过小
+                //VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
                 // 如果有字节缓存，则每次重复都新建一个临时文件
                 if (_lastCopyDwgBytes != null && _lastCopyDwgBytes.Length > 0)
                 {
@@ -1430,11 +1430,11 @@ namespace GB_NewCadPlus_IV.Helpers
                         var br = new BlockReference(targetPoint, blkDefId);
 
                         // 初始化缩放比例 scale 为 1.0
-                        double scale = 1.0;
+                        double scale = AutoCadHelper.GetScale();
                         // 根据当前界面状态（WinForm 或 WPF）获取用户设置的缩放比例
                         if (VariableDictionary.winForm_Status) // 如果是 WinForm 模式
                         {
-                            try { scale = VariableDictionary.textBoxScale; } // 尝试读取 WinForm 的比例值
+                            try { scale = VariableDictionary.winformTextBoxScale; } // 尝试读取 WinForm 的比例值
                             catch { scale = 1.0; } // 读取失败则使用默认值 1.0
                         }
                         else // 如果是 WPF 模式
@@ -1451,19 +1451,16 @@ namespace GB_NewCadPlus_IV.Helpers
                         var entityObjectId = tr.CurrentSpace.AddEntity(br);
                         // 以写模式打开刚刚添加的块参照 fileEntity，以便后续修改属性或变换
                         var fileEntity = (BlockReference)tr.GetObject(entityObjectId, OpenMode.ForWrite);
-
                         // 记录当前的旋转角度 tempAngle，用于拖拽过程中的增量计算
                         double tempAngle = VariableDictionary.entityRotateAngle;
                         // 记录当前的缩放比例 tempScale，用于拖拽过程中的增量计算
                         double tempScale = scale;
-
                         // 如果初始旋转角度不为 0，则预先应用旋转，确保预览方向正确
                         if (Math.Abs(tempAngle) > 1e-12)
                         {
                             // 绕 Z 轴旋转块参照 fileEntity
                             fileEntity.TransformBy(Matrix3d.Rotation(tempAngle, Vector3d.ZAxis, targetPoint));
                         }
-
                         // 创建自定义拖拽类 JigEx，用于实现鼠标跟随效果
                         var entityBlock = new JigEx((mpw, _) =>
                         {
@@ -1487,7 +1484,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             double currentUiScale = scale;
                             if (VariableDictionary.winForm_Status) // WinForm 模式
                             {
-                                try { currentUiScale = VariableDictionary.textBoxScale; } // 读取实时比例
+                                try { currentUiScale = VariableDictionary.winformTextBoxScale; } // 读取实时比例
                                 catch { currentUiScale = tempScale; } // 失败则沿用上次有效值
                             }
                             else // WPF 模式
@@ -1691,14 +1688,6 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 // 重置 WinForm 状态标志
                 VariableDictionary.winForm_Status = false;
-                //VariableDictionary.btnFileName = null;
-                //VariableDictionary.entityRotateAngle = 0;
-                //VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
-                //VariableDictionary.TCH_Ptj_No = 0;
-                //VariableDictionary.blockScale = AutoCadHelper.GetScale();
-                //VariableDictionary.layerName = null;
-                //VariableDictionary.layerColorIndex = 1;
-                //VariableDictionary.textColorIndex = 1;
 
             }
             catch (Exception ex) // 捕获整个执行过程中的任何未预期异常
@@ -1899,141 +1888,153 @@ namespace GB_NewCadPlus_IV.Helpers
             #endregion
         }
 
-        /// <summary>
-        /// 一个块反复插入图中
-        /// </summary>
         [CommandMethod(nameof(GB_InsertBlock_5))]
         public static void GB_InsertBlock_5()
         {
-            #region 方法1：  
-            try
+            try // 整个方法主 try，捕获并记录异常
             {
-                pointS.Clear();
-                Directory.CreateDirectory(GetPath.referenceFile);
-                if (VariableDictionary.btnFileName == null) return;
+                pointS.Clear(); // 清空坐标集合，准备存储新插入块的坐标
+                var uiScale = AutoCadHelper.GetScale(); // 获取当前图纸的比例，作为块的默认插入比例
+                var plScale = 0.3 * uiScale; // 多段线宽度缩放比例，基于 UI 比例计算
+                Directory.CreateDirectory(GetPath.referenceFile); // 确保参考文件目录存在
+                if (VariableDictionary.btnFileName == null) return; // 若按钮名为空则直接返回
+                if (VariableDictionary.resourcesFile == null) return; // 若资源文件为空则直接返回
 
-                if (VariableDictionary.resourcesFile == null) return; //判断点现的原文件是不是空；
-                using var tr = new DBTrans();
+                using var tr = new DBTrans(); // 使用事务包装对图形数据库的修改
 
-                // 获取对应块的 ObjectId  
+                // 获取对应块的 ObjectId（从外部资源 DWG 中）
                 var referenceFileObId = tr.BlockTable.GetBlockFormA(
                     VariableDictionary.resourcesFile,
                     VariableDictionary.btnFileName,
                     VariableDictionary.btnFileName_blockName,
                     true);
 
-                var refFileRec = tr.GetObject(referenceFileObId, OpenMode.ForRead) as BlockTableRecord;
+                var refFileRec = tr.GetObject(referenceFileObId, OpenMode.ForRead) as BlockTableRecord; // 读取块表记录
                 if (refFileRec == null)
                 {
-                    LogManager.Instance.LogInfo("未找到块记录！");
-                    return;
+                    LogManager.Instance.LogInfo("未找到块记录！"); // 日志：未找到块记录
+                    return; // 退出
                 }
 
-                LogManager.Instance.LogInfo("块！");
-                while (true)
+                LogManager.Instance.LogInfo("块！"); // 日志：进入块插入循环
+                while (true) // 循环插入，直到用户取消
                 {
-                    // 把块插入到当前空间  
+                    // 把块插入到当前空间
                     var referenceFileBlock = tr.CurrentSpace.InsertBlock(Point3d.Origin, referenceFileObId);
 
-                    // 检查是否为实体  
+                    // 检查是否为实体
                     if (tr.GetObject(referenceFileBlock) is not Entity referenceFileEntity)
-                        return;
+                        return; // 若不是实体则退出
 
-                    // 设置图层和颜色等属性  
-                    referenceFileEntity.Layer = VariableDictionary.btnBlockLayer;
-                    referenceFileEntity.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
-                    referenceFileEntity.Scale(new Point3d(0, 0, 0), VariableDictionary.blockScale);
+                    // 设置图层和颜色等属性
+                    referenceFileEntity.Layer = VariableDictionary.btnBlockLayer; // 指定图层
+                    referenceFileEntity.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex); // 指定颜色索引
+                    referenceFileEntity.Scale(new Point3d(0, 0, 0), uiScale / 100); // 按 UI 比例缩放块
 
-                    //double tempAngle = 0; // 原始角度  
-                    var startPoint = new Point3d(0, 0, 0);
+                    var startPoint = new Point3d(0, 0, 0); // 拖拽起始点（本地变量）
 
                     var jigBlock = new JigEx((mpw, _) =>
                     {
-                        // 先移动  
-                        referenceFileEntity.Move(startPoint, mpw);
-                        startPoint = mpw;
+                        referenceFileEntity.Move(startPoint, mpw); // 将实体从上次位置移动到当前鼠标位置
+                        startPoint = mpw; // 更新起始位置为当前点，便于下次增量移动
                     });
-                    jigBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(referenceFileEntity));
-                    jigBlock.SetOptions(msg: "\n指定插入点");
 
-                    // 拖拽  
+                    jigBlock.DatabaseEntityDraw(wd => wd.Geometry.Draw(referenceFileEntity)); // 绘制拖拽预览
+                    jigBlock.SetOptions(msg: "\n指定插入点"); // 设置提示信息
+
+                    // 执行拖拽交互
                     var endPoint = Env.Editor.Drag(jigBlock);
                     if (endPoint.Status != PromptStatus.OK)
                     {
-                        // 用户取消插入，则删除已插入的块  
+                        // 用户取消插入，则删除已插入的块并退出循环
                         tr.GetObject(referenceFileBlock, OpenMode.ForWrite);
                         referenceFileBlock.Erase();
                         break;
                     }
 
-                    // 存储插入点坐标（WCS）  
-                    var UcsEndPoint = jigBlock.MousePointWcsLast;
-                    pointS.Add(UcsEndPoint);
-
-
-                    Env.Editor.Redraw();
+                    // 存储插入点坐标（WCS）
+                    var UcsEndPoint = jigBlock.MousePointWcsLast; // 获取最后一次鼠标 WCS 点
+                    pointS.Add(UcsEndPoint); // 添加到点集合
+                    Env.Editor.Redraw(); // 刷新视图
                 }
 
-                // ======================  
-                // 在此处根据插入数量绘图  
-                // ======================  
-                int count = pointS.Count;
-                LogManager.Instance.LogInfo($"\n已插入 {count} 个块，开始绘制外围图形...");
+                // ======================
+                // 在此处根据插入数量绘图
+                // ======================
+                int count = pointS.Count; // 获取插入点数量
+                LogManager.Instance.LogInfo($"\n已插入 {count} 个块，开始绘制外围图形..."); // 日志
 
                 if (count == 3)
-                { // 三点生成外接圆，圆心与3点等距  
-                    Point3d p1 = pointS[0];
-                    Point3d p2 = pointS[1];
-                    Point3d p3 = pointS[2];
+                { // 三点生成外接“圆”的多段线形式（使用带 bulge 的 polyline 生成平滑圆弧）
+                    Point3d p1 = pointS[0]; // 第一点
+                    Point3d p2 = pointS[1]; // 第二点
+                    Point3d p3 = pointS[2]; // 第三点
 
-                    // 计算三角形外接圆圆心（与三点等距的点）  
-                    Point3d circleCenter = GetCircumcenter(p1, p2, p3);
+                    // 计算三角形外接圆圆心（与三点等距的点）
+                    Point3d circleCenter = GetCircumcenter(p1, p2, p3); // 复用已有方法计算圆心
 
-                    // 计算圆心到三个点的距离，取最大值，然后加上150作为新圆的半径  
-                    double radius = p1.DistanceTo(circleCenter) + 150.0;
+                    // 计算圆心到某一点的距离作为半径，并向外扩展 1.5 * uiScale（与旧逻辑保持一致）
+                    double radius = p1.DistanceTo(circleCenter) + 1.5 * uiScale; // 半径计算
 
-                    // 检查计算出的圆心是否与三点等距  
-                    double dist1 = circleCenter.DistanceTo(p1);
-                    double dist2 = circleCenter.DistanceTo(p2);
-                    double dist3 = circleCenter.DistanceTo(p3);
+                    // 记录到日志，以验证计算正确性
+                    double dist1 = circleCenter.DistanceTo(p1); // 距离1
+                    double dist2 = circleCenter.DistanceTo(p2); // 距离2
+                    double dist3 = circleCenter.DistanceTo(p3); // 距离3
+                    LogManager.Instance.LogInfo($"\n圆心到三点的距离: {dist1:F4}, {dist2:F4}, {dist3:F4}"); // 打印距离
 
-                    // 记录到日志，以验证计算正确性  
-                    LogManager.Instance.LogInfo($"\n圆心到三点的距离: {dist1:F4}, {dist2:F4}, {dist3:F4}");
+                    // 使用 Polyline（2D）并用 bulge 值创建若干弧段以近似平滑圆
+                    var plCircle = new Polyline(); // 新建 Polyline 对象（2D）
+                    int segments = 72; // 分段数（越大越光滑，性能开销也越大）
+                    double delta = 2.0 * Math.PI / segments; // 每段对应的角度增量
+                    double bulge = Math.Tan(delta / 4.0); // 对应弧段的 bulge 值（tan(Δ/4)）
 
-                    // 正确创建圆：使用外接圆圆心和半径  
-                    var circle = new Circle(circleCenter, Vector3d.ZAxis, radius);
-                    circle.Layer = VariableDictionary.btnBlockLayer;
-                    circle.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
-                    tr.CurrentSpace.AddEntity(circle);
-                    Env.Editor.Redraw();
-                    LogManager.Instance.LogInfo("\n已创建外围圆形，与三点等距并向外扩展150。");
+                    // 起始角度可以由第一个点方向决定，也可以固定为 0；这里以 0 开始，生成完整闭合圆
+                    double startAngle = 0.0; // 起始角度
+
+                    // 循环添加顶点并指定 bulge，使得每个段为圆弧
+                    for (int i = 0; i < segments; i++)
+                    {
+                        double angle = startAngle + i * delta; // 当前角度
+                        double x = circleCenter.X + radius * Math.Cos(angle); // 计算顶点 X
+                        double y = circleCenter.Y + radius * Math.Sin(angle); // 计算顶点 Y
+                        var pt2d = new Point2d(x, y); // 构造 Point2d 坐标
+                        plCircle.AddVertexAt(i, pt2d, bulge, plScale, plScale); // 添加顶点并设置 bulge 与宽度
+                    }
+
+                    plCircle.Closed = true; // 闭合多段线（形成完整环）
+                    plCircle.Layer = VariableDictionary.btnBlockLayer; // 设置图层
+                    plCircle.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex); // 设置颜色索引
+
+                    // 将多段线添加到当前空间（使用事务 tr）
+                    tr.CurrentSpace.AddEntity(plCircle); // 添加实体到图纸
+                    Env.Editor.Redraw(); // 刷新显示
+                    LogManager.Instance.LogInfo("\n已创建外围多段线圆，使用 bulge 生成平滑弧段。"); // 日志说明
                 }
                 else if (count == 4)
                 {
-                    // 计算中心点  
+                    // 计算中心点
                     var center = new Point3d(
                         pointS.Average(p => p.X),
                         pointS.Average(p => p.Y),
                         pointS.Average(p => p.Z)
                     );
 
-                    // 绘制矩形 - 使用原始4点作为矩形顶点，向外扩展150  
+                    // 绘制矩形 - 使用原始4点作为矩形顶点，向外扩展150
                     List<Point2d> expandedPoints = new List<Point2d>();
 
                     foreach (var point in pointS)
                     {
-                        // 计算从中心到点的方向向量  
+                        // 计算从中心到点的方向向量
                         Vector3d dirVector = point - center;
-                        dirVector = dirVector.GetNormal(); // 单位化向量  
+                        dirVector = dirVector.GetNormal(); // 单位化向量
 
-                        // 创建新点：沿着方向向量延伸150的距离  
-                        Point3d expandedPoint3d = point + dirVector * 150.0;
+                        // 创建新点：沿着方向向量延伸150的距离
+                        Point3d expandedPoint3d = point + dirVector * 1.5 * uiScale;
                         Point2d expandedPoint = new Point2d(expandedPoint3d.X, expandedPoint3d.Y);
                         expandedPoints.Add(expandedPoint);
                     }
 
-                    // 确保点按顺时针或逆时针排序  
-                    // 对顶点按角度排序  
+                    // 确保点按顺时针或逆时针排序
                     var sortedPoints = expandedPoints.Select((p, index) => new
                     {
                         Point = p,
@@ -2043,14 +2044,14 @@ namespace GB_NewCadPlus_IV.Helpers
                     .Select(item => item.Point)
                     .ToList();
 
-                    // 创建Polyline并添加扩展后的顶点  
+                    // 创建Polyline并添加扩展后的顶点
                     var pl = new Polyline();
                     for (int i = 0; i < sortedPoints.Count; i++)
                     {
-                        pl.AddVertexAt(i, sortedPoints[i], 0, 30, 30);
+                        pl.AddVertexAt(i, sortedPoints[i], 0, plScale, plScale);
                     }
 
-                    // 闭合  
+                    // 闭合
                     pl.Closed = true;
                     pl.Layer = VariableDictionary.btnBlockLayer;
                     pl.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
@@ -2060,26 +2061,26 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
                 else if (count > 4)
                 {
-                    // 计算中心点  
+                    // 计算中心点
                     var center = new Point3d(
                         pointS.Average(p => p.X),
                         pointS.Average(p => p.Y),
                         pointS.Average(p => p.Z)
                     );
 
-                    // 创建多边形 - 使用原始点作为多边形顶点，向外扩展150  
+                    // 创建多边形 - 使用原始点作为多边形顶点，向外扩展150
                     List<Point2d> expandedPoints = new List<Point2d>();
                     foreach (var point in pointS)
                     {
-                        // 计算从中心到点的方向向量  
+                        // 计算从中心到点的方向向量
                         Vector3d dirVector = point - center;
-                        dirVector = dirVector.GetNormal(); // 单位化向量  
-                        // 创建新点：沿着方向向量延伸150的距离  
-                        Point3d expandedPoint3d = point + dirVector * 150.0;
+                        dirVector = dirVector.GetNormal(); // 单位化向量
+                                                           // 创建新点：沿着方向向量延伸150的距离
+                        Point3d expandedPoint3d = point + dirVector * 1.5 * uiScale;
                         Point2d expandedPoint = new Point2d(expandedPoint3d.X, expandedPoint3d.Y);
                         expandedPoints.Add(expandedPoint);
                     }
-                    // 对顶点按角度排序，确保多边形正确  
+                    // 对顶点按角度排序，确保多边形正确
                     var sortedPoints = expandedPoints.Select((p, index) => new
                     {
                         Point = p,
@@ -2089,13 +2090,13 @@ namespace GB_NewCadPlus_IV.Helpers
                     .Select(item => item.Point)
                     .ToList();
 
-                    // 创建多边形  
+                    // 创建多边形
                     var polygon = new Polyline();
                     for (int i = 0; i < sortedPoints.Count; i++)
                     {
-                        polygon.AddVertexAt(i, sortedPoints[i], 0, 30, 30);
+                        polygon.AddVertexAt(i, sortedPoints[i], 0, plScale, plScale);
                     }
-                    // 闭合多边形  
+                    // 闭合多边形
                     polygon.Closed = true;
                     polygon.Layer = VariableDictionary.btnBlockLayer;
                     polygon.ColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
@@ -2107,28 +2108,29 @@ namespace GB_NewCadPlus_IV.Helpers
                 {
                     LogManager.Instance.LogInfo($"\n已插入{count}个块，但数量不满足绘制外围图形的条件（需要至少3个点）。");
                 }
-                //加标注
-                // DDimLinear("总重:" + VariableDictionary.dimString + "kg" + "\n" + $"{count}点着地", Convert.ToInt16(pointS.Count));
+
+                // 添加标注（若有）
                 var dimColorLine = VariableDictionary.layerColorIndex;
                 if (VariableDictionary.btnFileName.Contains("结构"))
                 {
                     dimColorLine = 3;
                 }
                 if (VariableDictionary.dimString != null)
-                    Command.DDimLinear(tr, VariableDictionary.dimString, count.ToString(), Convert.ToInt16(dimColorLine));
-                tr.Commit();
-                Env.Editor.Redraw();
-                LogManager.Instance.LogInfo("\n操作完成。");
-                pointS.Clear();
+                    Command.DDimLinear(tr, VariableDictionary.dimString, count.ToString(), Convert.ToInt16(dimColorLine)); // 创建标注
+
+                tr.Commit(); // 提交事务
+                Env.Editor.Redraw(); // 刷新显示
+                LogManager.Instance.LogInfo("\n操作完成。"); // 日志：完成
+                pointS.Clear(); // 清理点集合
             }
-            catch (Exception ex)
+            catch (Exception ex) // 捕获方法级别异常并记录
             {
-                LogManager.Instance.LogInfo($"\n插入图元失败：{ex.Message}");
-                // 可以添加更详细的错误信息记录  
-                LogManager.Instance.LogInfo($"\n错误详情：{ex.StackTrace}");
+                LogManager.Instance.LogInfo($"\n插入图元失败：{ex.Message}"); // 日志错误信息
+                LogManager.Instance.LogInfo($"\n错误详情：{ex.StackTrace}"); // 日志堆栈信息
             }
-            #endregion
         }
+
+
 
         /// <summary>
         /// 计算三角形外接圆圆心，确保圆心与三个点等距 

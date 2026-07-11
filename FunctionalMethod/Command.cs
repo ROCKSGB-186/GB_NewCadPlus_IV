@@ -6,21 +6,27 @@ using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using IFoxCAD.Cad;
+using NPOI.SS.Formula.Functions;
 using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;  // 仅用于创建 .xlsx 工作簿
 using NPOI.SS.Util;          // 用于 CellRangeAddress 等辅助类
-using System.IO;             // FileStream 必需
+using NPOI.XSSF.UserModel;  // 仅用于创建 .xlsx 工作簿
 using Org.BouncyCastle.Utilities;
+using System.IO;             // FileStream 必需
 using System.Windows;
 using System.Windows.Forms.Integration;
+using System;
+using Autodesk.AutoCAD.Runtime;
+using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
+using BorderStyle = NPOI.SS.UserModel.BorderStyle;
+using CellReference = NPOI.SS.Util.CellReference;
+using CellType = NPOI.SS.UserModel.CellType;
+using HorizontalAlignment = NPOI.SS.UserModel.HorizontalAlignment;
 using Line = Autodesk.AutoCAD.DatabaseServices.Line;
 using Path = System.IO.Path;
-using BorderStyle = NPOI.SS.UserModel.BorderStyle;
-using HorizontalAlignment = NPOI.SS.UserModel.HorizontalAlignment;
 using VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment;
-using CellType = NPOI.SS.UserModel.CellType;
-using CellReference = NPOI.SS.Util.CellReference;
 
 /// <summary>
 /// CAD远行时自动运行 在菜单内加入工具
@@ -134,7 +140,212 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         private static List<ObjectId>? currentSpaceObjectId = new List<ObjectId>();
 
         #region 接口、实体、天正数据、标注等
+        [CommandMethod(nameof(ReadTianZhengInto))]
+        public static void ReadTianZhengInto()
+        {
+            // 在 AutoCAD 中输入命令:
+            // DumpEntityInfo [CommandMethod("DumpEntityInfo")] public void DumpEntityInfo() {
+            //获取当前文档与编辑器
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            // 当前文档
+             Editor ed = doc.Editor;
+            // 编辑器对象
+            Database db = doc.Database; // 数据库对象
+            // 提示用户选择实体
+            PromptEntityOptions peo = new PromptEntityOptions("\n请选择实体: ");
+            PromptEntityResult per = ed.GetEntity(peo);
+            if (per.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\n未选择实体。");
+                return;
+            }
 
+            // 开启事务读取实体信息
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                try
+                {
+                    // 以只读方式打开实体
+                    Entity ent = tr.GetObject(per.ObjectId, OpenMode.ForRead) as Entity; // 打开实体
+                    if (ent == null)
+                    {
+                        ed.WriteMessage("\n所选对象不是实体或无法读取。");
+                        tr.Commit();
+                        return;
+                    }
+                    
+                    // 基本信息输出
+                    ed.WriteMessage($"\n==== 实体基础信息 ====");
+                    ed.WriteMessage($"\nCLR 类型: {ent.GetType().FullName}"); // .NET 类型名
+                    ed.WriteMessage($"\nDxfName: {ent.ObjectId.ObjectClass.DxfName}"); // DXF 名称（例如: LINE, CIRCLE 或自定义）
+                    ed.WriteMessage($"\nDxfName: {ent.GetRXClass().Name}"); // DXF 名称（例如: LINE, CIRCLE 或自定义）
+                    ed.WriteMessage($"\nHandle: {ent.Handle}"); // 句柄
+                    ed.WriteMessage($"\nOwnerId: {ent.OwnerId}"); // 所属表/块等
+                    ed.WriteMessage($"\nIsProxy: {ent is ProxyEntity}"); // 是否代理实体（ProxyEntity）
+
+                    // 如果有扩展字典（ExtensionDictionary），枚举所有条目并打印 XRecord
+                    if (ent.ExtensionDictionary != ObjectId.Null)
+                    {
+                        ed.WriteMessage("\n==== ExtensionDictionary (扩展字典) 条目 ====");
+                        DBDictionary extDict = tr.GetObject(ent.ExtensionDictionary, OpenMode.ForRead) as DBDictionary; // 获取扩展字典
+                        foreach (DBDictionaryEntry entry in extDict)
+                        {
+                            ed.WriteMessage($"\nEntry Key: {entry.Key}"); // 条目名
+                                                                          // 可能是 XRecord 或其它对象
+                            DBObject dbo = tr.GetObject(entry.Value, OpenMode.ForRead);
+                            Xrecord xr = dbo as Xrecord;
+                            if (xr != null)
+                            {
+                                ed.WriteMessage($"\n  XRecord 数据:");
+                                ResultBuffer rb = xr.Data;
+                                if (rb != null)
+                                {
+                                    foreach (TypedValue tv in rb)
+                                    {
+                                        ed.WriteMessage($"\n    TypeCode={tv.TypeCode}  Value={tv.Value}");
+                                    }
+                                }
+                                else
+                                {
+                                    ed.WriteMessage("\n    XRecord 为空。");
+                                }
+                            }
+                            else
+                            {
+                                ed.WriteMessage($"\n  非 XRecord 对象，类型: {dbo.GetType().FullName}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        ed.WriteMessage("\n实体无 ExtensionDictionary（扩展字典）。");
+                    }
+
+                    // 遍历数据库中注册的所有应用名（RegAppTable），尝试读取每个应用名对应的 XData
+                    ed.WriteMessage("\n==== 尝试读取所有注册 RegApp 的 XData ====");
+                    RegAppTable rat = tr.GetObject(db.RegAppTableId, OpenMode.ForRead) as RegAppTable;
+                    foreach (ObjectId rid in rat)
+                    {
+                        RegAppTableRecord rar = tr.GetObject(rid, OpenMode.ForRead) as RegAppTableRecord;
+                        string appName = rar.Name; // 注册应用名
+                                                   // 尝试获取该应用下的 XData
+                        ResultBuffer xdb = ent.GetXDataForApplication(appName);
+                        if (xdb != null)
+                        {
+                            ed.WriteMessage($"\nXData for app '{appName}':");
+                            foreach (TypedValue tv in xdb)
+                            {
+                                ed.WriteMessage($"\n  TypeCode={tv.TypeCode}  Value={tv.Value}");
+                            }
+                        }
+                    }
+
+                    // 如果是代理实体，额外提示
+                    if (ent is ProxyEntity)
+                    {
+                        ed.WriteMessage("\n实体为代理实体（ProxyEntity），很多自定义属性可能仅通过 ARX/厂商 SDK 可访问。");
+                    }
+
+                    tr.Commit();
+                }
+                catch (System.Exception ex)
+                {
+                    ed.WriteMessage($"\n读取实体时出错: {ex.Message}");
+                    tr.Abort();
+                }
+            }
+        }
+
+        [CommandMethod("GetTCHProps")]
+        public static void GetTCHProps()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+
+            PromptEntityOptions peo = new PromptEntityOptions("\n请选择一个天正图元: ");
+            PromptEntityResult per = ed.GetEntity(peo);
+            if (per.Status != PromptStatus.OK) return;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                try
+                {
+                    Entity ent = tr.GetObject(per.ObjectId, OpenMode.ForRead) as Entity;
+                    if (ent == null) return;
+
+                    // 获取 COM 对象
+                    object comObj = ent.AcadObject;
+                    Type comType = comObj.GetType();
+
+                    // 辅助方法：安全获取属性值，并输出到命令行
+                    void SafeGetProperty(string propName)
+                    {
+                        try
+                        {
+                            // 使用 InvokeMember 获取属性（适用于 COM 对象）
+                            object value = comType.InvokeMember(propName,
+                                System.Reflection.BindingFlags.GetProperty,
+                                null, comObj, null);
+                            if (value is Array arr)
+                            {
+                                string arrStr = string.Join(", ", arr.Cast<object>().Select(o => o?.ToString() ?? "null"));
+                                ed.WriteMessage($"\n{propName}: [{arrStr}]");
+                            }
+                            else
+                            {
+                                ed.WriteMessage($"\n{propName}: {value ?? "null"}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            ed.WriteMessage($"\n{propName}: <访问失败 - {ex.Message}>");
+                        }
+                    }
+
+                    // 定义你要读取的属性名列表（对照你的动态视图中的名称）
+                    string[] propNames = new string[]
+                    {
+                "EntityName",          // "TDbHvacDuct"
+                "Handle",              // "29F"
+                "Hvac_End",            // double[3]
+                "Hvac_El",             // 0
+                "Hvac_CenWeight",      // 0
+                "Hvac_EdgeWeight",     // 0
+                "Hvac_EndWeight",      // 0
+                "Havc_R2",             // 0
+                "Havc_R3",             // 0
+                "Havc_R4",             // 0
+                "Havc_S3",             // 0
+                "Havc_S18",            // 0
+                "Layer",               // "DUCT-净化管"
+                "Linetype",            // "BYLAYER"
+                "LinetypeScale",       // 1
+                "LRotation",           // 0
+                "PScale",              // 100
+                "PlotStyleName",       // "ByLayer"
+                "ObjectName",          // "TDbHvacDuct"
+                "Lineweight"           // 注意：是 Lineweight 不是 LineWeight（大小写敏感）
+                    };
+
+                    // 循环读取每个属性
+                    foreach (string name in propNames)
+                    {
+                        SafeGetProperty(name);
+                    }
+
+                    // 如果你还想读取 Hvac_R1 ~ Hvac_R447 这些数值，可以添加一个循环
+                    // 例如 for (int i = 1; i <= 447; i++) { string p = "Hvac_R" + i; SafeGetProperty(p); }
+                    // 但为避免过多输出，你可以按需添加
+                }
+                catch (System.Exception ex)
+                {
+                    ed.WriteMessage($"\n整体错误: {ex.Message}");
+                }
+                tr.Commit();
+            }
+        }
+        
 
         /// <summary>
         /// 发送纯文本
@@ -161,6 +372,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public static bool readLayerONOFFState = false;
 
+        
         #region 辅助方法,检查图层,标注文字内容构建,标注样式设置,自动孵化等
 
 
@@ -263,13 +475,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             mld.ColorIndex = textColor;// 设置标注颜色
             mld.LeaderLineColor = Color.FromColorIndex(ColorMethod.ByAci, textColor);// 设置引线颜色
             mld.TextAttachmentType = textAttachmentType;// 设置文本附着类型
-            //mld.TextHeight = textHeight;// 设置文本高度
-            //mld.ArrowSize = arrowSize;// 设置箭头大小
+                                                        //mld.TextHeight = textHeight;// 设置文本高度
+                                                        //mld.ArrowSize = arrowSize;// 设置箭头大小
             mld.MText = mt;// 将 MText 赋值给 MLeader 的 MText 属性            
 
             int ldNum = mld.AddLeader();// 添加一个引线并获取引线编号
             int lnNum = mld.AddLeaderLine(ldNum);// 在指定引线上添加一条引线并获取引线编号
-            // 注意：AddFirstVertex 必须在设置 MLeader 属性之后调用，以确保正确应用样式和属性。
+                                                 // 注意：AddFirstVertex 必须在设置 MLeader 属性之后调用，以确保正确应用样式和属性。
             mld.AddFirstVertex(lnNum, firstPoint);// 在指定引线上添加第一个顶点，位置为用户指定的第一点
             using var jig = new JigEx((mpw, _) =>
             {
@@ -388,7 +600,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             Wpf_Cad_PaletteSet.Add("GB_CADTools", host);//添加子面板
                             Wpf_Cad_PaletteSet.Visible = true;//显示窗体容器
                             Wpf_Cad_PaletteSet.Dock = DockSides.Left;//窗体容器的停靠位置
-                            //FormMain.GB_CadToolsForm.ShowToolsPanel();
+                                                                     //FormMain.GB_CadToolsForm.ShowToolsPanel();
                             LogManager.Instance.LogInfo("\n主窗体已成功创建并显示。");
                             return;
                         }
@@ -549,7 +761,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 if (userPoint1.Status != PromptStatus.OK) return;
                 var ucsUserPoint1 = userPoint1.Value.Wcs2Ucs().Z20();
                 // 计算标注的文字高度和箭头大小，基于用户界面缩放比例，确保在不同缩放级别下标注具有合适的大小。
-                double uiScale = VariableDictionary.textBoxScale;
+                double uiScale = VariableDictionary.winformTextBoxScale;
                 if (double.IsNaN(uiScale) || uiScale <= 0)
                 {
                     try { uiScale = AutoCadHelper.GetScale(true); } catch { uiScale = 1.0; }
@@ -647,7 +859,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 if (userPoint1.Status != PromptStatus.OK) return; // 用户取消则退出
                 var ucsUserPoint1 = userPoint1.Value.Wcs2Ucs().Z20(); // 转换到 UCS
 
-                double uiScale = AutoCadHelper.GetScale(); // 读取当前界面比例
+                double uiScale = AutoCadHelper.GetScale();  // 读取当前界面比例
 
                 double textHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 文字高度
                 double arrowSize = TextFontsStyleHelper.ComputeScaledHeight(2.0, uiScale); // 箭头尺寸
@@ -690,7 +902,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 short textColor = layerColorIndex > 0 ? Convert.ToInt16(layerColorIndex) : LayerControlHelper.ResolveLayerColor();
                 // 确保目标图层存在，并获取图层名称。
                 string targetLayer = LayerControlHelper.GetOrCreateTargetLayer(
-                    tr, VariableDictionary.layerName ?? VariableDictionary.btnBlockLayer,textColor);
+                    tr, VariableDictionary.layerName ?? VariableDictionary.btnBlockLayer, textColor);
                 // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
                 string content = BuildContextualDimText(dimString, dimString2, jztjUseMeter: false, includeDeviceCode: true);
                 // 用户指定标注第一点，并转换到 UCS 坐标系，准备创建标注。
@@ -703,7 +915,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                 double textHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 文字高度
                 double arrowSize = TextFontsStyleHelper.ComputeScaledHeight(2.0, uiScale); // 箭头尺寸
-                // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
+                                                                                           // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
                 bool ok = TryCreateLeaderByDrag(
                     tr,
                     targetLayer,
@@ -747,7 +959,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                 double textHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 文字高度
                 double arrowSize = TextFontsStyleHelper.ComputeScaledHeight(2.0, uiScale); // 箭头尺寸
-                // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
+                                                                                           // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
                 bool ok = TryCreateLeaderByDrag(
                     tr,
                     targetLayer,
@@ -793,7 +1005,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                 double textHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 文字高度
                 double arrowSize = TextFontsStyleHelper.ComputeScaledHeight(2.0, uiScale); // 箭头尺寸
-                // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
+                                                                                           // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
                 bool ok = TryCreateLeaderByDrag(
                     tr,
                     targetLayer,
@@ -842,7 +1054,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                 double textHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 文字高度
                 double arrowSize = TextFontsStyleHelper.ComputeScaledHeight(2.0, uiScale); // 箭头尺寸
-                // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
+                                                                                           // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
                 bool ok = TryCreateLeaderByDrag(
                     tr,
                     targetLayer,
@@ -882,23 +1094,23 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 //开启事务
                 //var tr = new DBTrans();
                 TextFontsStyleHelper.TextStyleAndLayerInfo(tr, layerName, layerColorIndex, "tJText");
-                var textBoxScale = AutoCadHelper.GetScale(true);//文本框缩放比例，基于界面比例进行调整，确保在不同缩放级别下标注具有合适的大小。  
-                // 先确保“洞口标注”样式存在并更新参数
+                var winformTextBoxScale = AutoCadHelper.GetScale(true);//文本框缩放比例，基于界面比例进行调整，确保在不同缩放级别下标注具有合适的大小。  
+                                                                // 先确保“洞口标注”样式存在并更新参数
                 ObjectId dimStyleId = DimStyleHelper.EnsureOrCreateDimStyle(
                     tr,
                     "JLPDI-定位",
                     layerColorIndex,
-                    textBoxScale,
+                    winformTextBoxScale,
                     tr.TextStyleTable["tJText"]);
 
                 // 再创建 RotatedDimension，并直接套样式
                 RotatedDimension rDim = new RotatedDimension();
                 rDim.DimensionStyle = dimStyleId;                 // 关键：用样式Id
-                //rDim.DimensionStyleName = "洞口标注";              // 保留名称便于排查
+                                                                  //rDim.DimensionStyleName = "洞口标注";              // 保留名称便于排查
                 rDim.DimensionText = null;                        // 先不设置文本，让动态标注时自动生成
                 rDim.Dimclrt = Color.FromColorIndex(ColorMethod.ByColor, layerColorIndex); // 通过工厂方法生成一个红色的 Color 对象（1 = 红色索引）                                                                                           
                 rDim.Annotative = AnnotativeStates.True;// 启用注释缩放（让对象在布局里按注释比例自适应）              
-                rDim.LinetypeScale = 1 * textBoxScale;
+                rDim.LinetypeScale = 1 * winformTextBoxScale;
                 rDim.Layer = layerName;
                 rDim.TextStyleId = tr.TextStyleTable["tJText"];
                 rDim.XLine1Point = pt1;
@@ -924,11 +1136,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     rDim.XLine2Point = pt3;
                     rDim.DimLinePoint = pt3;
                     rDim.Annotative = AnnotativeStates.True; // 保持注释缩放设置
-                    rDim.LinetypeScale = 1 * textBoxScale;
-                    rDim.Dimasz = 2 * textBoxScale; // 控制引线箭头的大小
-                    rDim.Dimtxt = 3.5 * textBoxScale; // 标注文字高度（样式 TextSize=0 时生效）
-                    rDim.Dimexo = 3 * textBoxScale; // 尺寸界线偏移
-                    rDim.Dimgap = 2 * textBoxScale; // 标注文字偏移量
+                    rDim.LinetypeScale = 1 * winformTextBoxScale;
+                    rDim.Dimasz = 2 * winformTextBoxScale; // 控制引线箭头的大小
+                    rDim.Dimtxt = 3.5 * winformTextBoxScale; // 标注文字高度（样式 TextSize=0 时生效）
+                    rDim.Dimexo = 3 * winformTextBoxScale; // 尺寸界线偏移
+                    rDim.Dimgap = 2 * winformTextBoxScale; // 标注文字偏移量
                     rDim.TextStyleId = tr.TextStyleTable["tJText"];
                 });
                 dimPoint2.DatabaseEntityDraw(WorldDraw => WorldDraw.Geometry.Draw(rDim));
@@ -944,11 +1156,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     var pt3 = mpw.Z20();
                     rDim.DimLinePoint = pt3;//标注点
                     rDim.Annotative = AnnotativeStates.True;// 启用注释缩放（让对象在布局里按注释比例自适应）
-                    rDim.LinetypeScale = 1 * textBoxScale;
-                    rDim.Dimasz = 2 * textBoxScale;//控制引线箭头的大小                                            
-                    rDim.Dimtxt = 3.5 * textBoxScale;// Dimtxt 指定标注文字的高度，除非当前文字样式具有固定的高度
-                    rDim.Dimexo = 3 * textBoxScale;//尺寸界线偏移
-                    rDim.Dimgap = 2 * textBoxScale;// 标注文字偏移量
+                    rDim.LinetypeScale = 1 * winformTextBoxScale;
+                    rDim.Dimasz = 2 * winformTextBoxScale;//控制引线箭头的大小                                            
+                    rDim.Dimtxt = 3.5 * winformTextBoxScale;// Dimtxt 指定标注文字的高度，除非当前文字样式具有固定的高度
+                    rDim.Dimexo = 3 * winformTextBoxScale;//尺寸界线偏移
+                    rDim.Dimgap = 2 * winformTextBoxScale;// 标注文字偏移量
                     rDim.TextStyleId = tr.TextStyleTable["tJText"];
                 });
                 dimTextPoint.DatabaseEntityDraw(WorldDraw => WorldDraw.Geometry.Draw(rDim));
@@ -999,7 +1211,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 var mld = new MLeader
                 {
                     Layer = VariableDictionary.btnBlockLayer,//设置多重引线的图层
-                    //TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine,//设置多重引线的标注文字下是不是有引线；
+                                                             //TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine,//设置多重引线的标注文字下是不是有引线；
                     TextAttachmentType = TextAttachmentType.AttachmentBottomLine,//设置多重引线的标注文字下是不是有引线；
                     ContentType = ContentType.MTextContent,//内容类型
                     ColorIndex = Convert.ToInt32(VariableDictionary.layerColorIndex),
@@ -1072,7 +1284,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                 double textHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 文字高度
                 double arrowSize = TextFontsStyleHelper.ComputeScaledHeight(2.0, uiScale); // 箭头尺寸
-                // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
+                                                                                           // 根据用户输入的标注内容和当前场景，构建适合的标注文本，并调用统一的拖拽放置方法创建标注。
                 bool ok = TryCreateLeaderByDrag(
                     tr,
                     targetLayer,
@@ -1098,75 +1310,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         }
 
 
-
-        /// <summary>
-        /// 标注
-        /// </summary>
-        /// <param name="pt1Ucs">第一点坐标</param>
-        /// <param name="dimX">X坐标</param>
-        /// <param name="dimY">Y坐标</param>
-        /// <param name="dimFl">标注文字</param>
-        /// <param name="layerName">图层名</param>
-        /// <param name="VariableDictionary.layerColorIndex">图层颜色</param>
-        //[CommandMethod(nameof(PointDim))]
-        //public static void PointDim(DBTrans tr, Point3d UcsUserPoint1, string dimX, string dimY, string dimFl, string layerName, Int16 layerColorIndex)
-        //{
-        //    try
-        //    {
-        //        //using var tr = new DBTrans();
-        //        TextStyleAndLayerInfo(tr,layerName, Convert.ToInt16(VariableDictionary.layerColorIndex), "tJText");
-        //        var mld = new MLeader
-        //        {
-        //            Layer = layerName,//设置多重引线的图层
-        //            ColorIndex = VariableDictionary.layerColorIndex,
-        //            TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine,//设置多重引线的标注文字下是不是有引线；
-        //            ContentType = ContentType.MTextContent,//内容类型
-        //            LeaderLineColor = Color.FromColorIndex(ColorMethod.ByAci, Convert.ToInt16(VariableDictionary.layerColorIndex)),// 例如索引3通常代表绿色
-        //        };
-        //        //标注样式
-        //        MText mt = new MText();
-        //        TextStyleAndLayerInfo(tr, VariableDictionary.btnBlockLayer, Convert.ToInt16(VariableDictionary.layerColorIndex), "tJText", ref mt, ref mld);
-        //        mt.Attachment = AttachmentPoint.MiddleCenter; // 设置标注文字居中对齐  
-        //                                                      // 添加引线和引线段  
-        //        int ldNum = mld.AddLeader();
-        //        int lnNum = mld.AddLeaderLine(ldNum);
-        //        mld.AddFirstVertex(lnNum, UcsUserPoint1);  // 引线起始点（UCS 坐标）
-        //        var mpwUcs = new Point3d(0, 0, 0);
-        //        using var mleaderjig = new JigEx((mpw, _) =>
-        //        {
-        //            // 引线结束点（UCS 坐标）
-        //            mpwUcs = mpw.Z20();
-        //            // 标注文字显示位置        
-        //            mld.TextLocation = mpwUcs;
-        //        });
-        //        var UcsUserPoint2 = mleaderjig.MousePointWcsLast;
-        //        //标注文字
-        //        mt.Contents = dimX + dimY + dimFl;
-        //        //标注文字高度
-        //        mt.Height = 300;
-        //        mt.ColorIndex = VariableDictionary.layerColorIndex;
-        //        mld.AddLastVertex(lnNum, UcsUserPoint2);
-        //        mld.MText = mt;
-        //        mld.TextHeight = 300;
-        //        mld.TextStyleId = tr.TextStyleTable["tJText"];
-        //        mleaderjig.DatabaseEntityDraw(wb => wb.Geometry.Draw(mld));
-        //        mleaderjig.SetOptions(UcsUserPoint1, msg: "\n标注文字的位置");
-        //        var userPoint2 = Env.Editor.Drag(mleaderjig);
-        //        if (userPoint2.Status != PromptStatus.OK) return;
-
-        //        tr.CurrentSpace.AddEntity(mld);
-        //        //tr.Commit();
-        //        Env.Editor.Redraw();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        // 记录错误日志  
-        //        LogManager.Instance.LogInfo($"标注失败！错误信息: {ex.Message}"); // 输出错误信息  
-        //    }
-        //}
-
         #endregion
-
 
 
         /// <summary>
@@ -1311,24 +1455,18 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     // 与单块逻辑一致：询问是否设备块（这里只询问一次，应用到本次批处理）
                     string targetLayer = selectedLayer;
                     var dialogResult = System.Windows.Forms.MessageBox.Show(
-                        "要分解的块是不是设备块:",
+                        "分解后的块设置为“S_设备”图层：是（Y）；保持原图层：否（No）",
                         "分解确认",
                         System.Windows.Forms.MessageBoxButtons.YesNo,
                         System.Windows.Forms.MessageBoxIcon.Question);
 
                     if (dialogResult == System.Windows.Forms.DialogResult.Yes)
                     {
-                        if (string.Equals(selectedLayer, "设备", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(selectedLayer, "SB", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(selectedLayer, "设备名称", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(selectedLayer, "S_设备", StringComparison.OrdinalIgnoreCase))
-                        {
-                            targetLayer = "S_设备";
+                        targetLayer = "S_设备";
 
-                            // 确保图层存在
-                            LayerDictionaryHelper.EnsureTargetLayer(tr, targetLayer, 140);
-                            Env.Editor.WriteMessage($"\n识别为设备块批处理，图层由 '{selectedLayer}' 调整为 '{targetLayer}'。");
-                        }
+                        // 确保图层存在
+                        LayerDictionaryHelper.EnsureTargetLayer(tr, targetLayer, 140);
+                        Env.Editor.WriteMessage($"\n识别为设备块批处理，图层由 '{selectedLayer}' 调整为 '{targetLayer}'。");
                     }
 
                     // 确认提示
@@ -1814,8 +1952,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
-
-
         #endregion
 
 
@@ -1959,23 +2095,16 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                     // 弹出消息框：是否设备块
                     var dialogResult = System.Windows.Forms.MessageBox.Show(
-                        "要分解的块是不是设备块:",
+                        "分解后的块设置为“S_设备”图层：是（Y）；保持原图层否（No）；",
                         "分解确认",
                         System.Windows.Forms.MessageBoxButtons.YesNo,
                         System.Windows.Forms.MessageBoxIcon.Question);
 
                     if (dialogResult == System.Windows.Forms.DialogResult.Yes)
                     {
-                        // 仅当当前图层是“设备”或“设备名称”时，改为 Devices
-                        if (string.Equals(originalLayer, "设备", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(originalLayer, "设备名称", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(originalLayer, "SB", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(originalLayer, "S_设备", StringComparison.OrdinalIgnoreCase))
-                        {
-                            targetLayer = "S_设备";
-                            LayerDictionaryHelper.EnsureTargetLayer(tr, targetLayer, 140);
-                            Env.Editor.WriteMessage($"\n已识别设备块，图层由 '{originalLayer}' 调整为 '{targetLayer}'。");
-                        }
+                        targetLayer = "S_设备";
+                        LayerDictionaryHelper.EnsureTargetLayer(tr, targetLayer, 140);
+                        Env.Editor.WriteMessage($"\n已识别设备块，图层由 '{originalLayer}' 调整为 '{targetLayer}'。");
                     }
                     else
                     {
@@ -2027,14 +2156,12 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             // 根块是数据库对象，不应在本方法中Dispose
             blocksToProcess.Enqueue((blockRef, false));
 
-            string layerForName = !string.IsNullOrEmpty(targetLayer) ? targetLayer : blockRef.Layer;
-
             // 确保目标图层存在
             if (!string.IsNullOrEmpty(targetLayer))
             {
                 LayerDictionaryHelper.EnsureTargetLayer(tr, targetLayer, 140);
             }
-
+            string layerForName = !string.IsNullOrEmpty(targetLayer) ? targetLayer : blockRef.Layer;
             try
             {
                 // 核心：使用AutoCAD原生 Explode 递归分解，避免手工矩阵链导致镜像/位置错误
@@ -2652,8 +2779,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 结构-用户指定原点后半径画圆；
         /// </summary>
-        [CommandMethod(nameof(CirRadius))]
-        public static void CirRadius()
+        [CommandMethod(nameof(RadiusCIR_Point))]
+        public static void RadiusCIR_Point()
         {
             try
             {
@@ -2668,10 +2795,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 var userPoint1 = Env.Editor.GetPoint("\n请指定圆形洞口的起点");//指定圆的第一点
                 if (userPoint1.Status != PromptStatus.OK) return;
                 var UcsUserPoint1 = userPoint1.Value.Wcs2Ucs().Z20();//把指定的点转成Wcs2坐标；
-                // 创建polyline
+                                                                     // 创建polyline
                 Polyline polylineHatch = new Polyline();
                 Point3d center = new Point3d(0, 0, 0);//圆心
-                //拖动实现
+                                                      //拖动实现
                 using var cir = new JigEx((mpw, queue) =>
                 {
                     var userPoint2 = mpw.Z20();//mpw为鼠标移动变量；
@@ -2720,8 +2847,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 结构-用户指定两点为半径画圆；
         /// </summary>
-        [CommandMethod(nameof(CirRadius_2))]
-        public static void CirRadius_2()
+        [CommandMethod(nameof(RadiusCIR_2Point))]
+        public static void RadiusCIR_2Point()
         {
             try
             {
@@ -2737,7 +2864,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 var cirCenter = new Point3d(0, 0, 0);
                 var polylineHatch = new Polyline();
                 Point3d center = new Point3d(0, 0, 0);//圆的中心
-                //拖动圆
+                                                      //拖动圆
                 using var cir = new JigEx((mpw, queue) =>
                 {
                     var userPoint2 = mpw.Z20();//mpw为鼠标移动变量；
@@ -2746,7 +2873,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     userCir.ColorIndex = layerColorIndex;
                     center = userCir.Center;//圆的中心
                     double radius = userCir.Radius;//圆的半径
-                    // 计算两个polyline的点
+                                                   // 计算两个polyline的点
                     Point3d polyline1Start = new Point3d(center.X - radius * Math.Cos(Math.PI / 4), center.Y - radius * Math.Sin(Math.PI / 4), 0);
                     Point3d polylineCenter = new Point3d(center.X - radius * Math.Cos(Math.PI / 4) / 2, center.Y + radius * Math.Sin(Math.PI / 4) / 2, 0);
                     Point3d polyline2End = new Point3d(center.X + radius * Math.Cos(Math.PI / 4), center.Y + radius * Math.Sin(Math.PI / 4), 0);
@@ -2786,8 +2913,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 结构-用户指定数值为直径画圆；
         /// </summary>
-        [CommandMethod(nameof(CirDiameter))]
-        public static void CirDiameter()
+        [CommandMethod(nameof(DiameterCIR_Point))]
+        public static void DiameterCIR_Point()
         {
             try
             {
@@ -2802,7 +2929,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 var userPoint1 = Env.Editor.GetPoint("\n请指定圆形洞口的起点");//指定圆的第一点
                 if (userPoint1.Status != PromptStatus.OK) return; //指定成功
                 var UcsUserPoint1 = userPoint1.Value.Wcs2Ucs().Z20();//把指定的点转成Wcs2坐标；
-                // 声明一个变量保存填充边界的多段线（用于 SOLID 填充）  
+                                                                     // 声明一个变量保存填充边界的多段线（用于 SOLID 填充）  
                 Polyline polylineHatch = new Polyline();
                 Point3d center = new Point3d(0, 0, 0);
                 //拖动实现
@@ -2852,10 +2979,10 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         }
 
         /// <summary>
-        /// 结构-用户指定两点为直径画圆；
+        /// 结构-用户指定两点为直径画圆；STRUC_DiameterCIR
         /// </summary>
-        [CommandMethod(nameof(CirDiameter_2))]
-        public static void CirDiameter_2()
+        [CommandMethod(nameof(DiameterCIR_2Point))]
+        public static void DiameterCIR_2Point()
         {
             try
             {
@@ -2873,7 +3000,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 创建第一个polyline
                 Polyline polylineHatch = new Polyline();
                 Point3d center = new Point3d(0, 0, 0);//圆的中心
-                //拖动圆
+                                                      //拖动圆
                 using var cir = new JigEx((mpw, queue) =>
                 {
                     var userCir = new Circle(mpw, Vector3d.ZAxis, (cirDiameter / 2) + cirPlus / 2);//创建指定直径的圆；
@@ -2881,7 +3008,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     userCir.ColorIndex = layerColorIndex;
                     center = userCir.Center;//圆的中心
                     double radius = userCir.Radius;//圆的半径
-                    // 计算两个polyline的点
+                                                   // 计算两个polyline的点
                     var polyline1Start = new Point3d(center.X - radius * Math.Cos(Math.PI / 4), center.Y - radius * Math.Sin(Math.PI / 4), 0);
                     var polylineCenter = new Point3d(center.X - radius * Math.Cos(Math.PI / 4) / 2, center.Y + radius * Math.Sin(Math.PI / 4) / 2, 0);
                     var polyline2End = new Point3d(center.X + radius * Math.Cos(Math.PI / 4), center.Y + radius * Math.Sin(Math.PI / 4), 0);
@@ -2958,11 +3085,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         }
 
         /// <summary>
-        /// 结构用户用鼠标画矩形
+        /// 结构用户用鼠标画矩形STRUC_PolyLineREC STRUC_PolyLineREC
         /// </summary>
-        /// <param name="layerName"></param>
-        [CommandMethod(nameof(Rec2PolyLine))]
-        public static void Rec2PolyLine()
+        /// <param name="layerName"></param> 
+        [CommandMethod(nameof(STRUC_PolyLineREC))]
+        public static void STRUC_PolyLineREC()
         {
             try
             {
@@ -3004,7 +3131,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         new Point3d(polyLineRecExt.MaxPoint.X + recPlus, polyLineRecExt.MaxPoint.Y + recPlus, 0));
                     width = newRectBounds.MaxPoint.X - newRectBounds.MinPoint.X;//拿到宽
                     height = newRectBounds.MaxPoint.Y - newRectBounds.MinPoint.Y;//拿到高
-                    // 辅助计算：取扩大矩形的左上与右下点，计算二者间 1/4 点（作为两条线交合点）  
+                                                                                 // 辅助计算：取扩大矩形的左上与右下点，计算二者间 1/4 点（作为两条线交合点）  
                     var leftUp = new Point3d(newRectBounds.MinPoint.X, newRectBounds.MaxPoint.Y, 0);
                     var rightDown = new Point3d(newRectBounds.MaxPoint.X, newRectBounds.MinPoint.Y, 0);
                     double targetX = leftUp.X + (rightDown.X - leftUp.X) * 1.0 / 4;
@@ -3024,8 +3151,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     newRectPointMin = new Point3d(newRectBounds.MinPoint.X, newRectBounds.MinPoint.Y, 0);
                     newRectPointMax = new Point3d(newRectBounds.MaxPoint.X, newRectBounds.MaxPoint.Y, 0);
                     queue.Enqueue(newRect); // 放大后的矩形  
-                    // 绘制用来辅助生成填充边界的两条线（或辅助多段线）  
-                    // 此处构造的填充边界区域：由扩大矩形的左下角、左上角、右上角，以及计算得到的交合点构成  
+                                            // 绘制用来辅助生成填充边界的两条线（或辅助多段线）  
+                                            // 此处构造的填充边界区域：由扩大矩形的左下角、左上角、右上角，以及计算得到的交合点构成  
                     if (layerName.Contains("结构"))
                     {
                         hatchBoundary = new Polyline();
@@ -3064,11 +3191,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         }
 
         /// <summary>
-        /// 暖通用户指定两点为对角线画方Rec2PolyLine_N
+        /// 暖通用户指定两点为对角线画方STRUC_PolyLineREC_N
         /// </summary>
         /// <param name="layerName"></param>
-        [CommandMethod(nameof(Rec2PolyLine_N))]
-        public static void Rec2PolyLine_N()
+        [CommandMethod(nameof(HVAC_PolyLineREC))]
+        public static void HVAC_PolyLineREC()
         {
             try
             {
@@ -3156,13 +3283,32 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 {
                     int plusX = Convert.ToInt32(Math.Abs(ucsUserPoint1.X - ucsUserPoint2.X)) + Convert.ToInt32(VariableDictionary.textbox_Width) * 2;
                     int plusY = Convert.ToInt32(Math.Abs(ucsUserPoint1.Y - ucsUserPoint2.Y)) + Convert.ToInt32(VariableDictionary.textbox_Height) * 2;
-                    PointDim(tr, centerPoint, "洞：" + plusX, "x" + plusY, "\n距地：", VariableDictionary.btnBlockLayer ?? VariableDictionary.layerName ?? "0", layerColor);
+                    
+                    //PointDim(tr, centerPoint, "洞：" + plusX, "x" + plusY, "\n距地：", VariableDictionary.btnBlockLayer ?? VariableDictionary.layerName ?? "0", layerColor);
+
+                    if (VariableDictionary.buttonText == "TJ(暖通过建筑-百叶窗)")
+                    {
+                        PointDim(tr, centerPoint, "百叶窗：" + plusX, "x" + plusY, "\n距地：", VariableDictionary.btnBlockLayer ?? VariableDictionary.layerName ?? "0", layerColor);
+                    }
+                    else if (VariableDictionary.buttonText == "TJ(暖通过建筑-洞口)")
+                    {
+                        PointDim(tr, centerPoint, "洞：" + plusX, "x" + plusY, "\n距地：", VariableDictionary.btnBlockLayer ?? VariableDictionary.layerName ?? "0", layerColor);
+                    }
                 }
                 else
                 {
+
                     int plusX = Convert.ToInt32(TianZhengHelper.hvacR4) + Convert.ToInt32(VariableDictionary.textbox_Width) * 2;
                     int plusY = Convert.ToInt32(TianZhengHelper.hvacR3) + Convert.ToInt32(VariableDictionary.textbox_Height) * 2;
-                    PointDim(tr, centerPoint, "洞：" + plusX, "x" + plusY, "\n距地：" + TianZhengHelper.strHvacStart, VariableDictionary.btnBlockLayer ?? VariableDictionary.layerName ?? "0", layerColor);
+
+                    if(VariableDictionary.buttonText == "TJ(暖通过建筑-百叶窗)")
+                    {
+                        PointDim(tr, centerPoint, "百叶窗：" + plusX, "x" + plusY, "\n距地：" + TianZhengHelper.strHvacStart, VariableDictionary.btnBlockLayer ?? VariableDictionary.layerName ?? "0", layerColor);
+                    }
+                    else if(VariableDictionary.buttonText == "TJ(暖通过建筑-洞口)")
+                    {
+                        PointDim(tr, centerPoint, "洞：" + plusX, "x" + plusY, "\n距地：" + TianZhengHelper.strHvacStart, VariableDictionary.btnBlockLayer ?? VariableDictionary.layerName ?? "0", layerColor);
+                    }
                 }
                 // 先提交外层事务，避免后续方法再开事务冲突
                 tr.Commit();
@@ -3189,8 +3335,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 结构、用户输入长宽后画矩形；
         /// </summary>
-        [CommandMethod(nameof(DrawRec))]
-        public static void DrawRec()
+        [CommandMethod(nameof(STRUC_DrawRec))]
+        public static void STRUC_DrawRec()
         {
             #region 方法一
             try
@@ -3233,7 +3379,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 double targetY = recLeftUp.Y + (recRightDowm.Y - recLeftUp.Y) * 1 / 4;
                 double targetZ = recLeftUp.Z + (recRightDowm.Z - recLeftUp.Z) * 1 / 4;
                 Point3d targetPoint = new Point3d(targetX, targetY, targetZ);//找到1/4点的坐标
-                // 创建扩大矩形
+                                                                             // 创建扩大矩形
                 Polyline newRect = new Polyline();
                 newRect.AddVertexAt(0, new Point2d(newRectBounds.MinPoint.X, newRectBounds.MinPoint.Y), 0, 0, 0);
                 newRect.AddVertexAt(1, new Point2d(newRectBounds.MinPoint.X, newRectBounds.MaxPoint.Y), 0, 0, 0);
@@ -3256,7 +3402,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     hatchBoundary.Closed = true;
                     hatchBoundary.Layer = layerName;
                     hatchBoundary.ColorIndex = layerColorIndex;
-                    #endregion
+                #endregion
                     var newRectObjectId = tr.CurrentSpace.AddEntity(newRect);
                     var hatchBoundaryObjectId = tr.CurrentSpace.AddEntity(hatchBoundary);
                     var hatchObectId = new ObjectId();
@@ -3363,6 +3509,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 var layerName = VariableDictionary.btnBlockLayer;
+                var uiScale = AutoCadHelper.GetScale();
+                var plScale = 0.3 * uiScale; // 设置线宽
+                int hatchScale = Convert.ToInt32(1 * uiScale); // 根据线宽调整填充比例
                 var layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
                 using var tr = new DBTrans();
 
@@ -3408,8 +3557,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     for (int i = 0; i < pointS.Count; i++)
                     {
                         finalPolyline.AddVertexAt(i, new Point2d(pointS[i].X, pointS[i].Y), 0, 0, 0);
-                        finalPolyline.SetStartWidthAt(i, 30);
-                        finalPolyline.SetEndWidthAt(i, 30);
+                        finalPolyline.SetStartWidthAt(i, plScale);
+                        finalPolyline.SetEndWidthAt(i, plScale);
                     }
                     finalPolyline.Closed = true;
                     finalPolyline.Layer = layerName;
@@ -3420,7 +3569,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                     if (layerName != null)
                         //调用填充方法
-                        autoHatch(tr, layerName, 231, 200, "ANSI38", polylineId);
+
+                        autoHatch(tr, layerName, 231, hatchScale, "ANSI38", polylineId);
                     Env.Editor.Redraw();
                 }
                 else
@@ -3448,13 +3598,15 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 pointS.Clear();
+                var uiScale = AutoCadHelper.GetScale();
+                double plScale = 0.3 * uiScale; // 设置线宽
                 var layerName = VariableDictionary.btnBlockLayer; // 设置图层名称
                 Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 231); // 设置图层颜色索引
                 using var tr = new DBTrans();//开启事务
                                              // 检查图层是否存在，如果不存在则创建
 
                 LayerDictionaryHelper.EnsureTargetLayer(tr, layerName, layerColorIndex);//添加图层；
-                // 获取第一个点
+                                                                                        // 获取第一个点
                 var userPoint1 = Env.Editor.GetPoint("\n指定多边形的第一个点：");
                 if (userPoint1.Status != PromptStatus.OK) return;
                 // 将第一个点转换为 UCS 坐标并存储
@@ -3501,14 +3653,15 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 如果点数大于 2，则闭合多边形并添加到模型空间
                 if (pointS.Count >= 3)
                 {
+
                     // 创建最终的多段线
                     Polyline finalPolyline = new Polyline();
                     for (int i = 0; i < pointS.Count; i++)
                     {
                         finalPolyline.AddVertexAt(i, new Point2d(pointS[i].X, pointS[i].Y), 0, 0, 0);
                         // 设置线宽为 30
-                        finalPolyline.SetStartWidthAt(i, 30);
-                        finalPolyline.SetEndWidthAt(i, 30);
+                        finalPolyline.SetStartWidthAt(i, plScale);
+                        finalPolyline.SetEndWidthAt(i, plScale);
                     }
                     finalPolyline.Closed = true; // 闭合多边形
                     finalPolyline.Layer = layerName; // 设置图层
@@ -3551,8 +3704,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             polylineX1.Closed = false;
                             polylineX1.Layer = layerName; // 设置线条图层  
                             polylineX1.ColorIndex = 231;  // 设置线条颜色  
-                            polylineX1.SetStartWidthAt(0, 30);
-                            polylineX1.SetEndWidthAt(0, 30);
+                            polylineX1.SetStartWidthAt(0, plScale);
+                            polylineX1.SetEndWidthAt(0, plScale);
                             queue.Enqueue(polylineX1);
 
                             // 定义闭合的方形  
@@ -3562,8 +3715,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             polylineX2.Closed = true; // 闭合成方形  
                             polylineX2.Layer = layerName; // 设置线条图层  
                             polylineX2.ColorIndex = 231;
-                            polylineX2.SetStartWidthAt(0, 30);
-                            polylineX2.SetEndWidthAt(0, 30);
+                            polylineX2.SetStartWidthAt(0, plScale);
+                            polylineX2.SetEndWidthAt(0, plScale);
                         });
 
                         polylineX.SetOptions(UcsUserPointX1, msg: "\n请指定框着地内线第二点");
@@ -3609,10 +3762,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 pointS.Clear();
+                double uiScale = 0.3 * AutoCadHelper.GetScale();
                 var layerName = VariableDictionary.btnBlockLayer; // 设置图层名称
                 Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 231); // 设置图层颜色索引
                 using var tr = new DBTrans();//开启事务
-                // 检查图层是否存在，如果不存在则创建
+                                             // 检查图层是否存在，如果不存在则创建
                 LayerDictionaryHelper.EnsureTargetLayer(tr, layerName, layerColorIndex);//添加图层；
                                                                                         // 获取第一个点
                 var userPoint1 = Env.Editor.GetPoint("\n指定多边形的第一个点：");
@@ -3657,14 +3811,15 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 如果点数大于 2，则闭合多边形并添加到模型空间
                 if (pointS.Count >= 3)
                 {
+
                     // 创建最终的多段线
                     Polyline finalPolyline = new Polyline();
                     for (int i = 0; i < pointS.Count; i++)
                     {
                         finalPolyline.AddVertexAt(i, new Point2d(pointS[i].X, pointS[i].Y), 0, 0, 0);
                         // 设置线宽为 30
-                        finalPolyline.SetStartWidthAt(i, 30);
-                        finalPolyline.SetEndWidthAt(i, 30);
+                        finalPolyline.SetStartWidthAt(i, uiScale);
+                        finalPolyline.SetEndWidthAt(i, uiScale);
                     }
                     finalPolyline.Closed = true; // 闭合多边形
                     finalPolyline.Layer = layerName; // 设置图层
@@ -3695,76 +3850,97 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
-        /// <summary>
-        /// 生成箭头
-        /// </summary>
-        /// <param name="existingPolygon">Polyline多边形</param>
-        /// <param name="layerName"></param>
         public static void DrawArrows(Polyline existingPolygon, string layerName)
         {
             try
             {
-                using var tr = new DBTrans();
+                using var tr = new DBTrans(); // 事务用于写入图形数据库
 
-                // 获取当前图比例（优先使用已缓存/全局值）
-                double uiScale = VariableDictionary.blockScale;
-                if (double.IsNaN(uiScale) || uiScale <= 0)
-                {
-                    try { uiScale = AutoCadHelper.GetScale(true); } catch { uiScale = 1.0; }
-                }
-                if (uiScale <= 0) uiScale = 1.0;
+                // 读取界面/注释比例（仅用于视觉宽度等，不用于几何位置）
+                double uiScale = AutoCadHelper.GetScale();
+                double plScale = uiScale / 100.0; // 仅作为线宽/常量宽度的参考
 
-                // 获取多边形的边界  
+                // 获取多边形包围盒并计算宽高
                 Extents3d bounds = existingPolygon.GeometricExtents;
                 double width = bounds.MaxPoint.X - bounds.MinPoint.X;
                 double height = bounds.MaxPoint.Y - bounds.MinPoint.Y;
 
-                // 计算箭头的基本尺寸（按图面尺寸与当前比例缩放）
-                double arrowWidth = width * 0.8 * uiScale; // 箭头总长度
-                double arrowHeight = Math.Max(1.0, height * 0.3 * uiScale); // 箭头高度（最小保护）
-                double arrowHeadWidth = Math.Max(1.0, width * 0.2 * uiScale); // 箭头底坐宽度
-                double margin = Math.Max(1.0, width * 0.1 * uiScale); // 左右边距
+                // 包围盒保护
+                if (width <= 0 || height <= 0)
+                {
+                    LogManager.Instance.LogInfo("\nDrawArrows: 多边形包围盒无效，宽或高为 0。");
+                    return;
+                }
 
-                // 计算两个箭头的垂直位置  
+                // 最小几何保护值（避免尺寸过小）
+                double minGeometric = Math.Max(1.0, Math.Min(width, height) * 0.02);
+
+                // 边距：箭头尾部与对应边框的距离（可按宽度比例或最小值）
+                double margin = Math.Max(minGeometric, width * 0.04);
+
+                // 为保证“尾部到近边框距离 = 尖部到远边框距离”，箭头总长度应为 (width - 2 * margin)
+                double arrowWidth = Math.Max(minGeometric, width - 2.0 * margin);
+
+                // 箭头高度与头部宽按比例计算（不再乘 plScale，几何尺寸与边界相关）
+                double arrowHeight = Math.Max(minGeometric, height * 0.12);
+                double arrowHeadWidth = Math.Min(arrowWidth * 0.45, Math.Max(minGeometric, arrowWidth * 0.25));
+                // 保护：确保箭头头部宽度不超过箭头整体的一半
+                if (arrowHeadWidth > arrowWidth * 0.5) arrowHeadWidth = arrowWidth * 0.5;
+
+                // 两个箭头的垂直位置：取包围盒内按高度分布的位置
                 double firstArrowY = bounds.MinPoint.Y + height * 0.35;
                 double secondArrowY = bounds.MinPoint.Y + height * 0.65;
 
-                // 创建第一个箭头（向右）  
+                // -------------------------
+                // 第一个箭头（从左向右）
+                // 计算起点 X：从左边界加 margin（此时尾部到左边界的距离 = margin）
+                // 尖端 X 将位于 startX + arrowWidth，因此尖端到右边界的距离 = bounds.MaxX - (startX + arrowWidth) = margin
+                // -------------------------
                 Polyline arrow1 = new Polyline();
-                double x1 = bounds.MinPoint.X + margin;
-                arrow1.AddVertexAt(0, new Point2d(x1, firstArrowY), 0, 0, 0);  // 起点  
-                arrow1.AddVertexAt(1, new Point2d(x1 + arrowWidth - arrowHeadWidth, firstArrowY), 0, 0, 0);  // 线条终点  
-                arrow1.AddVertexAt(2, new Point2d(x1 + arrowWidth - arrowHeadWidth, firstArrowY - arrowHeight / 2), 0, 0, 0);  // 箭头底部  
-                arrow1.AddVertexAt(3, new Point2d(x1 + arrowWidth, firstArrowY + arrowHeight / 8), 0, 0, 0); // 箭头尖端  
-                arrow1.AddVertexAt(4, new Point2d(x1 + arrowWidth - arrowHeadWidth, firstArrowY + arrowHeight / 1.4), 0, 0, 0);  // 箭头顶部  
-                arrow1.AddVertexAt(5, new Point2d(x1 + arrowWidth - arrowHeadWidth, firstArrowY + arrowHeight / 4), 0, 0, 0);  // 回到线条  
-                arrow1.AddVertexAt(6, new Point2d(x1, firstArrowY + arrowHeight / 4), 0, 0, 0);  // 线条起点上边  
+                double x1 = bounds.MinPoint.X + margin; // 尾部 X（靠近左边框）
+                arrow1.AddVertexAt(0, new Point2d(x1, firstArrowY), 0, 0, 0); // 起点（尾部下）
+                arrow1.AddVertexAt(1, new Point2d(x1 + (arrowWidth - arrowHeadWidth), firstArrowY), 0, 0, 0); // 箭身末端
+                arrow1.AddVertexAt(2, new Point2d(x1 + (arrowWidth - arrowHeadWidth), firstArrowY - arrowHeight / 2.0), 0, 0, 0); // 箭头底下
+                arrow1.AddVertexAt(3, new Point2d(x1 + arrowWidth, firstArrowY + arrowHeight / 8.0), 0, 0, 0); // 箭尖
+                arrow1.AddVertexAt(4, new Point2d(x1 + (arrowWidth - arrowHeadWidth), firstArrowY + arrowHeight / 1.4), 0, 0, 0); // 箭头顶部
+                arrow1.AddVertexAt(5, new Point2d(x1 + (arrowWidth - arrowHeadWidth), firstArrowY + arrowHeight / 4.0), 0, 0, 0); // 回到箭身
+                arrow1.AddVertexAt(6, new Point2d(x1, firstArrowY + arrowHeight / 4.0), 0, 0, 0); // 尾部上
                 arrow1.Closed = true;
                 arrow1.Layer = layerName;
                 arrow1.ColorIndex = 231;
+                // 可选：设置常量宽以改善不同注释比例下的显示
+                try { arrow1.ConstantWidth = Math.Max(0.01, plScale * 0.3); } catch { }
                 tr.CurrentSpace.AddEntity(arrow1);
 
-                // 创建第二个箭头（向左）  
+                // -------------------------
+                // 第二个箭头（从右向左）
+                // 计算起点 X：从右边界减去 margin（此时尾部到右边框的距离 = margin）
+                // 尖端 X 将位于 startX - arrowWidth，因此尖端到左边界的距离 = (startX - arrowWidth) - bounds.MinX = margin
+                // -------------------------
                 Polyline arrow2 = new Polyline();
-                double x2 = bounds.MaxPoint.X - margin;
-                arrow2.AddVertexAt(0, new Point2d(x2, secondArrowY), 0, 0, 0);  // 起点  
-                arrow2.AddVertexAt(1, new Point2d(x2 - arrowWidth + arrowHeadWidth, secondArrowY), 0, 0, 0);  // 线条终点  
-                arrow2.AddVertexAt(2, new Point2d(x2 - arrowWidth + arrowHeadWidth, secondArrowY - arrowHeight / 2), 0, 0, 0);  // 箭头底部  
-                arrow2.AddVertexAt(3, new Point2d(x2 - arrowWidth, secondArrowY + arrowHeight / 8), 0, 0, 0); // 箭头尖端  
-                arrow2.AddVertexAt(4, new Point2d(x2 - arrowWidth + arrowHeadWidth, secondArrowY + arrowHeight / 1.4), 0, 0, 0);  // 箭头顶部  
-                arrow2.AddVertexAt(5, new Point2d(x2 - arrowWidth + arrowHeadWidth, secondArrowY + arrowHeight / 4), 0, 0, 0);  // 回到线条  
-                arrow2.AddVertexAt(6, new Point2d(x2, secondArrowY + arrowHeight / 4), 0, 0, 0);  // 线条起点上边  
+                double x2 = bounds.MaxPoint.X - margin; // 尾部 X（靠近右边框）
+                arrow2.AddVertexAt(0, new Point2d(x2, secondArrowY), 0, 0, 0); // 起点（尾部下）
+                arrow2.AddVertexAt(1, new Point2d(x2 - (arrowWidth - arrowHeadWidth), secondArrowY), 0, 0, 0); // 箭身末端
+                arrow2.AddVertexAt(2, new Point2d(x2 - (arrowWidth - arrowHeadWidth), secondArrowY - arrowHeight / 2.0), 0, 0, 0); // 箭头底下
+                arrow2.AddVertexAt(3, new Point2d(x2 - arrowWidth, secondArrowY + arrowHeight / 8.0), 0, 0, 0); // 箭尖
+                arrow2.AddVertexAt(4, new Point2d(x2 - (arrowWidth - arrowHeadWidth), secondArrowY + arrowHeight / 1.4), 0, 0, 0); // 箭头顶部
+                arrow2.AddVertexAt(5, new Point2d(x2 - (arrowWidth - arrowHeadWidth), secondArrowY + arrowHeight / 4.0), 0, 0, 0); // 回到箭身
+                arrow2.AddVertexAt(6, new Point2d(x2, secondArrowY + arrowHeight / 4.0), 0, 0, 0); // 尾部上
                 arrow2.Closed = true;
                 arrow2.Layer = layerName;
                 arrow2.ColorIndex = 231;
+                try { arrow2.ConstantWidth = Math.Max(0.01, plScale * 0.3); } catch { }
                 tr.CurrentSpace.AddEntity(arrow2);
 
-                // 为箭头添加填充（SOLID），并让填充的显示比例随 uiScale 调整（保护性值）
+                // -------------------------
+                // 添加实心填充（Hatch），调整 PatternScale 为固定保护值，避免随 uiScale 带来过度变化
+                // -------------------------
+                double hatchScale = 1.0; // 保护性固定值，如需按显示放大可改为 1.0 / uiScale 等策略
                 using (Hatch hatch1 = new Hatch())
                 {
                     hatch1.SetHatchPattern(HatchPatternType.PreDefined, "SOLID");
                     hatch1.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { arrow1.ObjectId });
-                    hatch1.PatternScale = Math.Max(1.0, 100 * uiScale);
+                    hatch1.PatternScale = hatchScale;
                     hatch1.Layer = layerName;
                     hatch1.ColorIndex = 231;
                     hatch1.EvaluateHatch(true);
@@ -3774,7 +3950,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 {
                     hatch2.SetHatchPattern(HatchPatternType.PreDefined, "SOLID");
                     hatch2.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { arrow2.ObjectId });
-                    hatch2.PatternScale = Math.Max(1.0, 100 * uiScale);
+                    hatch2.PatternScale = hatchScale;
                     hatch2.Layer = layerName;
                     hatch2.ColorIndex = 231;
                     hatch2.EvaluateHatch(true);
@@ -3782,7 +3958,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 }
 
                 tr.Commit();
-                Env.Editor.Redraw();  // 强制刷新视图
+                Env.Editor.Redraw();
             }
             catch (System.Exception ex)
             {
@@ -3802,7 +3978,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 var layerName = VariableDictionary.btnBlockLayer; // 设置图层名称
                 Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 231); // 设置图层颜色索引
                 using var tr = new DBTrans();//开启事务
-                // 检查图层是否存在，如果不存在则创建
+                                             // 检查图层是否存在，如果不存在则创建
                 LayerDictionaryHelper.EnsureTargetLayer(tr, layerName, layerColorIndex);//添加图层；
 
                 // 获取第一个点
@@ -4065,7 +4241,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             if (kwTextString != null)
                             {
 
-                                Match kwTextMatch = Regex.Match(kwTextString.TextString.ToLower(), @"\d+(\.\d+)?");
+                                System.Text.RegularExpressions.Match kwTextMatch = Regex.Match(kwTextString.TextString.ToLower(), @"\d+(\.\d+)?");
                                 //i++;
                                 if (kwTextMatch.Success)
                                 {
@@ -4129,21 +4305,21 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         #region 建筑绘图
 
         /// <summary>
-        /// 建筑、用户指定两点吊顶区Line2Polyline
+        /// 建筑、用户指定两点吊顶区DiaoDingPolyline
         /// </summary>
         /// <param name="layerName"></param>
-        [CommandMethod(nameof(Line2Polyline))]
-        public static void Line2Polyline()
+        [CommandMethod(nameof(DiaoDingPolyline))]
+        public static void DiaoDingPolyline()
         {
             try
             {
-                var layerName = VariableDictionary.btnBlockLayer;
-                Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 0); // 设置图层颜色索引
-                var scale = VariableDictionary.textBoxScale;
+                var layerName = VariableDictionary.layerName;
+                Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex); // 设置图层颜色索引
+                var scale = AutoCadHelper.GetScale();
                 using var tr = new DBTrans();//开启事务
-                // 检查图层是否存在，如果不存在则创建
+                                             // 检查图层是否存在，如果不存在则创建
                 LayerDictionaryHelper.EnsureTargetLayer(tr, layerName, layerColorIndex);//添加图层；
-                // 确保文字样式存在（DASH 里会引用）              
+                                                                                        // 确保文字样式存在（DASH 里会引用）              
                 TextFontsStyleHelper.EnsureTextStyle(tr, "tJText");
                 var userPoint1 = Env.Editor.GetPoint("\n请指定第一点");
                 if (userPoint1.Status != PromptStatus.OK) return;
@@ -4191,23 +4367,47 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         textPoint = midPoint - offsetVector;
                     }
 
-                    if (VariableDictionary.btnFileName == "JZTJ_不吊顶")
+                    if (VariableDictionary.btnFileName == "不吊顶")
                     {
-                        queue.Enqueue(polyline2);
+                        queue.Enqueue(polyline2); // 将多段线加入绘制队列
+
+                        // 构造 DBText（先设置样式与内容）
                         DBText text = new DBText()
                         {
-                            TextStyleId = tr.TextStyleTable["tJText"],
-                            TextString = "不吊顶",
-                            Height = 3.50 * scale,
-                            WidthFactor = 0.7,
-                            ColorIndex = VariableDictionary.layerColorIndex,
-                            Layer = layerName,
-                            Position = textPoint,
-                            //Rotation = angle,
-                            HorizontalMode = TextHorizontalMode.TextCenter,
-                            VerticalMode = TextVerticalMode.TextVerticalMid,
-                            AlignmentPoint = textPoint
+                            TextStyleId = tr.TextStyleTable["tJText"], // 设置文字样式
+                            TextString = "不吊顶", // 设置文字内容
+                            Height = 3.50 * scale, // 设置文字高度
+                            WidthFactor = 0.7,     // 设置文字宽度因子
+                            ColorIndex = VariableDictionary.layerColorIndex, // 设置文字颜色索引
+                            Layer = layerName,     // 设置文字图层
+                                                   // 这里先不设置 Position，使用 AlignmentPoint + AdjustAlignment 来把“中间字”对齐到交叉点
+                            HorizontalMode = TextHorizontalMode.TextCenter, // 水平居中
+                            VerticalMode = TextVerticalMode.TextVerticalMid   // 垂直中点
                         };
+
+                        try
+                        {
+                            // 1) 把对齐点设置为交叉点 midPoint，使文本的“中间点”与交叉点对齐
+                            text.AlignmentPoint = midPoint;
+
+                            // 2) 让 AutoCAD 根据 AlignmentPoint 与对齐模式调整文字位置（需要数据库上下文）
+                            try { text.AdjustAlignment(tr.Database); } catch { /* 忽略调整失败 */ }
+
+                            // 3) 对整个文字再向全局向上移动 4 * scale（按你的要求）
+                            var upOffset = new Vector3d(0, 4.0 * scale, 0);
+                            try { text.TransformBy(Matrix3d.Displacement(upOffset)); } catch { /* 忽略移动失败 */ }
+
+                            // 4) 为保障在 Jig 中能正确显示，也把 AlignmentPoint 更新为最终位置的中心（可选）
+                            //    这里保持 AlignmentPoint 为 midPoint（逻辑基点），Position 已由 AdjustAlignment/TransformBy 确定
+                        }
+                        catch
+                        {
+                            // 容错：若对齐流程失败，回退到使用 textPointUp（线上方基础点再上移）作为位置
+                            Point3d fallback = textPoint + new Vector3d(0, 4.0 * scale, 0);
+                            text.Position = fallback;
+                            text.AlignmentPoint = fallback;
+                        }
+
                         queue.Enqueue(text);
                     }
                     else
@@ -4246,7 +4446,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             catch (Exception ex)
             {
                 // 记录错误日志  
-                LogManager.Instance.LogInfo("建筑、用户指定两点吊顶区Line2Polyline失败！");
+                LogManager.Instance.LogInfo("建筑、用户指定两点吊顶区DiaoDingPolyline失败！");
                 LogManager.Instance.LogInfo(ex.Message);
             }
         }
@@ -4308,19 +4508,21 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
+        //STRUC_PolyLineREC结构的专业缩写
+
         /// <summary>
         /// 建筑专业用鼠标画矩形
         /// </summary>
         /// <param name="layerName"></param>
-        [CommandMethod(nameof(Rec2PolyLine_2))]
-        public static void Rec2PolyLine_2()
+        [CommandMethod(nameof(ARCH_PolyLineREC_2))]
+        public static void ARCH_PolyLineREC_2()
         {
             try
             {
                 var layerName = VariableDictionary.btnBlockLayer;
                 Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 0); // 设置图层颜色索引
                 using var tr = new DBTrans();//开启事务
-                // 检查图层是否存在，如果不存在则创建
+                                             // 检查图层是否存在，如果不存在则创建
                 LayerDictionaryHelper.EnsureTargetLayer(tr, layerName, layerColorIndex);//添加图层；
 
                 // 获取矩形左下角点（起始点）  
@@ -4415,18 +4617,18 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// 建筑专业用鼠标画矩形
         /// </summary>
         /// <param name="layerName"></param>
-        [CommandMethod(nameof(Rec2PolyLine_3))]
-        public static void Rec2PolyLine_3()
+        [CommandMethod(nameof(ARCH_PolyLineREC_3))]
+        public static void ARCH_PolyLineREC_3()
         {
             try
             {
                 var layerName = VariableDictionary.btnBlockLayer;
-                var textBoxScale = AutoCadHelper.GetScale();
+                var winformTextBoxScale = AutoCadHelper.GetScale();
                 // 计算矢量差（拖动时基于参考点的偏移量）  
                 var delta = new Vector3d(0, 0, 0);
                 Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 0); // 设置图层颜色索引
                 using var tr = new DBTrans();//开启事务
-                // 检查图层是否存在，如果不存在则创建
+                                             // 检查图层是否存在，如果不存在则创建
                 LayerDictionaryHelper.EnsureTargetLayer(tr, layerName, layerColorIndex);//添加图层；
 
                 // 获取参考点（可以视为左下角，但后续根据方向调整）  
@@ -4654,7 +4856,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
                 Int16 layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex == null ? VariableDictionary.layerColorIndex : 64); // 设置图层颜色索引
                 using var tr = new DBTrans();//开启事务
-                // 检查图层是否存在，如果不存在则创建
+                                             // 检查图层是否存在，如果不存在则创建
                 LayerDictionaryHelper.EnsureTargetLayer(tr, layerName, layerColorIndex);//添加图层；
 
                 // 获取用户输入的第一点和第二点
@@ -4730,7 +4932,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 1) 设置结果图层名称和颜色
                 string layerName = "房屋面积";
                 short layerColorIndex = 2;
-                var textBoxScale = VariableDictionary.textBoxScale == null ? VariableDictionary.textBoxScale : 100;
+                var winformTextBoxScale = VariableDictionary.winformTextBoxScale == null ? VariableDictionary.winformTextBoxScale : 100;
 
                 // 2) 用于存储用户依次确认的点（二维点，统一按 UCS 保存）
                 List<Point2d> points = new List<Point2d>();
@@ -4834,7 +5036,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 var text = new DBText();
                 TextFontsStyleHelper.TextStyleAndLayerInfo(tr, layerName, layerColorIndex, "tJText");
                 text.TextString = $"{area:F2}";
-                text.Height = 3 * textBoxScale;
+                text.Height = 3 * winformTextBoxScale;
                 text.TextStyleId = tr.TextStyleTable["tJText"];
                 text.Layer = layerName;
                 text.ColorIndex = layerColorIndex;
@@ -4929,14 +5131,12 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 using var tr = new DBTrans();
                 TextFontsStyleHelper.TextStyleAndLayerInfo(tr, VariableDictionary.btnBlockLayer, Convert.ToInt16(VariableDictionary.layerColorIndex), "tJText");
                 var layerColorIndex = Convert.ToInt16(VariableDictionary.layerColorIndex);
-                double uiScale = VariableDictionary.textBoxScale;
+                double uiScale = VariableDictionary.winformTextBoxScale;
                 if (double.IsNaN(uiScale) || uiScale <= 0)
                 {
                     try { uiScale = AutoCadHelper.GetScale(true); } catch { uiScale = 1.0; }
                 }
                 if (uiScale <= 0) uiScale = 1.0;
-                //double textHeight = ResolveLeaderTextHeight(3.0);
-                //double arrowSize = ResolveLeaderArrowSize(2.0);
 
                 string targetLayer = LayerControlHelper.GetOrCreateTargetLayer(
                     tr,
@@ -4977,8 +5177,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 });
                 entityBBText.DatabaseEntityDraw(wd => wd.Geometry.Draw(text));
                 entityBBText.SetOptions(msg: "\n指定插入点");
-
-                //entityBlock.SetOptions(startPoint, msg: "\n指定插入点");这个startpoint，是有个参考线在里面，用于托拽时的辅助；
                 var endPoint = Env.Editor.Drag(entityBBText);
                 if (endPoint.Status != PromptStatus.OK)
                     tr.Abort();
@@ -5221,7 +5419,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         Contents = label,
                         Location = centerPt,
                         //TextHeight = Math.Max(50, Math.Min(coreLen, coreWid) / 3.0),
-                        TextHeight = 2 * VariableDictionary.textBoxScale,
+                        TextHeight = 2 * VariableDictionary.winformTextBoxScale,
                         Attachment = AttachmentPoint.MiddleCenter
                     };
                     var mtextId = tr.CurrentSpace.AddEntity(mtext);
@@ -5261,7 +5459,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     var preview = entities.First();
                     Point3d lastPt = Point3d.Origin;
                     double lastAngle = VariableDictionary.entityRotateAngle;
-                    double lastScale = VariableDictionary.textBoxScale > 0 ? VariableDictionary.textBoxScale : 1.0;
+                    double lastScale = VariableDictionary.winformTextBoxScale > 0 ? VariableDictionary.winformTextBoxScale : 1.0;
 
                     var jig = new JigEx((currPt, _) =>
                     {
@@ -5284,7 +5482,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         }
 
                         // 3. 缩放
-                        double currScale = VariableDictionary.textBoxScale > 0 ? VariableDictionary.textBoxScale : 1.0;
+                        double currScale = VariableDictionary.winformTextBoxScale > 0 ? VariableDictionary.winformTextBoxScale : 1.0;
                         if (Math.Abs(currScale - lastScale) > 1e-9)
                         {
                             double factor = currScale / lastScale;
@@ -5606,8 +5804,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         #endregion
 
         #endregion
-
-        ///GetCircumcenter  GeneratePipeTableFromSelection getscale
+        
 
         #region Excel相关 
 
@@ -5625,234 +5822,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
         }
 
-        ////////////////////////////////////
-        /// <summary>
-        /// 插入Excel表格数据到CAD
-        /// </summary>
-        //[CommandMethod("InsertExcelTableToCAD")] // 在CAD中执行命令：EXCELTABLE
-        //public void InsertExcelTableToCAD()
-        //{
-        //    try
-        //    {
-        //        VariableDictionary.winForm_Status = true;
-        //        VariableDictionary.textBoxScale = 0;
-        //        VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
-        //        // 1) 选择文件
-        //        string excelPath = SelectExcelFile();
-        //        if (string.IsNullOrWhiteSpace(excelPath) || !File.Exists(excelPath))
-        //        {
-        //            LogManager.Instance.LogInfo("\n未选择有效的Excel文件，操作已取消。");
-        //            return;
-        //        }
-
-        //        // 2) 定义目标字段（按业务顺序）
-        //        string keyField = "分类号";
-        //        string[] targetFields = { "分类号", "设备位号", "设备名称", "主要技术规格型号", "数量", "电压", "功率", "单重" }; // 可根据需要调整字段列表和顺序
-        //        // 保存：第一行表头 + 后续数据
-        //        List<List<string>> dataList = new List<List<string>>();
-
-        //        // 3) NPOI 读取 Excel
-        //        IWorkbook workbook; // 工作簿对象
-        //        using (FileStream fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read)) // 
-        //        {
-        //            workbook = new XSSFWorkbook(fs);
-        //        }
-
-        //        ISheet sheet = workbook.GetSheetAt(0);
-        //        if (sheet == null)
-        //        {
-        //            Application.ShowAlertDialog("Excel工作表为空或无有效数据。");
-        //            return;
-        //        }
-
-        //        // 获取总行数（1‑based）
-        //        int totalRows = sheet.LastRowNum + 1;
-        //        if (totalRows <= 0)
-        //        {
-        //            Application.ShowAlertDialog("Excel工作表为空或无有效数据。");
-        //            return;
-        //        }
-
-        //        // 获取总列数（取所有行中最大的列数，兼容不规则表格）
-        //        int colCount = 0;
-        //        for (int i = 0; i < totalRows; i++)
-        //        {
-        //            IRow r = sheet.GetRow(i);
-        //            if (r != null)
-        //            {
-        //                int cols = r.LastCellNum; // 1‑based
-        //                if (cols > colCount) colCount = cols;
-        //            }
-        //        }
-        //        if (colCount == 0)
-        //        {
-        //            Application.ShowAlertDialog("Excel工作表为空或无有效数据。");
-        //            return;
-        //        }
-
-        //        DataFormatter formatter = new DataFormatter();
-
-        //        // 辅助方法：获取单元格显示文本（模拟 EPPlus 的 .Text）
-        //        string GetCellText(int row1Based, int col1Based)
-        //        {
-        //            if (row1Based < 1 || col1Based < 1) return string.Empty;
-        //            IRow row = sheet.GetRow(row1Based - 1);
-        //            if (row == null) return string.Empty;
-        //            ICell cell = row.GetCell(col1Based - 1);
-        //            if (cell == null) return string.Empty;
-        //            return formatter.FormatCellValue(cell).Trim();
-        //        }
-
-        //        // 表头查找区间（第5~7行，做边界保护）
-        //        int headerStart = Math.Max(1, 5);
-        //        int headerEnd = Math.Min(7, totalRows);
-
-        //        // 字段 → 列索引（1‑based）
-        //        Dictionary<string, int> fieldColumnMap = new Dictionary<string, int>();
-
-        //        for (int r = headerStart; r <= headerEnd; r++)
-        //        {
-        //            for (int c = 1; c <= colCount; c++)
-        //            {
-        //                string raw = GetCellText(r, c);
-        //                string colName = raw.Replace("\r", "").Replace("\n", "").Trim();
-        //                if (string.IsNullOrWhiteSpace(colName)) continue;
-
-        //                foreach (var target in targetFields)
-        //                {
-        //                    if (!fieldColumnMap.ContainsKey(target) && colName.Contains(target))
-        //                    {
-        //                        fieldColumnMap[target] = c;
-        //                        break;
-        //                    }
-        //                }
-        //            }
-        //        }
-
-        //        if (!fieldColumnMap.ContainsKey(keyField))
-        //        {
-        //            Application.ShowAlertDialog("未找到“分类号”列，请检查Excel模板。");
-        //            return;
-        //        }
-
-        //        // 仅保留找到的字段（保持顺序）
-        //        var orderedFields = targetFields.Where(f => fieldColumnMap.ContainsKey(f)).ToList();
-        //        if (orderedFields.Count == 0)
-        //        {
-        //            Application.ShowAlertDialog("未识别到可导入列，请检查表头。");
-        //            return;
-        //        }
-
-        //        // 表头行
-        //        dataList.Add(new List<string>(orderedFields));
-
-        //        // 数据从第8行开始
-        //        int dataStartRow = 8;
-        //        int keyCol = fieldColumnMap[keyField];
-
-        //        for (int row = dataStartRow; row <= totalRows; row++)
-        //        {
-        //            string classifyValue = GetCellText(row, keyCol);
-        //            if (string.IsNullOrWhiteSpace(classifyValue)) continue;   // 分类号为空则跳过
-
-        //            List<string> rowData = new List<string>(orderedFields.Count);
-        //            foreach (var field in orderedFields)
-        //            {
-        //                int col = fieldColumnMap[field];
-        //                rowData.Add(GetCellText(row, col));
-        //            }
-        //            dataList.Add(rowData);
-        //        }
-
-        //        // 4) 后续逻辑与原先完全一致
-        //        if (dataList.Count <= 1)
-        //        {
-        //            Application.ShowAlertDialog("没有可导入的数据（分类号为空）。");
-        //            return;
-        //        }
-
-        //        var doc = Application.DocumentManager.MdiActiveDocument;
-        //        if (doc == null) return;
-
-        //        using (doc.LockDocument())
-        //        using (DBTrans tr = new())
-        //        {
-        //            TextFontsStyleHelper.TextStyleAndLayerInfo(tr, "S_设备", 1, "tJText");
-
-        //            // 保持原展示顺序：数据倒序（表头会变到最后一行）
-        //            dataList.Reverse();
-
-        //            PromptPointResult ppr = Env.Editor.GetPoint("\n请在CAD中指定表格插入点：");
-        //            if (ppr.Status != PromptStatus.OK) return;
-
-        //            int rows = dataList.Count;
-        //            int cols = dataList[0].Count;
-
-        //            var table = new Autodesk.AutoCAD.DatabaseServices.Table
-        //            {
-        //                Position = ppr.Value,
-        //                Layer = "S_设备"
-        //            };
-        //            table.SetSize(rows, cols);
-
-        //            for (int r = 0; r < rows; r++)
-        //            {
-        //                bool isHeaderRow = (r == rows - 1); // Reverse 后表头在最后一行
-        //                for (int c = 0; c < cols; c++)
-        //                {
-        //                    var cell = table.Cells[r, c];
-        //                    cell.TextString = dataList[r][c];
-        //                    cell.TextStyleId = tr.TextStyleTable["tJText"];
-        //                    cell.TextHeight = isHeaderRow ? 3.5 * VariableDictionary.textBoxScale : 3 * VariableDictionary.textBoxScale;
-        //                    cell.Alignment = CellAlignment.MiddleCenter;
-        //                }
-        //            }
-
-        //            for (int r = 0; r < rows; r++)
-        //                table.Rows[r].Height = (r == rows - 1) ? 5 * VariableDictionary.textBoxScale : 4.5 * VariableDictionary.textBoxScale;
-
-        //            for (int c = 0; c < cols; c++)
-        //            {
-        //                int maxLen = 1;
-        //                for (int r = 0; r < rows; r++)
-        //                {
-        //                    var txt = dataList[r][c] ?? string.Empty;
-        //                    if (txt.Length > maxLen) maxLen = txt.Length;
-        //                }
-        //                double width = Math.Min(60 * VariableDictionary.textBoxScale, Math.Max(6 * VariableDictionary.textBoxScale, maxLen * 1.8 * VariableDictionary.textBoxScale));
-        //                table.Columns[c].Width = width;
-        //            }
-
-        //            table.GenerateLayout();
-        //            table.RecomputeTableBlock(true);
-
-        //            tr.CurrentSpace.AddEntity(table);
-
-        //            // 分解为普通图元（保持原行为）
-        //            DBObjectCollection explodedObjects = new DBObjectCollection();
-        //            table.Explode(explodedObjects);
-        //            foreach (DBObject obj in explodedObjects)
-        //            {
-        //                if (obj is Entity ent)
-        //                    tr.CurrentSpace.AddEntity(ent);
-        //                else
-        //                    obj.Dispose();
-        //            }
-        //            table.Erase();
-
-        //            tr.Commit();
-        //            Env.Editor.Redraw();
-        //        }
-
-        //        LogManager.Instance.LogInfo("\n表格已经插入到CAD。");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"\n导入Excel失败：{ex.Message}");
-        //    }
-        //}
-
-
         [CommandMethod("InsertExcelTableToCAD")] // 在CAD中执行命令：EXCELTABLE
         public void InsertExcelTableToCAD()
         {
@@ -5860,8 +5829,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try // 尝试执行主逻辑 
             { // 开始 try 块 
                 VariableDictionary.winForm_Status = true; // 标记窗体状态 
-                VariableDictionary.textBoxScale = 0; // 先重置缩放缓存 
-                try { VariableDictionary.textBoxScale = AutoCadHelper.GetScale(); } catch { VariableDictionary.textBoxScale = 1.0; } // 安全读取缩放值 
+                VariableDictionary.winformTextBoxScale = 0; // 先重置缩放缓存 
+                try { VariableDictionary.winformTextBoxScale = AutoCadHelper.GetScale(); } catch { VariableDictionary.winformTextBoxScale = 1.0; } // 安全读取缩放值 
 
                 // 1) 选择文件 
                 string excelPath = SelectExcelFile(); // 调用已有的文件选择方法 
@@ -6023,7 +5992,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     int cols = dataList[0].Count; // 列数（假设每行列数一致，且至少有一行表头）
 
                     // 计算列宽与行高（先计算，再用于预览与最终放置）
-                    double uiScale = VariableDictionary.textBoxScale;
+                    double uiScale = VariableDictionary.winformTextBoxScale;
                     if (double.IsNaN(uiScale) || uiScale <= 0) uiScale = 1.0; // 安全的 UI 缩放值
                     double headerTextHeight = TextFontsStyleHelper.ComputeScaledHeight(3.5, uiScale); // 表头字体高度
                     double bodyTextHeight = TextFontsStyleHelper.ComputeScaledHeight(3.0, uiScale); // 正文字体高度

@@ -492,10 +492,9 @@
                                                                     <Button
                                                                         x:Name="绘制进口管道"
                                                                         Width="85"
-                                                                        Height="25"
+                                                                        Height="NaN"
                                                                         Margin="1,0,0,0"
                                                                         HorizontalAlignment="Left"
-                                                                        VerticalAlignment="Top"
                                                                         Background="#FF0050A0"
                                                                         BorderBrush="#FFC2C6CE"
                                                                         Click="绘制进口管道_Click"

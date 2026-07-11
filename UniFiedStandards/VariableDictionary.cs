@@ -70,6 +70,10 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// </summary>
         public static bool winForm_Status = false;
         /// <summary>
+        /// wpf页面状态
+        /// </summary>
+        public static bool wpfWindows_Status = false;
+        /// <summary>
         /// 二层传递窗单选按钮状态
         /// </summary>
         public static bool radioButton = false;
@@ -238,7 +242,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 文本框输入比例
         /// </summary>
-        public static double textBoxScale = 0;
+        public static double winformTextBoxScale = 0;
         /// <summary>
         /// 文本框输入比例
         /// </summary>
@@ -299,6 +303,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
            "S_设备名称",
            "S_工艺设备",
            "S_办公家具",
+           "S_设备位号",
            "SB",
            "SB(工艺设备)",
            "SB(设备名称)",
@@ -380,11 +385,12 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// </summary>
         public static List<string> AtjtBtn = new List<string>
         {
-             "TJ(建筑专业)",
+            "TJ(建筑专业)",
             "TJ(建筑专业J)",
             "TJ(建筑专业J)Y",
             "TJ(建筑吊顶)",
-            "TJ(建筑过结构洞口)",
+            "TJ(建筑吊顶_排水沟)",
+            "TJ(建筑过结构洞口)"
         };
 
         /// <summary>

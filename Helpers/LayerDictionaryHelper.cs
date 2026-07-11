@@ -96,7 +96,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <returns>确保存在的图层名称</returns>
         public static string EnsureTargetLayer(DBTrans tr, string? preferLayerName, short colorIndex)
         {
-            string layerName = string.IsNullOrWhiteSpace(preferLayerName) ? "0" : preferLayerName;
+            string layerName = string.IsNullOrWhiteSpace(preferLayerName) ? "0" : preferLayerName;// 判断传进来的图层名是否为空，如果为空则使用默认图层名 "0"
 
             if (!tr.LayerTable.Has(layerName))
             {
@@ -114,8 +114,9 @@ namespace GB_NewCadPlus_IV.Helpers
                         ltr.IsPlottable = true; // 设置图层为可打印
                     }
                 }
+                AutoCadHelper.LogWithSafety($"已创建新图层：{layerName}");
             }
-            AutoCadHelper.LogWithSafety($"创建新图层：{layerName}");
+            AutoCadHelper.LogWithSafety($"当前图纸中已有图层：{layerName}");
             return layerName;
         }
 

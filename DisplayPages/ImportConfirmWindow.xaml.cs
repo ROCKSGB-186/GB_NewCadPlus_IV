@@ -308,11 +308,12 @@ namespace GB_NewCadPlus_IV.Views
             catch (InvalidOperationException ex)
             {
                 this.Close(); // 如果设置 DialogResult 失败（如窗口未以 ShowDialog 方式打开），则直接关闭窗口，确保用户操作得到响应
+                MessageBox.Show($"{ex}");
             }
         }
 
         /// <summary>
-        /// 确认按钮点击事件
+        /// [确认导入]按钮点击事件
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>

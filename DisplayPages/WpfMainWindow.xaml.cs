@@ -376,7 +376,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-
+                VariableDictionary.wpfWindows_Status = true; // 标记 WPF 窗口已加载
                 if (!Directory.Exists(GetPath.PreviewCachePath))
                     Directory.CreateDirectory(GetPath.PreviewCachePath);
                 if (!Directory.Exists(GetPath.DwgCachePath))
@@ -387,7 +387,6 @@ namespace GB_NewCadPlus_IV
                 var clientVersion = entryAsm?.GetName().Version?.ToString() ?? execAsm?.GetName().Version?.ToString() ?? "未知";
                 if (FindName("TextBox客户端版本") is TextBox clientVersionBox)
                     clientVersionBox.Text = clientVersion;
-                AutoCadHelper.GetScale();//先拿到绘图比例;
                 // 读取服务器端版本号（通过 DatabaseManager）
                 var serverVersionText = "未连接";
                 try
@@ -575,105 +574,21 @@ namespace GB_NewCadPlus_IV
         );
        
         #region 绘图配置（读取/保存/解析绘图比例）
-
-        // 从本地或控件读取绘图比例并设置到 VariableDictionary
-        //private void LoadDrawingConfig()
-        //{
-        //    try
-        //    {
-        //        double d = 0.0;
-        //        if (File.Exists(DrawingConfigPath))
-        //        {
-        //            try
-        //            {
-        //                DrawingConfig cfg = null;
-        //                try
-        //                {
-        //                    if (!File.Exists(DrawingConfigPath)) return;
-
-        //                    string json = File.ReadAllText(DrawingConfigPath);
-        //                    var settings = new JsonSerializerSettings
-        //                    {
-        //                        MissingMemberHandling = MissingMemberHandling.Ignore
-        //                    };
-        //                    cfg = JsonConvert.DeserializeObject<DrawingConfig>(json, settings);
-        //                    if (cfg != null && cfg.DrawingScale > 0.0)
-        //                        d = cfg.DrawingScale;
-        //                }
-        //                catch (Exception ex)
-        //                {
-        //                    LogManager.Instance.LogWarning("加载绘图配置出错：" + ex.Message);
-        //                }
-        //                if (cfg != null && cfg.DrawingScale > 0.0) d = cfg.DrawingScale;
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                LogManager.Instance.LogWarning("解析本地绘图配置失败，回退到其它来源: " + ex.Message);
-        //            }
-        //        }
-
-        //        if (d <= 0.0)
-        //        {
-        //            try
-        //            {
-        //                var s = TextBox绘图比例?.Text ?? string.Empty;
-        //                if (!string.IsNullOrWhiteSpace(s))
-        //                {
-        //                    s = s.Trim();
-        //                    double result;
-        //                    if (!double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out result) &&
-        //                        !double.TryParse(s.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out result))
-        //                        result = 0.0;
-        //                    if (result > 0.0) d = result;
-        //                }
-        //            }
-        //            catch { d = 0.0; }
-        //        }
-
-        //        if (d <= 0.0)
-        //        {
-        //            try { d = AutoCadHelper.GetScale(); } catch { d = 100.0; }
-        //        }
-
-        //        if (d <= 0.0 || double.IsNaN(d) || double.IsInfinity(d)) d = 100.0;
-
-        //        if (TextBox绘图比例 != null)
-        //        {
-        //            try { TextBox绘图比例.Text = d.ToString(CultureInfo.InvariantCulture); }
-        //            catch { TextBox绘图比例.Text = d.ToString(); }
-        //        }
-
-        //        VariableDictionary.blockScale = d;
-        //        VariableDictionary.textBoxScale = d;
-        //        VariableDictionary.wpfTextBoxScale = d;
-
-        //        try { AutoCadHelper.Invalidate(); AutoCadHelper.GetAndApplyActiveDrawingScale(); } catch { }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogWarning("加载绘图配置失败: " + ex.Message);
-        //        if (TextBox绘图比例 != null) TextBox绘图比例.Text = "100";
-        //        VariableDictionary.blockScale = 100.0;
-        //        VariableDictionary.textBoxScale = 100.0;
-        //        VariableDictionary.wpfTextBoxScale = 100.0;
-        //    }
-        //}
-
-        // 保存当前绘图配置到本地 JSON 文件
+        
+        /// <summary>
+        /// 保存当前绘图配置到本地 JSON 文件
+        /// </summary>
         private void SaveDrawingConfig()
         {
             try
-            {
-
-                VariableDictionary.blockScale = AutoCadHelper.GetScale();
-                VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
-                VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
-             
+            { var scale = Convert.ToDouble(TextBox绘图比例.Text);
+                VariableDictionary.wpfTextBoxScale = scale != 0 ? scale : Convert.ToDouble(TextBox绘图比例.Tag);// 先从 WPF 界面获取绘图比例并更新全局变量
+                // 确保目录存在
                 var dir = Path.GetDirectoryName(DrawingConfigPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-
+                // 使用 Newtonsoft.Json 序列化绘图配置对象为 JSON 字符串，并写入文件
                 var settings = new JsonSerializerSettings { Formatting = Formatting.Indented, Culture = CultureInfo.InvariantCulture };
-                File.WriteAllText(DrawingConfigPath, JsonConvert.SerializeObject(AutoCadHelper.GetScale(), settings));
+                File.WriteAllText(DrawingConfigPath, JsonConvert.SerializeObject(VariableDictionary.wpfTextBoxScale, settings));
             }
             catch (Exception ex)
             {
@@ -682,25 +597,80 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 从 TextBox 解析绘图比例（供外部调用）
+        /// 从本地配置文件加载绘图比例并写入 VariableDictionary.wpfTextBoxScale
+        /// 返回是否成功加载（true 表示成功并已设置变量）
         /// </summary>
-        /// <returns></returns>
-        //public double GetDrawingScaleFromTextBox()
-        //{
-        //    try
-        //    {
-        //        if (TextBox绘图比例 == null) return 0.0;
-        //        var s = (TextBox绘图比例.Text ?? string.Empty).Trim();
-        //        if (string.IsNullOrEmpty(s)) return 0.0;
-        //        double result;
-        //        if ((double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out result) && result > 0.0) ||
-        //            (double.TryParse(s.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out result) && result > 0.0))
-        //            return result;
-        //        if (double.TryParse(s, out result) && result > 0.0) return result;
-        //    }
-        //    catch { }
-        //    return 0.0;
-        //}
+        public double LoadDrawingConfig()
+        {
+            try
+            {
+                // 如果 DrawingConfigPath 未定义或为空，则直接返回失败
+                if (string.IsNullOrWhiteSpace(DrawingConfigPath)) // 检查路径变量
+                {
+                    LogManager.Instance.LogWarning("LoadDrawingConfig: DrawingConfigPath 检查路径变量未设置"); // 记录日志
+                    return 0; // 返回失败
+                }
+
+                // 如果配置文件不存在，则直接返回失败（不抛异常）
+                if (!File.Exists(DrawingConfigPath)) // 检查文件是否存在
+                {
+                    LogManager.Instance.LogWarning("LoadDrawingConfig: DrawingConfigPath 配置文件不存在"); // 记录日志
+                    return 0; // 返回失败
+                }
+
+                // 读取文件全部文本（使用 UTF8 编码）
+                string json = File.ReadAllText(DrawingConfigPath, System.Text.Encoding.UTF8); // 读取文件内容
+
+                // 如果文件为空或全是空白，认为加载失败
+                if (string.IsNullOrWhiteSpace(json)) // 内容为空检查
+                {
+                    LogManager.Instance.LogWarning("LoadDrawingConfig: DrawingConfigPath 文件为空或全是空白"); // 记录日志
+                    return 0; // 返回失败
+                }
+
+                // 尝试用 JSON 反序列化为 double（因为保存时直接序列化了一个 double 值）
+                double parsedValue; // 用于保存解析结果
+                try
+                {
+                    // 优先用 JsonConvert 反序列化（兼容数字或 JSON number）
+                    parsedValue = JsonConvert.DeserializeObject<double>(json); // 反序列化为 double
+                }
+                catch
+                {
+                    // 如果 JSON 反序列化失败，尝试直接按文本解析为数字（宽松处理）
+                    string raw = json.Trim(); // 去除空白
+                                              // 去掉可能的引号包裹（以防意外）
+                    if ((raw.StartsWith("\"") && raw.EndsWith("\"")) || (raw.StartsWith("'") && raw.EndsWith("'")))
+                        raw = raw.Substring(1, raw.Length - 2); // 去掉引号
+                                                                // 规范化一些常见全角字符
+                    raw = raw.Replace('，', ',').Replace('．', '.').Replace('\u3000', ' '); // 替换全角符号
+                                                                                          // 尝试不变文化解析（小数点为 '.' 的情况）
+                    if (!double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out parsedValue))
+                    {
+                        // 回退到当前文化解析
+                        if (!double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.CurrentCulture, out parsedValue))
+                        {
+                            // 若仍无法解析，记录日志并返回失败
+                            LogManager.Instance.LogWarning($"LoadDrawingConfig: 无法解析绘图比例，原文='{json}'"); // 记录无法解析的原文
+                            return 0; // 返回失败
+                        }
+                    }
+                }
+
+                // 解析成功后，把值写入全局变量
+                VariableDictionary.wpfTextBoxScale = parsedValue; // 设置全局变量
+                
+                // 成功加载并设置变量
+                return VariableDictionary.wpfTextBoxScale; // 返回成功
+            }
+            catch (Exception ex)
+            {
+                // 捕获所有意外异常并记录日志，避免程序中断
+                LogManager.Instance.LogWarning("加载绘图配置失败: " + ex.Message); // 记录异常
+                return 0; // 返回失败
+            }
+        }
+
         #endregion
 
         #region 数据库初始化/检测/重置（与 DatabaseManager 协作）
@@ -1138,6 +1108,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                VariableDictionary.wpfWindows_Status = true;
                 if (!(sender is Button btn)) return; // 仅处理 Button 类型的点击事件
 
                 // 1. 视觉选中样式管理
@@ -1248,6 +1219,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                VariableDictionary.wpfWindows_Status = true;
                 // 解析文件储存信息
                 var file = ResolveFileStorageFromTag((sender as Button)?.Tag);
                 if (file == null) return;
@@ -1277,8 +1249,8 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                VariableDictionary.wpfWindows_Status = true;
                 if (!_isButtonMouseDown || _isButtonDragging) return; // 只有在鼠标左键按下且尚未判定为拖拽时才进行拖拽检测
-
                 var diff = e.GetPosition(null) - _buttonDragStartPoint; // 计算当前鼠标位置与起始点的差值
                 if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
                     Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)  // 如果水平或垂直方向的移动都超过系统定义的最小拖拽距离，则判定为拖拽
@@ -2212,11 +2184,95 @@ namespace GB_NewCadPlus_IV
         /// 根据 FileStorage 与属性字典构建 DataGrid 显示模型集合
         /// 返回 List<CategoryPropertyEditModel>
         /// </summary>
+        //public List<CategoryPropertyEditModel> PrepareFileDisplayData(FileStorage fileStorage, Dictionary<string, string> attributes)
+        //{
+        //    var result = new List<CategoryPropertyEditModel>();
+
+        //    // 辅助方法：安全获取字典值，若缺失则返回默认值
+        //    string GetAttr(string key, string defaultValue = "")
+        //    {
+        //        if (attributes != null && attributes.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v))
+        //            return v;
+        //        return defaultValue;
+        //    }
+
+        //    // 标记哪些键已经被固定行占用，后续遍历时跳过它们
+        //    var usedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        //    // 辅助方法：添加一行到结果列表，并标记使用的键
+        //    void AddRow(string name1, string key1, string def1,
+        //                string name2, string key2, string def2)
+        //    {
+        //        usedKeys.Add(key1);
+        //        usedKeys.Add(key2);
+        //        result.Add(new CategoryPropertyEditModel
+        //        {
+        //            PropertyName1 = name1,
+        //            PropertyValue1 = GetAttr(key1, def1),
+        //            PropertyName2 = name2,
+        //            PropertyValue2 = GetAttr(key2, def2)
+        //        });
+        //    }
+
+        //    try
+        //    {
+        //        // ---- 固定字段（从字典或直接赋默认值） ----
+        //        string displayName = fileStorage?.DisplayName ?? string.Empty;
+        //        AddRow("文件名", "FileName", displayName,
+        //               "显示名称", "DisplayName", displayName);
+        //        AddRow("元素块名", "BlockName", "",
+        //               "图层名称", "LayerName", "");
+        //        AddRow("颜色索引", "ColorIndex", "1",
+        //               "比例", "Scale", "1");
+        //        //AddRow("描述", "Description", "",
+        //        //       "版本", "Version", "1");
+        //        AddRow("创建者", "CreatedBy", Environment.UserName,
+        //               "是否公开", "IsPublic", "是");
+        //        AddRow("是否天正", "IsTianZheng", "否",
+        //               "", "", "");
+        //        AddRow("预览图名", "PreviewImageName", fileStorage.PreviewImageName,
+        //            "预览图地址", "PreviewImageAddress", fileStorage.PreviewImagePath);
+        //        // 几何信息
+        //        AddRow("长度", "Length", "",
+        //               "宽度", "Width", "");
+        //        AddRow("高度", "Height", "",
+        //               "角度", "Angle", "0");
+        //        if (attributes != null && attributes.Count > 0)
+        //        {
+        //            //---- 处理剩余的非空属性，按两列显示 ----
+        //            //var pairs = attributes
+        //            //    .Where(kv => !string.IsNullOrWhiteSpace(kv.Value) && !usedKeys.Contains(kv.Key))
+        //            //    .ToList();
+        //            var pairs = attributes
+        //                .Where(kv => !usedKeys.Contains(kv.Key))
+        //                .ToList();
+        //            for (int i = 0; i < pairs.Count; i += 2)
+        //            {
+        //                var p1 = pairs[i];
+        //                var p2 = (i + 1 < pairs.Count) ? pairs[i + 1] : default;
+        //                result.Add(new CategoryPropertyEditModel
+        //                {
+        //                    PropertyName1 = p1.Key,
+        //                    PropertyValue1 = p1.Value,
+        //                    PropertyName2 = p2.Key ?? string.Empty,
+        //                    PropertyValue2 = p2.Value ?? string.Empty
+        //                });
+        //            }
+        //        }
+        //        return result;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo("PrepareFileDisplayData 异常: " + ex.Message);
+        //    }
+
+        //    return result;
+        //}
+
+
         public List<CategoryPropertyEditModel> PrepareFileDisplayData(FileStorage fileStorage, Dictionary<string, string> attributes)
         {
             var result = new List<CategoryPropertyEditModel>();
 
-            // 辅助方法：安全获取字典值，若缺失则返回默认值
             string GetAttr(string key, string defaultValue = "")
             {
                 if (attributes != null && attributes.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v))
@@ -2224,11 +2280,9 @@ namespace GB_NewCadPlus_IV
                 return defaultValue;
             }
 
-            // 标记哪些键已经被固定行占用，后续遍历时跳过它们
             var usedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            void AddRow(string name1, string key1, string def1,
-                        string name2, string key2, string def2)
+            void AddRow(string name1, string key1, string def1, string name2, string key2, string def2)
             {
                 usedKeys.Add(key1);
                 usedKeys.Add(key2);
@@ -2243,55 +2297,82 @@ namespace GB_NewCadPlus_IV
 
             try
             {
-                // ---- 固定字段（从字典或直接赋默认值） ----
+                // ---- 固定字段 ----
                 string displayName = fileStorage?.DisplayName ?? string.Empty;
-                AddRow("文件名", "FileName", displayName,
-                       "显示名称", "DisplayName", displayName);
-                AddRow("元素块名", "BlockName", "",
-                       "图层名称", "LayerName", "");
-                AddRow("颜色索引", "ColorIndex", "1",
-                       "比例", "Scale", "1");
-                //AddRow("描述", "Description", "",
-                //       "版本", "Version", "1");
-                AddRow("创建者", "CreatedBy", Environment.UserName,
-                       "是否公开", "IsPublic", "是");
-                AddRow("是否天正", "IsTianZheng", "否",
-                       "", "", "");
-                AddRow("预览图名", "PreviewImageName", fileStorage.PreviewImageName,
-                    "预览图地址", "PreviewImageAddress", fileStorage.PreviewImagePath);
-                // 几何信息
-                AddRow("长度", "Length", "",
-                       "宽度", "Width", "");
-                AddRow("高度", "Height", "",
-                       "角度", "Angle", "0");
+                AddRow("文件名", "FileName", displayName, "显示名称", "DisplayName", displayName);
+                AddRow("元素块名", "BlockName", "", "图层名称", "LayerName", "");
+                AddRow("颜色索引", "ColorIndex", "1", "比例", "Scale", "1");
+                AddRow("创建者", "CreatedBy", Environment.UserName, "是否公开", "IsPublic", "是");
+                AddRow("是否天正", "IsTianZheng", "否", "", "", "");
+                AddRow("预览图名", "PreviewImageName", fileStorage.PreviewImageName, "预览图地址", "PreviewImageAddress", fileStorage.PreviewImagePath);
+                AddRow("长度", "Length", "", "宽度", "Width", "");
+                AddRow("高度", "Height", "", "角度", "Angle", "0");
+
+                // ---- 动态属性（预设 + 剩余排序） ----
                 if (attributes != null && attributes.Count > 0)
                 {
-                    var pairs = attributes
-                        .Where(kv => !string.IsNullOrWhiteSpace(kv.Value) && !usedKeys.Contains(kv.Key))
+                    // 1. 预设顺序键列表（不包含 REMARK）
+                    var predefinedKeys = new List<string>
+                    {
+                        "PIPELINETITLE", "TAG_NO", "NAME", "MODEL",
+                        "DRAWINGNO.STANDARDNO", "STRUCT_LEN_STD", "START_POINT", "END_POINT",
+                        "FLG_STD", "TEST_STD", "DNCONN_TYPE", "QTY",
+                        "WEIGHT", "SW_MODEL", "SYSTEM","REMARK"
+                        // REMARK 单独处理，放在最后
+                    };
+                    var predefinedKeysSet = new HashSet<string>(predefinedKeys, StringComparer.OrdinalIgnoreCase);
+
+                    // 2. 按顺序提取预设键（不含 REMARK），并记录已用的键
+                    var predefinedPairs = new List<KeyValuePair<string, string>>();
+                    foreach (var key in predefinedKeys)
+                    {
+                        if (!usedKeys.Contains(key) && attributes.TryGetValue(key, out var value))
+                        {
+                            predefinedPairs.Add(new KeyValuePair<string, string>(key, value));
+                        }
+                    }
+
+                    // 3. 提取剩余键（排除 usedKeys、所有预设键及 REMARK），并按字母排序
+                    var allPredefinedSet = new HashSet<string>(predefinedKeys, StringComparer.OrdinalIgnoreCase);
+                    allPredefinedSet.Add("Remarks"); // 也排除 REMARK，因为要单独处理
+                    var remainingPairs = attributes
+                        .Where(kv => !usedKeys.Contains(kv.Key) && !allPredefinedSet.Contains(kv.Key))
+                        .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
-                    for (int i = 0; i < pairs.Count; i += 2)
+                    // 4. 合并：预设 + 剩余排序
+                    var allPairs = predefinedPairs.Concat(remainingPairs).ToList();
+
+                    // 5. 单独处理 REMARK（如果存在且未被 usedKeys 占用）
+                    if (!usedKeys.Contains("Remarks") && attributes.TryGetValue("Remarks", out var remarkValue))
                     {
-                        var p1 = pairs[i];
-                        var p2 = (i + 1 < pairs.Count) ? pairs[i + 1] : default;
+                        allPairs.Add(new KeyValuePair<string, string>("Remarks", remarkValue ?? string.Empty));
+                    }
+
+                    // 6. 两两配对添加到结果
+                    for (int i = 0; i < allPairs.Count; i += 2)
+                    {
+                        var p1 = allPairs[i];
+                        var p2 = (i + 1 < allPairs.Count) ? allPairs[i + 1] : default;
                         result.Add(new CategoryPropertyEditModel
                         {
                             PropertyName1 = p1.Key,
-                            PropertyValue1 = p1.Value,
+                            PropertyValue1 = p1.Value ?? string.Empty,
                             PropertyName2 = p2.Key ?? string.Empty,
                             PropertyValue2 = p2.Value ?? string.Empty
                         });
                     }
                 }
+
                 return result;
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo("PrepareFileDisplayData 异常: " + ex.Message);
             }
-
             return result;
         }
+
 
         /// <summary>
         /// 抓取当前 DataGrid 的键/值快照到 _propertiesSnapshotForInsert（用于“还原初始值”功能）
@@ -2678,7 +2759,7 @@ namespace GB_NewCadPlus_IV
 
                 // ==================== 步骤7：上传到服务器 ====================
                 LogManager.Instance.LogInfo($"[ReplacePreview|{traceId}] 步骤7: 开始上传预览图到服务器");
-                bool uploadSuccess = await ReplacePreviewViaUploadApiAsync(traceId, latest, newPreviewLocalPath);
+                bool uploadSuccess = await ReplacePreviewViaUploadApiAsync(traceId, latest, newPreviewLocalPath); //添加当前图形入库的上传接口，使用 replacePreviewId 字段标识替换预览图
                 if (!uploadSuccess)
                 {
                     LogManager.Instance.LogError($"[ReplacePreview|{traceId}] 步骤7 失败: 服务器上传失败");
@@ -2967,66 +3048,148 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 初始化属性编辑网格
         /// </summary>
+        //private async void AddFileInitializeFilePropertiesGrid()
+        //{
+        //    try
+        //    {
+        //        var properties = new List<CategoryPropertyEditModel>
+        //          {
+        //          // 文件存储表(cad_file_storage)相关属性
+        //          new CategoryPropertyEditModel { PropertyName1 = "显示名称", PropertyValue1 = Path.GetFileNameWithoutExtension(_selectedFilePath), PropertyName2 = "元素块名", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "层名", PropertyValue1 = "TJ(  专业  )", PropertyName2 = "颜色索引", PropertyValue2 = "40" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "描述", PropertyValue1 = "", PropertyName2 = "版本", PropertyValue2 = "1" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "是否公开", PropertyValue1 = "是", PropertyName2 = "创建者", PropertyValue2 = Environment.UserName },
+        //          new CategoryPropertyEditModel { PropertyName1 = "是否天正", PropertyValue1 = "否" },
+        //          // 文件属性表(cad_file_attributes)相关属性
+        //          new CategoryPropertyEditModel { PropertyName1 = "长度", PropertyValue1 = "", PropertyName2 = "宽度", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "高度", PropertyValue1 = "", PropertyName2 = "角度", PropertyValue2 = "0" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "基点X", PropertyValue1 = "0", PropertyName2 = "基点Y", PropertyValue2 = "0" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "基点Z", PropertyValue1 = "0", PropertyName2 = "介质", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "规格", PropertyValue1 = "", PropertyName2 = "材质", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "标准号", PropertyValue1 = "", PropertyName2 = "功率", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "容积", PropertyValue1 = "", PropertyName2 = "压力", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "温度", PropertyValue1 = "", PropertyName2 = "直径", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "外径", PropertyValue1 = "", PropertyName2 = "内径", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "厚度", PropertyValue1 = "", PropertyName2 = "重量", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "型号", PropertyValue1 = "", PropertyName2 = "备注", PropertyValue2 = "" },
+
+        //          // 文件标签表(file_tags)相关属性（可以添加多个标签）
+        //          new CategoryPropertyEditModel { PropertyName1 = "标签1", PropertyValue1 = "", PropertyName2 = "标签2", PropertyValue2 = "" },
+        //          new CategoryPropertyEditModel { PropertyName1 = "标签3", PropertyValue1 = "", PropertyName2 = "", PropertyValue2 = "" }
+        //          };
+
+        //        CategoryPropertiesDataGrid.ItemsSource = properties;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogManager.Instance.LogInfo($"初始化属性编辑失败: {ex.Message}");
+        //    }
+        //}
+
+
+        /// <summary>
+        /// 添加文件时初始化属性编辑网格，包含管道相关的标准属性
+        /// </summary>
         private async void AddFileInitializeFilePropertiesGrid()
         {
             try
             {
-                var properties = new List<CategoryPropertyEditModel>
-                  {
-                  // 文件存储表(cad_file_storage)相关属性
-                  new CategoryPropertyEditModel { PropertyName1 = "显示名称", PropertyValue1 = Path.GetFileNameWithoutExtension(_selectedFilePath), PropertyName2 = "元素块名", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "层名", PropertyValue1 = "TJ(  专业  )", PropertyName2 = "颜色索引", PropertyValue2 = "40" },
-                  new CategoryPropertyEditModel { PropertyName1 = "描述", PropertyValue1 = "", PropertyName2 = "版本", PropertyValue2 = "1" },
-                  new CategoryPropertyEditModel { PropertyName1 = "是否公开", PropertyValue1 = "是", PropertyName2 = "创建者", PropertyValue2 = Environment.UserName },
-                  new CategoryPropertyEditModel { PropertyName1 = "是否天正", PropertyValue1 = "否" },
-                  // 文件属性表(cad_file_attributes)相关属性
-                  new CategoryPropertyEditModel { PropertyName1 = "长度", PropertyValue1 = "", PropertyName2 = "宽度", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "高度", PropertyValue1 = "", PropertyName2 = "角度", PropertyValue2 = "0" },
-                  new CategoryPropertyEditModel { PropertyName1 = "基点X", PropertyValue1 = "0", PropertyName2 = "基点Y", PropertyValue2 = "0" },
-                  new CategoryPropertyEditModel { PropertyName1 = "基点Z", PropertyValue1 = "0", PropertyName2 = "介质", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "规格", PropertyValue1 = "", PropertyName2 = "材质", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "标准号", PropertyValue1 = "", PropertyName2 = "功率", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "容积", PropertyValue1 = "", PropertyName2 = "压力", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "温度", PropertyValue1 = "", PropertyName2 = "直径", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "外径", PropertyValue1 = "", PropertyName2 = "内径", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "厚度", PropertyValue1 = "", PropertyName2 = "重量", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "型号", PropertyValue1 = "", PropertyName2 = "备注", PropertyValue2 = "" },
+                // 准备：canonical 列表（应与 AttributeKeyMapper 中 canonical 对齐）
+                var canonicalFields = new[]
+                {
+            "PIPELINETITLE","TAG_NO","NAME","MODEL","DRAWINGNO_STANDARDNO","STRUCT_LEN_STD",
+            "START_POINT","END_POINT","FLG_STD","TEST_STD","DN","PIPE_OD","PIPE_ID","PIPE_THK",
+            "SCHEDULE","PN","CLASS","WORK_PRESSURE","DESIGN_PRESSURE","DESIGN_TEMP","WORK_TEMP",
+            "TEMP_RANGE","MEDIUM","PIPE_TYPE","PIPE_CLASS","CONN_TYPE","PIPE_MATL","LINING_MATL",
+            "LINING_THK","LINING_PROC","PIPE_LENGTH","FLOW_VEL","FLOW_RATE","PIPE_WEIGHT","PIPE_COATING",
+            "COATING_THK","INSUL_MATL","INSUL_THK","INSUL_TYPE","HEAT_TRACE","HEAT_TRACE_POWER",
+            "NDT_RATIO","NDT_TYPE","PRESSURE_LOSS","ROUGHNESS","MAX_BENDING","EXPANSION","CLEANING_REQ",
+            "QTY","WEIGHT","SW_MODEL","SYSTEM","REMARK"
+        };
 
-                  // 文件标签表(file_tags)相关属性（可以添加多个标签）
-                  new CategoryPropertyEditModel { PropertyName1 = "标签1", PropertyValue1 = "", PropertyName2 = "标签2", PropertyValue2 = "" },
-                  new CategoryPropertyEditModel { PropertyName1 = "标签3", PropertyValue1 = "", PropertyName2 = "", PropertyValue2 = "" }
-                  };
+                // 显示名映射（中文），建议把这张表放到 AttributeKeyMapper/GetDisplayName 中统一维护
+                var displayMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            {"PIPELINETITLE","管道提示标题"},
+            {"TAG_NO","管段号"},
+            {"NAME","名称"},
+            {"MODEL","规格型号"},
+            {"DRAWINGNO_STANDARDNO","图号/标准号"},
+            {"STRUCT_LEN_STD","结构长度标准"},
+            {"START_POINT","起点"},
+            {"END_POINT","终点"},
+            {"FLG_STD","法兰标准"},
+            {"TEST_STD","试验标准"},
+            {"DN","公称通径"},
+            {"PIPE_OD","外径"},
+            {"PIPE_ID","内径"},
+            {"PIPE_THK","壁厚"},
+            {"SCHEDULE","壁厚等级"},
+            {"PN","公称压力"},
+            {"CLASS","压力等级"},
+            {"WORK_PRESSURE","工作压力"},
+            {"DESIGN_PRESSURE","设计压力"},
+            {"DESIGN_TEMP","设计温度"},
+            {"WORK_TEMP","工作温度"},
+            {"TEMP_RANGE","适用温度范围"},
+            {"MEDIUM","介质"},
+            {"PIPE_TYPE","管道类型"},
+            {"PIPE_CLASS","管道等级"},
+            {"CONN_TYPE","连接方式"},
+            {"PIPE_MATL","管道材质"},
+            {"LINING_MATL","衬里材质"},
+            {"LINING_THK","衬里厚度"},
+            {"LINING_PROC","衬里工艺"},
+            {"PIPE_LENGTH","管道长度"},
+            {"FLOW_VEL","设计流速"},
+            {"FLOW_RATE","介质流量"},
+            {"PIPE_WEIGHT","管道计算重量"},
+            {"PIPE_COATING","防腐涂层"},
+            {"COATING_THK","涂层厚度"},
+            {"INSUL_MATL","保温材料"},
+            {"INSUL_THK","保温厚度"},
+            {"INSUL_TYPE","保温方式"},
+            {"HEAT_TRACE","伴热类型"},
+            {"HEAT_TRACE_POWER","伴热功率"},
+            {"NDT_RATIO","无损检测比例"},
+            {"NDT_TYPE","无损检测方法"},
+            {"PRESSURE_LOSS","允许压损"},
+            {"ROUGHNESS","内壁粗糙度"},
+            {"MAX_BENDING","允许弯曲半径"},
+            {"EXPANSION","热膨胀量"},
+            {"CLEANING_REQ","清洁度要求"},
+            {"QTY","数量"},
+            {"WEIGHT","总重量"},
+            {"SW_MODEL","3D模型文件名"},
+            {"SYSTEM","所属系统"},
+            {"REMARK","备注"}
+        };
+
+                // 构建 UI 用的行（两列形式：显示名 / 值；第二列临时存放 canonical 以便保存时读取）
+                var properties = new List<CategoryPropertyEditModel>();
+
+                foreach (var canonical in canonicalFields)
+                {
+                    string display = displayMap.ContainsKey(canonical) ? displayMap[canonical] : canonical;
+                    // PropertyName1: 显示名（中文）， PropertyValue1: 初始值（空）
+                    // PropertyName2: 我临时放 canonical key（便于后续保存）， PropertyValue2: 可留空或存默认
+                    properties.Add(new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = display,
+                        PropertyValue1 = string.Empty,
+                        PropertyName2 = canonical,      // 暂用第二列存 canonical key，或改 model 加字段 CanonicalKey 更好
+                        PropertyValue2 = string.Empty
+                    });
+                }
+
+                // 你原有的通用/文件元数据放在表头前面（可按需合并）
+                // 可把显示名称、层名等插入到 properties 开头
+                properties.Insert(0, new CategoryPropertyEditModel { PropertyName1 = "显示名称", PropertyValue1 = Path.GetFileNameWithoutExtension(_selectedFilePath), PropertyName2 = "元素块名", PropertyValue2 = "" });
+                properties.Insert(1, new CategoryPropertyEditModel { PropertyName1 = "层名", PropertyValue1 = "TJ(  专业  )", PropertyName2 = "颜色索引", PropertyValue2 = "40" });
+                properties.Insert(2, new CategoryPropertyEditModel { PropertyName1 = "描述", PropertyValue1 = "", PropertyName2 = "版本", PropertyValue2 = "1" });
+                properties.Insert(3, new CategoryPropertyEditModel { PropertyName1 = "是否公开", PropertyValue1 = "是", PropertyName2 = "创建者", PropertyValue2 = Environment.UserName });
 
                 CategoryPropertiesDataGrid.ItemsSource = properties;
-
-                //FileStorage? fileStorage = null;
-                //Dictionary<string, string> attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                //if (!string.IsNullOrWhiteSpace(_selectedFilePath) && _databaseManager != null)
-                //{
-                //    string fileHash = await TryCalculateFileHashAsync(_selectedFilePath);
-                //    if (!string.IsNullOrWhiteSpace(fileHash))
-                //    {
-                //        var result = await _databaseManager.GetFileStorageWithAttributesByHashAsync(fileHash);
-                //        fileStorage = result.File;
-                //        attributes = result.Attributes;
-                //    }
-
-                //    // 如果未获取到完整记录，至少构造基础存储对象用于后续显示
-                //    if (fileStorage == null)
-                //    {
-                //        fileStorage = new FileStorage
-                //        {
-                //            FilePath = _selectedFilePath,
-                //            FileName = Path.GetFileNameWithoutExtension(_selectedFilePath),
-                //            DisplayName = Path.GetFileNameWithoutExtension(_selectedFilePath)
-                //        };
-                //    }
-                //}
-
-                //var displayData = PrepareFileDisplayData(fileStorage, attributes);
-                //CategoryPropertiesDataGrid.ItemsSource = displayData;
-
             }
             catch (Exception ex)
             {
@@ -3176,7 +3339,7 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
                 // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
-                VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
+                //VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
                 string? tempPath = null;
 
                 // 优先：WPF 窗口中选中的 FileStorage（视实现而定）
@@ -7380,14 +7543,12 @@ namespace GB_NewCadPlus_IV
         private void 绘制进口管道_Click(object sender, RoutedEventArgs e)
         {
             // 设置绘图比例到全局变量，供命令使用
-            VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
             Env.Document.SendStringToExecute("DrawInletPipeByClicks ", false, false, false);
             //Env.Document.SendStringToExecute("Draw_GD_PipeLine_DynamicBlock ", false, false, false);
         }
 
         private void 绘制出口管道_Click(object sender, RoutedEventArgs e)
         {
-            VariableDictionary.textBoxScale = AutoCadHelper.GetScale();
             Env.Document.SendStringToExecute("DrawOutletPipeByClicks ", false, false, false);
             //Env.Document.SendStringToExecute("Draw_GD_PipeLine_DynamicBlock ", false, false, false);
         }
@@ -7974,7 +8135,10 @@ namespace GB_NewCadPlus_IV
                 // 在调用选择/统计前确保比例被刷新到缓存，全局代码（例如 SavePipeTableToTempDwg）可读取该比例
                 try
                 {
-                    AutoCadHelper.GetScale();
+                    if (VariableDictionary.wpfTextBoxScale == 0)
+                    {
+                        VariableDictionary.wpfTextBoxScale = 1;
+                    }
                 }
                 catch (Exception exScale)
                 {
@@ -8729,7 +8893,7 @@ namespace GB_NewCadPlus_IV
                 return double.NaN;
             }
         }
-
+        
         #endregion
 
 
@@ -12857,8 +13021,7 @@ namespace GB_NewCadPlus_IV
             var sections = new List<(string GridName, string Header, List<CalcCsvTableRow> Rows)>();
 
             // 获取当前 CAD 的绘图比例，用于后续计算文字高度和行列尺寸
-            // 注意：AutoCadHelper.GetScale() 通常返回的是比例分母（例如 100 代表 1:100）
-            var scale = AutoCadHelper.GetScale();
+            var scale = VariableDictionary.wpfTextBoxScale; 
 
             try
             {

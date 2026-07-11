@@ -4,11 +4,15 @@ using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Threading;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace GB_NewCadPlus_IV.Helpers
@@ -130,544 +134,147 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 缓存锁
-        /// </summary>
-        private static readonly object _cacheLock = new object();
-
-        /// <summary>
         /// 缓存比例
         /// </summary>
         private static double _cachedScale = 1.0;
-
-        /// <summary>
-        /// 缓存时间
-        /// </summary>
-        private static DateTime _cacheTime = DateTime.MinValue;
-
-        /// <summary>
-        /// 缓存时间跨度
-        /// </summary>
-        private static readonly TimeSpan _cacheTtl = TimeSpan.FromSeconds(2);
 
         /// <summary>
         /// 获取当前绘图比例（优先使用用户在WPF界面输入的值）
         /// </summary>
         /// <param name="useCache">是否使用缓存</param>
         /// <returns>绘图比例</returns>
+        private static readonly object _lock = new object();
+
+        /// <summary>
+        /// 获取绘图比例
+        /// </summary>
+        /// <param name="useCache">是否优先使用缓存值</param>
+        /// <returns>返回用户设置的比例值，如果未设置则返回 1.0</returns>
         public static double GetScale(bool useCache = true)
         {
-            // 默认先给一个无效占位值，后续按界面来源覆盖
-            double userScale = 0.0;
+            try
+            {
+                // 2. 从界面读取（按优先级：WinForm > WPF > 默认值）
+                double scale = ReadScaleFromUI();
 
-            // 如果当前是 WinForm 状态，则优先读取 WinForm 比例缓存
+                // 3. 如果读取成功，更新缓存
+                //if (scale > 0)
+                //{
+                //    UpdateScaleCache(scale);
+                //    return scale;
+                //}
+
+                // 4. 所有方法都失败，返回默认值
+                LogManager.Instance.LogInfo($"使用比例 {scale}");
+                return scale;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"GetScale 异常: {ex.Message}");
+                return 1.0;
+            }
+        }
+
+        /// <summary>
+        /// 从界面读取比例值
+        /// </summary>
+        private static double ReadScaleFromUI()
+        {
+            // 优先 WinForm
             if (VariableDictionary.winForm_Status)
             {
-                if (VariableDictionary.textBoxScale > 0)
+                double scale = GetDrawingScaleFrom_Winform();
+                if (scale > 0) return scale;
+            }
+            // 再尝试 WPF
+            if (VariableDictionary.wpfWindows_Status)
+            {
+                double scale = GetDrawingScaleFrom_Wpf();
+                if (scale > 0) return scale;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// 从 WinForm 界面读取比例值
+        /// </summary>
+        private static double GetDrawingScaleFrom_Winform()
+        {
+            try
+            {
+                // 从窗体实例读取
+                var form = System.Windows.Forms.Application.OpenForms
+                    .OfType<FormMain>()
+                    .FirstOrDefault();
+
+                if (form != null)
                 {
-                    userScale = VariableDictionary.textBoxScale;
+                    string text = GetWinFormControlText(form, "textBox_Scale_比例");
+                    if (double.TryParse(text, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double result))
+                    {
+                        return result;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogWarning($"读取 WinForm 比例失败: {ex.Message}");
+            }
+            return 0;
+        }
+       
+        /// <summary>
+        /// 从 WPF 界面读取比例值
+        /// </summary>
+        private static double GetDrawingScaleFrom_Wpf()
+        {
+            try
+            {
+                var _wpfWindowsLoadScad = new WpfMainWindow();
+                VariableDictionary.wpfTextBoxScale = _wpfWindowsLoadScad.LoadDrawingConfig();
+
+            }
+            catch (Exception ex)
+            {
+                // 记录或忽略错误（根据项目日志策略）
+                try { Application.DocumentManager.MdiActiveDocument?.Editor?.WriteMessage($"\nGetDrawingScaleFrom_Wpf 异常: {ex.Message}"); } catch { }
+            }
+            return VariableDictionary.wpfTextBoxScale;
+        }
+        
+        /// <summary>
+        /// 获取 WinForm 控件的文本
+        /// </summary>
+        private static string GetWinFormControlText(System.Windows.Forms.Form form, string controlName)
+        {
+            var control = form.Controls.Find(controlName, true).FirstOrDefault();
+            if (control is System.Windows.Forms.TextBox textBox)
+                return textBox.Text;
+            if (control is System.Windows.Forms.NumericUpDown numericUpDown)
+                return numericUpDown.Value.ToString();
+            return string.Empty;
+        }
+        
+        /// <summary>
+        /// 更新比例缓存
+        /// </summary>
+        private static void UpdateScaleCache(double scale)
+        {
+            lock (_lock)
+            {
+                if (VariableDictionary.winForm_Status)
+                    VariableDictionary.winformTextBoxScale = scale;
                 else
                 {
-                    // 如果缓存无效，尝试从 WinForm 界面安全读取 textBox_Scale_比例（通过 Application.OpenForms + WinFormHelper）
-                    try
-                    {
-                        // 尝试通过打开的窗体集合找到 FormMain 的实例（兼容多实例或未直接传入实例的情况）
-                        var form = System.Windows.Forms.Application.OpenForms
-                            .OfType<FormMain>()
-                            .FirstOrDefault(); // 找不到返回 null
-
-                        if (form != null)
-                        {
-                            // 调用你要求的辅助方法从指定 Form 实例中读取 TextBox 文本值
-                            string txt = GetWinFormTextBoxValue(form, "textBox_Scale_比例");
-
-                            // 如果读取到非空文本则尝试解析为 double（先用 InvariantCulture 再用默认）
-                            if (!string.IsNullOrWhiteSpace(txt))
-                            {
-                                if (double.TryParse(txt, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed) ||
-                                    double.TryParse(txt, out parsed))
-                                {
-                                    // 解析成功后同步到全局缓存并作为最终比例
-                                    VariableDictionary.textBoxScale = parsed;
-                                    userScale = parsed;
-                                }
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        // 读取窗体或反射过程中出现异常则忽略，继续走后续回退逻辑
-                        LogManager.Instance.LogWarning("读取 WinForm TextBox 值时发生异常。");
-                    }
+                    VariableDictionary.wpfTextBoxScale = scale;
                 }
 
-            }
-            else
-            {
-                userScale = GetDrawingScaleFromWpf();// 先拿到wpf页面中的TextBox绘图比例中用户输入或默认的比例; 
-                // WPF 模式优先使用全局缓存的 wpfTextBoxScale（你要求的优先级）
-                if (VariableDictionary.wpfTextBoxScale > 0.0)
-                {
-                    userScale = VariableDictionary.wpfTextBoxScale;
-                }
-                else
-                {
-                    // 若 wpfTextBoxScale 无效，再尝试实时从 WPF 文本框读取
-                    userScale = GetDrawingScaleFromWpf();
-                }
-
-                // 兜底再尝试 textBoxScale，避免某些旧流程仅写入 textBoxScale
-                if (userScale <= 0.0 && VariableDictionary.textBoxScale > 0.0)
-                {
-                    userScale = VariableDictionary.textBoxScale;
-                }
-            }
-
-            // 只要拿到有效用户比例，直接返回，不走CAD视口计算
-            if (userScale > 0.0)
-            {
-                return userScale;
-            }
-
-            // 如果界面比例不可用，则走原有缓存逻辑
-            if (useCache)
-            {
-                lock (_cacheLock)
-                {
-                    if (!double.IsNaN(_cachedScale) && (DateTime.UtcNow - _cacheTime) < _cacheTtl)
-                        return _cachedScale;
-                }
-            }
-
-            // 计算当前图纸/视口比例作为最终回退
-            double scale = ComputeActiveDrawingScale();
-
-            // 写入缓存，减少频繁计算
-            lock (_cacheLock)
-            {
-                _cachedScale = scale;
-                _cacheTime = DateTime.UtcNow;
-            }
-
-            return scale;
-        }
-
-        /// <summary>
-        /// 获取当前视图比例的方法
-        /// </summary>
-        /// <returns></returns>
-        private static double ComputeActiveDrawingScale()
-        {
-            const double defaultScale = 1.0;
-
-            try
-            {
-                var doc = Application.DocumentManager.MdiActiveDocument;
-                if (doc == null) return defaultScale;
-
-                using (doc.LockDocument())
-                {
-                    var db = doc.Database;
-                    using (var tr = db.TransactionManager.StartTransaction())
-                    {
-                        try
-                        {
-                            // 若在模型空间，返回 1.0
-                            try { if (db.TileMode) return 1.0; } catch { }
-
-                            // 尝试获取当前视图
-                            Autodesk.AutoCAD.DatabaseServices.ViewTableRecord currentView = null;
-                            try { currentView = doc.Editor.GetCurrentView(); } catch { currentView = null; }
-
-                            // 遍历布局里实体，找 Viewport（使用反射以兼容不同 API）
-                            var lm = Autodesk.AutoCAD.DatabaseServices.LayoutManager.Current;
-                            string layoutName = null;
-                            try { layoutName = lm.CurrentLayout; } catch { layoutName = null; }
-
-                            double bestScore = double.MaxValue;
-                            double candidateScale = double.NaN;
-                            bool found = false;
-
-                            if (!string.IsNullOrEmpty(layoutName))
-                            {
-                                try
-                                {
-                                    ObjectId layoutId = lm.GetLayoutId(layoutName);
-                                    var layout = (Autodesk.AutoCAD.DatabaseServices.Layout)tr.GetObject(layoutId, OpenMode.ForRead);
-                                    if (layout != null)
-                                    {
-                                        var btr = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
-                                        foreach (ObjectId entId in btr)
-                                        {
-                                            try
-                                            {
-                                                var ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
-                                                if (ent == null) continue;
-
-                                                var etype = ent.GetType();
-                                                if (!string.Equals(etype.Name, "Viewport", StringComparison.OrdinalIgnoreCase))
-                                                    continue;
-
-                                                double? customScaleRaw = null;
-                                                double? viewHeight = null;
-                                                object viewCenterObj = null;
-                                                object centerPointObj = null;
-
-                                                try
-                                                {
-                                                    var p = etype.GetProperty("CustomScale");
-                                                    if (p != null) { var v = p.GetValue(ent); if (v != null) customScaleRaw = Convert.ToDouble(v); }
-                                                }
-                                                catch { }
-
-                                                try
-                                                {
-                                                    var p = etype.GetProperty("ViewHeight");
-                                                    if (p != null) { var v = p.GetValue(ent); if (v != null) viewHeight = Convert.ToDouble(v); }
-                                                }
-                                                catch { }
-
-                                                try { var p = etype.GetProperty("ViewCenter"); if (p != null) viewCenterObj = p.GetValue(ent); } catch { }
-                                                try { var p = etype.GetProperty("CenterPoint"); if (p != null) centerPointObj = p.GetValue(ent); } catch { }
-
-                                                double score = 0.0;
-                                                if (currentView != null)
-                                                {
-                                                    try
-                                                    {
-                                                        double vx = double.NaN, vy = double.NaN;
-                                                        if (viewCenterObj != null)
-                                                        {
-                                                            var tc = viewCenterObj.GetType();
-                                                            var px = tc.GetProperty("X")?.GetValue(viewCenterObj);
-                                                            var py = tc.GetProperty("Y")?.GetValue(viewCenterObj);
-                                                            vx = Convert.ToDouble(px);
-                                                            vy = Convert.ToDouble(py);
-                                                        }
-                                                        else if (centerPointObj != null)
-                                                        {
-                                                            var tc = centerPointObj.GetType();
-                                                            var px = tc.GetProperty("X")?.GetValue(centerPointObj);
-                                                            var py = tc.GetProperty("Y")?.GetValue(centerPointObj);
-                                                            vx = Convert.ToDouble(px);
-                                                            vy = Convert.ToDouble(py);
-                                                        }
-                                                        else
-                                                        {
-                                                            score = 1e6;
-                                                        }
-
-                                                        if (!double.IsNaN(vx) && !double.IsNaN(vy))
-                                                        {
-                                                            var cur = currentView.CenterPoint;
-                                                            score = Math.Abs(vx - cur.X) + Math.Abs(vy - cur.Y);
-                                                        }
-                                                    }
-                                                    catch { score = 1e6; }
-                                                }
-                                                else
-                                                {
-                                                    score = 1e5;
-                                                }
-
-                                                if (customScaleRaw.HasValue && customScaleRaw.Value > 0.0)
-                                                {
-                                                    double normalized = customScaleRaw.Value >= 1.0 ? 1.0 / customScaleRaw.Value : customScaleRaw.Value;
-                                                    if (score < bestScore)
-                                                    {
-                                                        bestScore = score;
-                                                        candidateScale = normalized;
-                                                        found = true;
-                                                        if (score <= 1e-6) break;
-                                                    }
-                                                }
-                                                else if (viewHeight.HasValue && viewHeight.Value > 1e-12 && currentView != null)
-                                                {
-                                                    try
-                                                    {
-                                                        double normalized = currentView.Height / viewHeight.Value;
-                                                        if (score < bestScore)
-                                                        {
-                                                            bestScore = score;
-                                                            candidateScale = normalized;
-                                                            found = true;
-                                                        }
-                                                    }
-                                                    catch { }
-                                                }
-                                            }
-                                            catch { }
-                                        }
-                                    }
-                                }
-                                catch { }
-                            }
-
-                            if (found && !double.IsNaN(candidateScale) && candidateScale > 0.0)
-                            {
-                                return candidateScale;
-                            }
-
-                            return default(double);
-                        }
-                        catch { return default(double); }
-                    }
-                }
-            }
-            catch { return default(double); }
-        }
-
-        /// <summary>
-        /// 从指定 WinForm 窗体中获取名为 textBoxName 的 TextBox 的文本值（找不到返回空字符串）
-        /// </summary>
-        /// <param name="form">目标窗体实例（例如：FormMain 的实例）</param>
-        /// <param name="textBoxName">要查找的控件名，比如 "textBox_Scale_比例"</param>
-        /// <returns>控件的 Text 值，找不到或出错返回空字符串</returns>
-        public static string GetWinFormTextBoxValue(Form form, string textBoxName)
-        {
-            // 输入保护：窗体或名字为空则返回空字符串
-            if (form == null || string.IsNullOrWhiteSpace(textBoxName))
-                return string.Empty;
-
-            try
-            {
-                // 取得窗体类型，用于反射查找字段/属性
-                Type formType = form.GetType();
-
-                // 1. 尝试按字段名查找（包含非公开字段，兼容 designer 生成的 private 字段）
-                FieldInfo field = formType.GetField(textBoxName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null)
-                {
-                    object? fieldVal = field.GetValue(form); // 获取字段值（可能为 Control）
-                    if (fieldVal is TextBox tbField) // 若字段本身就是 TextBox，直接返回 Text
-                        return tbField.Text ?? string.Empty;
-                    // 若字段是自定义控件或包装类，则尝试读取其 Text 属性
-                    if (fieldVal != null)
-                    {
-                        PropertyInfo? textProp = fieldVal.GetType().GetProperty("Text", BindingFlags.Instance | BindingFlags.Public);
-                        if (textProp != null)
-                        {
-                            var v = textProp.GetValue(fieldVal);
-                            return v?.ToString() ?? string.Empty;
-                        }
-                    }
-                }
-
-                // 2. 尝试按属性名查找（少见，但兼容）
-                PropertyInfo prop = formType.GetProperty(textBoxName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (prop != null)
-                {
-                    object? propVal = prop.GetValue(form);
-                    if (propVal is TextBox tbProp)
-                        return tbProp.Text ?? string.Empty;
-                    if (propVal != null)
-                    {
-                        PropertyInfo? textProp = propVal.GetType().GetProperty("Text", BindingFlags.Instance | BindingFlags.Public);
-                        if (textProp != null)
-                        {
-                            var v = textProp.GetValue(propVal);
-                            return v?.ToString() ?? string.Empty;
-                        }
-                    }
-                }
-
-                // 3. 递归在 Controls 集合中按 Name 查找（最通用）
-                string? recursiveResult = FindControlTextRecursive(form, textBoxName);
-                if (!string.IsNullOrEmpty(recursiveResult))
-                    return recursiveResult;
-
-                // 未找到则返回空字符串
-                return string.Empty;
-            }
-            catch
-            {
-                // 出错时保持安全性，返回空字符串（调用方可根据需要做兜底处理）
-                return string.Empty;
+                
+                    
             }
         }
-
-        // 私有递归辅助：在 parent 控件及其子控件中按 Name 查找并返回 Text（找不到返回 null）
-        private static string? FindControlTextRecursive(Control parent, string name)
-        {
-            if (parent == null) return null;
-
-            foreach (Control c in parent.Controls)
-            {
-                if (c == null) continue;
-
-                // 名称匹配（忽略大小写）
-                if (string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    // 如果是 TextBox，直接返回 Text
-                    if (c is TextBox tb) return tb.Text ?? string.Empty;
-
-                    // 否则尝试通过反射读取 Text 属性
-                    var p = c.GetType().GetProperty("Text", BindingFlags.Instance | BindingFlags.Public);
-                    if (p != null)
-                    {
-                        var val = p.GetValue(c);
-                        if (val != null) return val.ToString() ?? string.Empty;
-                    }
-                }
-
-                // 递归查找子控件
-                string? sub = FindControlTextRecursive(c, name);
-                if (!string.IsNullOrEmpty(sub)) return sub;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// 从WPF界面获取用户输入的绘图比例
-        /// </summary>
-        /// <returns>用户输入的比例值，如果获取失败返回0</returns>
-        private static double GetDrawingScaleFromWpf()
-        {
-            // 局部函数，统一解析字符串到正数比例
-            static double ParsePositiveScale(string raw)
-            {
-                // 空字符串直接返回0，表示无有效输入
-                if (string.IsNullOrWhiteSpace(raw)) return 0.0;
-                // 先去掉首尾空白
-                raw = raw.Trim();
-
-                // 先按 InvariantCulture 解析（支持标准小数点）
-                if (double.TryParse(raw, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out double v1) && v1 > 0.0)
-                    return v1;
-
-                // 兼容中文环境下用逗号作小数分隔符
-                string alt = raw.Replace(',', '.');
-                if (double.TryParse(alt, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out double v2) && v2 > 0.0)
-                    return v2;
-
-                // 最后兜底用当前区域解析
-                if (double.TryParse(raw, out double v3) && v3 > 0.0)
-                    return v3;
-
-                // 解析失败返回0
-                return 1;
-            }
-
-            try
-            {
-                // 优先拿到WPF主界面实例
-                var inst = GB_NewCadPlus_IV.WpfMainWindow.Instance;
-                if (inst != null)
-                {
-                    // 用于承接从UI线程读取到的文本
-                    string textFromUi = string.Empty;
-                    // 用于承接Tag默认值（例如XAML里 Tag="100"）
-                    string tagFromUi = string.Empty;
-
-                    // 必须在WPF Dispatcher线程访问TextBox，避免跨线程异常
-                    if (inst.Dispatcher != null)
-                    {
-                        // 若当前就在UI线程，直接读取
-                        if (inst.Dispatcher.CheckAccess())
-                        {
-                            // 读取TextBox文本
-                            textFromUi = inst.TextBox绘图比例?.Text ?? string.Empty;
-                            // 读取Tag作为默认比例兜底
-                            tagFromUi = inst.TextBox绘图比例?.Tag?.ToString() ?? string.Empty;
-                        }
-                        else
-                        {
-                            // 不在UI线程时切回UI线程读取，避免抛跨线程异常
-                            inst.Dispatcher.Invoke(() =>
-                            {
-                                // 读取Text
-                                textFromUi = inst.TextBox绘图比例?.Text ?? string.Empty;
-                                // 读取Tag
-                                tagFromUi = inst.TextBox绘图比例?.Tag?.ToString() ?? string.Empty;
-                            });
-                        }
-                    }
-
-                    // 优先解析用户输入的Text
-                    double v = ParsePositiveScale(textFromUi);
-                    if (v > 0.0) return v;
-
-                    // Text无效时尝试Tag默认值（你当前XAML里是100）
-                    v = ParsePositiveScale(tagFromUi);
-                    if (v > 0.0) return v;
-                }
-            }
-            catch
-            {
-                // WPF读取失败时继续走变量兜底
-            }
-
-            // 兜底1，读取WPF侧缓存值（由WPF代码维护）
-            if (VariableDictionary.wpfTextBoxScale > 0.0)
-            {
-                VariableDictionary.textBoxScale = VariableDictionary.wpfTextBoxScale;
-                return VariableDictionary.wpfTextBoxScale;
-            }
-
-            // 兜底2，读取通用缓存值
-            if (VariableDictionary.textBoxScale > 0.0)
-                return VariableDictionary.textBoxScale;
-
-            // 最终失败返回0，让上层走原有回退逻辑
-            return 1;
-        }
-
-        /// <summary>
-        /// 获取WPF主窗口实例
-        /// </summary>
-        /// <returns>WPF主窗口实例</returns>
-        public static object GetWpfWindow()
-        {
-            try
-            {
-                // 优先返回静态实例（若已初始化）
-                var inst = GB_NewCadPlus_IV.WpfMainWindow.Instance;
-                if (inst != null) return inst;
-
-                // 兜底：尝试遍历 Application.Windows 查找包含 WpfMainWindow 的 Window 并返回其 Content
-                var app = System.Windows.Application.Current;
-                if (app != null)
-                {
-                    foreach (System.Windows.Window w in app.Windows)
-                    {
-                        try
-                        {
-                            // 若 Window 的 Content 或视觉树中包含 WpfMainWindow，返回它
-                            if (w.Content is GB_NewCadPlus_IV.WpfMainWindow wc) return wc;
-
-                            // 遍历视觉树查找 UserControl
-                            var found = FindChildInVisualTree<GB_NewCadPlus_IV.WpfMainWindow>(w);
-                            if (found != null) return found;
-                        }
-                        catch { }
-                    }
-                }
-            }
-            catch { }
-            return null;
-        }
-
-        /// <summary>
-        /// 辅助：在视觉树中查找指定类型的子元素（递归）
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="parent"></param>
-        /// <returns></returns>
-        private static T FindChildInVisualTree<T>(System.Windows.DependencyObject parent) where T : System.Windows.DependencyObject
-        {
-            if (parent == null) return null;
-            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < count; i++)
-            {
-                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
-                if (child is T typed) return typed;
-                var res = FindChildInVisualTree<T>(child);
-                if (res != null) return res;
-            }
-            return null;
-        }
-
+      
         /// <summary>
         /// 安全的日志记录方法，防止并发访问问题
         /// </summary>
