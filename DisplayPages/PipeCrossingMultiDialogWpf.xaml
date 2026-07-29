@@ -27,40 +27,38 @@
         <TextBlock Grid.Row="0" Text="检测到以下交叉点，请为每个交叉点选择处理方式："
                    FontWeight="Bold" FontSize="15" Margin="0,0,0,10"/>
 
-        <!-- 数据表格 -->
         <DataGrid Grid.Row="1" ItemsSource="{Binding Options}" 
-                  AutoGenerateColumns="False" 
-                  CanUserAddRows="False" CanUserDeleteRows="False"
-                  HeadersVisibility="Column"
-                  GridLinesVisibility="All"
-                  SelectionMode="Single" SelectionUnit="Cell"
-                  IsReadOnly="True"
-                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+          AutoGenerateColumns="False" 
+          CanUserAddRows="False" CanUserDeleteRows="False"
+          HeadersVisibility="Column"
+          GridLinesVisibility="All"
+          SelectionMode="Single" SelectionUnit="FullRow" 
+            Focusable="False"
+            VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="序号" Binding="{Binding Index}" 
-                                    Width="0.10*" ElementStyle="{StaticResource CenterCellStyle}"/>
+                            Width="0.10*" ElementStyle="{StaticResource CenterCellStyle}" IsReadOnly="True"/>
                 <DataGridTextColumn Header="坐标" Binding="{Binding IntersectionDisplay}" 
-                                    Width="0.30*"/>
+                            Width="0.30*" IsReadOnly="True"/>
                 <DataGridTextColumn Header="管道名称" Binding="{Binding PipeName}" 
-                                    Width="0.25*"/>
-                <DataGridTemplateColumn Header="处理方式" Width="0.35*">
+                            Width="0.25*" IsReadOnly="True"/>
+                <DataGridTemplateColumn Header="处理方式" Width="0.35*" IsReadOnly="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock Text="操作：" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                 <RadioButton Content="相连" Margin="0,0,5,0"
-                                             IsChecked="{Binding IsConnect}"/>
+                                     IsChecked="{Binding IsConnect, UpdateSourceTrigger=PropertyChanged}"/>
                                 <RadioButton Content="覆盖" Margin="0,0,5,0"
-                                             IsChecked="{Binding IsCover}"/>
+                                     IsChecked="{Binding IsCover, UpdateSourceTrigger=PropertyChanged}"/>
                                 <RadioButton Content="下方" Margin="0,0,0,0"
-                                             IsChecked="{Binding IsUnder}"/>
+                                     IsChecked="{Binding IsUnder, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
-
         <!-- 按钮 -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
             <Button x:Name="管道交叉处理_确定" Content="确定" Width="80" Height="30" Margin="0,0,10,0" IsDefault="True" Click="OkButton_Click" />

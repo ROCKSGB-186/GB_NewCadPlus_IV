@@ -6,148 +6,169 @@ using System.Windows;
 using System.Windows.Interop;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
-using GB_NewCadPlus_IV.Helpers;
-using GB_NewCadPlus_IV.UniFiedStandards;
 
 namespace GB_NewCadPlus_IV.DisplayPages
 {
     /// <summary>
-    /// WPF 多点管道交叉处理对话框，集成遮罩创建与绘图次序调整
+    /// 管道交叉点多选对话框
     /// </summary>
     public partial class PipeCrossingMultiDialogWpf : Window
     {
-        public enum CrossingAction { Connect, Cover, Under }
-
         /// <summary>
-        /// 单个交叉点的 ViewModel
+        /// 交叉点行为：Connect：连接, Cover：覆盖, Under：下层
+        /// </summary>
+        public enum CrossingAction { Connect, Cover, Under }
+        /// <summary>
+        /// 交叉点选项视图模型
         /// </summary>
         public class CrossingOptionViewModel : INotifyPropertyChanged
         {
+            /// <summary>
+            /// 交叉点的行为
+            /// </summary>
             private CrossingAction _selectedAction = CrossingAction.Connect;
-
+            /// <summary>
+            /// 交叉点索引
+            /// </summary>
             public int Index { get; set; }
+            /// <summary>
+            /// 交叉点
+            /// </summary>
             public Point3d Intersection { get; set; }
+            /// <summary>
+            /// 管道名称
+            /// </summary>
             public string PipeName { get; set; }
-            public ObjectId OldPipeId { get; set; }   // 已有管道的 ObjectId
-            public ObjectId NewPipeId { get; set; }   // 新管道的 ObjectId
+            /// <summary>
+            /// 旧管道的 ID
+            /// </summary>
+            public ObjectId OldPipeId { get; set; }
+            /// <summary>
+            /// 新管道的 ID
+            /// </summary>
+            public ObjectId NewPipeId { get; set; }
 
+            /// <summary>
+            /// 交叉点的显示字符串
+            /// </summary>
+            public string IntersectionDisplay => $"({Intersection.X:F2}, {Intersection.Y:F2})";
+
+            /// <summary>
+            /// 获取或设置用户选择的行为
+            /// </summary>
             public CrossingAction SelectedAction
             {
                 get => _selectedAction;
                 set
                 {
+                    if (_selectedAction == value) return;
                     _selectedAction = value;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsConnect));
-                    OnPropertyChanged(nameof(IsCover));
-                    OnPropertyChanged(nameof(IsUnder));
+                    // 添加临时日志，可输出到 AutoCAD 命令行或弹出消息框
+                    Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage(
+                        $"\n[调试] 用户选择了：{value}");
+                    OnPropertyChanged(nameof(SelectedAction));//选中行为已更改
+                    OnPropertyChanged(nameof(IsConnect));//是否连接
+                    OnPropertyChanged(nameof(IsCover));//是否覆盖
+                    OnPropertyChanged(nameof(IsUnder));//是否下层
                 }
             }
-
-            public bool IsConnect { get => SelectedAction == CrossingAction.Connect; set { if (value) SelectedAction = CrossingAction.Connect; } }
-            public bool IsCover { get => SelectedAction == CrossingAction.Cover; set { if (value) SelectedAction = CrossingAction.Cover; } }
-            public bool IsUnder { get => SelectedAction == CrossingAction.Under; set { if (value) SelectedAction = CrossingAction.Under; } }
-
+            /// <summary>
+            /// 是否是连接
+            /// </summary>
+            public bool IsConnect
+            {
+                /// <summary>
+                /// 获取或设置是否是连接
+                /// </summary>
+                get => SelectedAction == CrossingAction.Connect;
+                /// <summary>
+                /// 设置是否是连接
+                /// </summary>
+                set { if (value) SelectedAction = CrossingAction.Connect; }
+            }
+            /// <summary>
+            /// 是否是覆盖
+            /// </summary>
+            public bool IsCover
+            {
+                ///获取或设置是否是覆盖
+                get => SelectedAction == CrossingAction.Cover;
+                ///设置是否是覆盖
+                set { if (value) SelectedAction = CrossingAction.Cover; }
+            }
+            /// <summary>
+            /// 是否是下层
+            /// </summary>
+            public bool IsUnder
+            {
+                ///获取或设置是否是下层
+                get => SelectedAction == CrossingAction.Under;
+                ///设置是否是下层
+                set { if (value) SelectedAction = CrossingAction.Under; }
+            }
+            /// <summary>
+            /// 属性更改事件
+            /// </summary>
             public event PropertyChangedEventHandler PropertyChanged;
+            /// <summary>
+            /// 属性已更改
+            /// </summary>
+            /// <param name="name"></param>
             protected void OnPropertyChanged([CallerMemberName] string name = null) =>
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
-
-        // 依赖资源
-        private readonly UnifiedTableGenerator _generator;
-        private readonly Transaction _tr;
-        private readonly Database _db;
-        private readonly string _layer;
-
+        /// <summary>
+        /// 交叉点选项
+        /// </summary>
         public List<CrossingOptionViewModel> Options { get; }
+        /// <summary>
+        /// 是否取消
+        /// </summary>
         public bool IsCancelled { get; private set; } = true;
-
         /// <summary>
         /// 构造函数
         /// </summary>
-        /// <param name="generator">UnifiedTableGenerator 实例，用于调用遮罩方法</param>
-        /// <param name="tr">当前活动事务</param>
-        /// <param name="db">数据库</param>
-        /// <param name="layer">遮罩图层（通常来自样例管道）</param>
-        /// <param name="options">交叉点选项列表（需预填充 Intersection, PipeName, OldPipeId, NewPipeId）</param>
-        public PipeCrossingMultiDialogWpf(
-            UnifiedTableGenerator generator,
-            Transaction tr,
-            Database db,
-            string layer,
-            List<CrossingOptionViewModel> options)
+        /// <param name="options"></param>
+        public PipeCrossingMultiDialogWpf(List<CrossingOptionViewModel> options)
         {
             InitializeComponent();
-            _generator = generator;
-            _tr = tr;
-            _db = db;
-            _layer = layer;
             Options = options ?? new List<CrossingOptionViewModel>();
-
-            // 自动设置序号
             for (int i = 0; i < Options.Count; i++)
                 Options[i].Index = i + 1;
-
             DataContext = this;
         }
-
         /// <summary>
-        /// 以 AutoCAD 主窗口为所有者显示对话框
+        /// 显示对话框
         /// </summary>
+        /// <returns></returns>
         public bool? ShowDialogWithOwner()
         {
             IntPtr ownerHandle = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
             new WindowInteropHelper(this) { Owner = ownerHandle };
             return ShowDialog();
         }
-
         /// <summary>
-        /// 确定按钮：执行每个交叉点的遮罩操作
+        /// 点击确定按钮
         /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void OkButton_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var opt in Options)
-            {
-                if (opt.SelectedAction == CrossingAction.Connect)
-                    continue;   // 相连，无需遮罩
-
-                ObjectId entityBelow, entityAbove;
-                if (opt.SelectedAction == CrossingAction.Cover)
-                {
-                    entityBelow = opt.OldPipeId;   // 旧管道在下
-                    entityAbove = opt.NewPipeId;   // 新管道在上
-                }
-                else // Under
-                {
-                    entityBelow = opt.NewPipeId;   // 新管道在下
-                    entityAbove = opt.OldPipeId;   // 旧管道在上
-                }
-
-                // 创建遮罩（Hatch 纯色填充，无边框）
-                var maskId = _generator.CreateBackgroundMask(
-                    opt.Intersection,
-                    2.0 * AutoCadHelper.GetScale(),   // 根据当前比例缩放
-                    _tr,
-                    _db,
-                    _layer);
-
-                // 调整绘图次序：entityBelow → mask → entityAbove
-                _generator.SetDrawOrderBetween(_tr, _db, entityBelow, maskId, entityAbove);
-            }
-
             IsCancelled = false;
             DialogResult = true;
             Close();
         }
-
         /// <summary>
-        /// 取消按钮
+        /// 点击取消按钮
         /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             IsCancelled = true;
             DialogResult = false;
             Close();
         }
+               
     }
 }

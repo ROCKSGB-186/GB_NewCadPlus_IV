@@ -1,4 +1,3 @@
-
 using Autodesk.AutoCAD.DatabaseServices;
 using GB_NewCadPlus_IV.DisplayPages;
 using GB_NewCadPlus_IV.FunctionalMethod;
@@ -2625,7 +2624,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         var newPipeId = InsertPipeBlockWithAttributes(tr, midPoint, newBlockName, 0.0, attValues);
                         var newBr = tr.GetObject(newPipeId, OpenMode.ForWrite) as BlockReference;
 
-                        // ========== 交叉检测（新管道与已有管道） ==========
+                        // ================== 4. 交互处理 (WPF 多交叉点，带调试) ==================
                         if (newPipeId != ObjectId.Null)
                         {
                             var newPipeBr = tr.GetObject(newPipeId, OpenMode.ForWrite) as BlockReference;
@@ -2635,41 +2634,51 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 if (newPath != null && newPath.Count >= 2)
                                 {
                                     var existingPipes = GetExistingPipes(db, tr);
+                                    ed.WriteMessage($"\n[调试] 已有管道数量: {existingPipes.Count}");
 
-                                    // 计算遮罩尺寸
-                                    //double maskSize = 5 * AutoCadHelper.GetScale();
-                                    double maskSize = 0;
-                                    // 
-                                    if (sampleInfo.PipeBodyTemplate is Polyline poly && poly.ConstantWidth > 0)
-                                        maskSize = Math.Max(1.0, poly.ConstantWidth * 10);
+                                    // 计算遮罩尺寸（避免双重缩放）
+                                    wpfScale = AutoCadHelper.GetScale();
+                                    double maskFinalSize = 0;
+                                    if (sampleInfo.PipeBodyTemplate != null &&
+                                        sampleInfo.PipeBodyTemplate.ConstantWidth > 0)
+                                    {
+                                        maskFinalSize = Math.Max(1.0, sampleInfo.PipeBodyTemplate.ConstantWidth * wpfScale * 10);
+                                    }
                                     else
-                                        maskSize = Math.Max(1.0, wpfScale * 0.5);
+                                    {
+                                        maskFinalSize = Math.Max(1.0, 5.0 * wpfScale);   // 5 为基础尺寸，可调
+                                    }
+                                    ed.WriteMessage($"\n[调试] 遮罩边长 (世界单位): {maskFinalSize:F2}, 比例: {wpfScale:F2}");
 
-                                    var crossingOptions = new List<PipeCrossingMultiDialogWpf.CrossingOptionViewModel>();
+                                    var crossOptions = new List<PipeCrossingMultiDialogWpf.CrossingOptionViewModel>();
                                     double endpointTol = Math.Max(1.0, wpfScale * 0.3);
-
+                                    // 循环
                                     foreach (var oldBr in existingPipes)
                                     {
                                         if (oldBr.ObjectId == newPipeBr.ObjectId) continue;
                                         var oldPath = GetPipePathVertices(oldBr, tr);
                                         if (oldPath == null || oldPath.Count < 2) continue;
-
+                                        //插入屏蔽块
                                         var intersections = GetPathIntersections(newPath, oldPath);
                                         if (intersections.Count == 0) continue;
 
-                                        // 过滤端点交叉（可选）
-                                        var filtered = intersections.Where(p =>
+                                        ed.WriteMessage($"\n[调试] 与管道 '{oldBr.Name}' 交叉点总数: {intersections.Count}");
+
+                                        var validIntersections = intersections.Where(p =>
                                             !IsNearEndpoint(p, newPath, endpointTol) &&
                                             !IsNearEndpoint(p, oldPath, endpointTol)
                                         ).ToList();
 
-                                        foreach (var pt in filtered)
+                                        ed.WriteMessage($"  其中非端点交叉点数量: {validIntersections.Count}");
+
+                                        foreach (var pt in validIntersections)
                                         {
-                                            string oldName = oldBr.Name ?? "未知";
+                                            string oldName = "未知";
                                             var attrs = GetEntityAttributeMap(tr, oldBr);
                                             if (attrs.TryGetValue("名称", out var nm)) oldName = nm;
+                                            else oldName = oldBr.Name ?? "未知";
 
-                                            crossingOptions.Add(new PipeCrossingMultiDialogWpf.CrossingOptionViewModel
+                                            crossOptions.Add(new PipeCrossingMultiDialogWpf.CrossingOptionViewModel
                                             {
                                                 Intersection = pt,
                                                 PipeName = oldName,
@@ -2679,62 +2688,84 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                         }
                                     }
 
-                                    if (crossingOptions.Count > 0)
+                                    ed.WriteMessage($"\n[调试] 最终收集到的交叉点数量: {crossOptions.Count}");
+
+                                    if (crossOptions.Count > 0)
                                     {
-                                        bool cancelled = false;
-                                        foreach (var opt in crossingOptions)  // crossingOptions 是您收集的 List<CrossingOptionViewModel>
+                                        var dlg = new PipeCrossingMultiDialogWpf(crossOptions);
+                                        bool? result = dlg.ShowDialogWithOwner();
+                                        ed.WriteMessage($"\n[调试] 对话框结果: {result}, IsCancelled: {dlg.IsCancelled}");
+
+                                        if (result == false || dlg.IsCancelled)
                                         {
-                                            // 使用原有的 WinForms 单点对话框
-                                            using (var dlg = new PipeCrossingDialog(opt.PipeName))
-                                            {
-                                                dlg.ShowDialog();
-                                                switch (dlg.SelectedAction)
-                                                {
-                                                    case PipeCrossingDialog.CrossingAction.Connect:
-                                                        // 相连，不处理
-                                                        break;
-
-                                                    case PipeCrossingDialog.CrossingAction.Cover:
-                                                        var maskId = CreateBackgroundMask(
-                                                            opt.Intersection,
-                                                            maskSize,
-                                                            tr,
-                                                            db,
-                                                            sampleInfo.PipeBodyTemplate.Layer
-                                                        );
-                                                        SetDrawOrderBetween(tr, db, opt.OldPipeId, maskId, opt.NewPipeId);
-                                                        break;
-
-                                                    case PipeCrossingDialog.CrossingAction.Under:
-                                                        var maskId2 = CreateBackgroundMask(
-                                                            opt.Intersection,
-                                                            maskSize,
-                                                            tr,
-                                                            db,
-                                                            sampleInfo.PipeBodyTemplate.Layer
-                                                        );
-                                                        SetDrawOrderBetween(tr, db, opt.NewPipeId, maskId2, opt.OldPipeId);
-                                                        break;
-
-                                                    case PipeCrossingDialog.CrossingAction.Cancel:
-                                                        // 用户取消，删除新管道并回滚事务
-                                                        newPipeBr.Erase(true);
-                                                        tr.Commit();
-                                                        ed.WriteMessage("\n操作已取消。");
-                                                        cancelled = true;
-                                                        break;
-                                                }
-                                                if (cancelled) break;
-                                            }
+                                            newPipeBr.Erase(true);
+                                            tr.Commit();
+                                            ed.WriteMessage("\n操作已取消。");
+                                            return;
                                         }
-                                        if (!cancelled)
+                                        else
                                         {
-                                            ed.WriteMessage($"\n已处理 {crossingOptions.Count} 个交叉点。");
+                                            foreach (var opt in dlg.Options)
+                                            {
+                                                if (opt.SelectedAction == PipeCrossingMultiDialogWpf.CrossingAction.Connect)
+                                                {
+                                                    ed.WriteMessage($"\n[调试] 交叉点 {opt.IntersectionDisplay} 选择相连，跳过遮罩。");
+                                                    continue;
+                                                }
+
+                                                ObjectId entityBelow, entityAbove;
+                                                if (opt.SelectedAction == PipeCrossingMultiDialogWpf.CrossingAction.Cover)
+                                                {
+                                                    entityBelow = opt.OldPipeId;
+                                                    entityAbove = opt.NewPipeId;
+                                                    ed.WriteMessage($"\n[调试] 处理方式: 覆盖, 旧管道在下, 新管道在上");
+                                                }
+                                                else
+                                                {
+                                                    entityBelow = opt.NewPipeId;
+                                                    entityAbove = opt.OldPipeId;
+                                                    ed.WriteMessage($"\n[调试] 处理方式: 下方, 新管道在下, 旧管道在上");
+                                                }
+
+                                                ed.WriteMessage($"\n[调试] 开始创建遮罩，中心点: {opt.IntersectionDisplay}, 尺寸: {maskFinalSize:F2}");
+
+                                                var maskId = CreateBackgroundMask(
+                                                    opt.Intersection,
+                                                    maskFinalSize,
+                                                    tr,
+                                                    db,
+                                                    sampleInfo.PipeBodyTemplate.Layer ?? "0"
+                                                );
+
+                                                ed.WriteMessage($"\n[调试] 遮罩创建完成，ObjectId: {maskId}");
+
+                                                SetDrawOrderBetween(tr, db, entityBelow, maskId, entityAbove);
+                                                ed.WriteMessage($"\n[调试] 绘图次序调整完毕，顺序：{entityBelow} -> {maskId} -> {entityAbove}");
+                                            }
+                                            ed.WriteMessage("\n[完成] 所有交叉点处理完毕。");
                                         }
                                     }
+                                    else
+                                    {
+                                        ed.WriteMessage("\n[调试] 没有需要处理的交叉点（可能都在端点）。");
+                                    }
+                                }
+                                else
+                                {
+                                    ed.WriteMessage("\n[调试] 新管道路径提取失败。");
                                 }
                             }
+                            else
+                            {
+                                ed.WriteMessage("\n[调试] 新管道块参照无效。");
+                            }
                         }
+                        else
+                        {
+                            ed.WriteMessage("\n[调试] 新管道插入失败 (newPipeId 为空)。");
+                        }
+
+                        // 下面的“删除原始线段”等代码保持不变
 
                         // 后处理拓扑关系
                         PipelineTopologyHelper.PostProcessAfterPipePlaced(tr, newPipeId, isOutlet ? "Outlet" : "Inlet");
@@ -2778,7 +2809,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
 
-        /*                     
+        /*                  
 
         if (newPipeId != ObjectId.Null)  // 新块插入成功
          {
@@ -3046,38 +3077,74 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         //}
 
         /// <summary>
-        /// 在指定中心点创建一个正方形 Wipeout 遮罩（自动匹配背景色）
+        /// 使用 Solid Hatch 作为遮罩（颜色自动匹配背景，支持绘图次序）
         /// </summary>
         /// <param name="center">遮罩中心点（世界坐标）</param>
-        /// <param name="size">遮罩边长（单位）</param>
+        /// <param name="size">遮罩边长（世界单位，内部不再缩放）</param>
         /// <param name="tr">事务</param>
         /// <param name="db">数据库</param>
-        /// <returns>Wipeout 对象 ID</returns>
+        /// <param name="layer">所在图层</param>
+        //public ObjectId CreateBackgroundMask(Point3d center, double size, Transaction tr, Database db, string layer = "0")
+        //{
+        //    double half = size / 2.0;
+        //    Point2dCollection pts = new Point2dCollection(4);
+        //    pts.Add(new Point2d(center.X - half, center.Y - half));
+        //    pts.Add(new Point2d(center.X + half, center.Y - half));
+        //    pts.Add(new Point2d(center.X + half, center.Y + half));
+        //    pts.Add(new Point2d(center.X - half, center.Y + half));
+
+        //    DoubleCollection bulges = new DoubleCollection(4);
+        //    for (int i = 0; i < 4; i++) bulges.Add(0.0);
+
+        //    Hatch hatch = new Hatch();
+        //    hatch.SetDatabaseDefaults(db);
+        //    hatch.SetHatchPattern(HatchPatternType.PreDefined, "SOLID");
+        //    hatch.Associative = false;
+        //    hatch.AppendLoop(HatchLoopTypes.Outermost, pts, bulges);
+        //    hatch.EvaluateHatch(true);
+
+        //    // ★ 先使用醒目的红色，测试到底有没有创建成功
+        //    hatch.ColorIndex = 255;   // 红色，极易观察
+        //    hatch.Layer = string.IsNullOrWhiteSpace(layer) ? "0" : layer;
+
+        //    BlockTableRecord btr = tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite) as BlockTableRecord;
+        //    btr.AppendEntity(hatch);
+        //    tr.AddNewlyCreatedDBObject(hatch, true);
+        //    return hatch.ObjectId;
+        //}
+
+        /// <summary>
+        /// 在指定中心点创建一个正方形 Wipeout 遮罩（自动匹配背景色，且隐藏边框）
+        /// </summary>
+        /// <param name="center">遮罩中心点（世界坐标）</param>
+        /// <param name="size">遮罩边长（世界单位，已含比例）</param>
+        /// <param name="tr">当前事务</param>
+        /// <param name="db">数据库</param>
+        /// <param name="layer">目标图层</param>
         public ObjectId CreateBackgroundMask(Point3d center, double size, Transaction tr, Database db, string layer = "0")
         {
-            size = size * AutoCadHelper.GetScale();
-            Point2dCollection pts = new Point2dCollection(5);
-            pts.Add(new Point2d(center.X - size, center.Y - size));
-            pts.Add(new Point2d(center.X + size, center.Y - size));
-            pts.Add(new Point2d(center.X + size, center.Y + size));
-            pts.Add(new Point2d(center.X - size, center.Y + size));
-            pts.Add(new Point2d(center.X - size, center.Y - size)); // 闭合
+            // 计算矩形四个角点（注意：必须闭合，即首尾点重合）
+            double half = size / 2.0;
+            Point2dCollection pts = new Point2dCollection(5)
+            {
+                new Point2d(center.X - half, center.Y - half),
+                new Point2d(center.X + half, center.Y - half),
+                new Point2d(center.X + half, center.Y + half),
+                new Point2d(center.X - half, center.Y + half),
+                new Point2d(center.X - half, center.Y - half)  // 闭合
+            };
 
             Wipeout wipe = new Wipeout();
             wipe.SetDatabaseDefaults(db);
+            // 设置四边形节点，需要提供法向量（通常为 Z 轴）
             wipe.SetFrom(pts, new Vector3d(0, 0, 1));
 
-            // 设置图层：确保图层名有效，若为空则回退到 "0"
+            // 设置图层（回退到 "0" 层）
             wipe.Layer = string.IsNullOrWhiteSpace(layer) ? "0" : layer;
 
-            // 临时修改系统变量以隐藏 Wipeout 边框
-            object oldWipeoutFrame = 1; // 默认显示边框
-            try
-            {
-                oldWipeoutFrame = Application.GetSystemVariable("WIPEOUTFRAME");
-            }
-            catch { /* 若读取失败则使用默认值，不影响后续 */ }
-            Application.SetSystemVariable("WIPEOUTFRAME", 0); // 隐藏边框
+            // 临时关闭 Wipeout 边框显示，以保持视觉干净
+            object oldWipeoutFrame = Application.GetSystemVariable("WIPEOUTFRAME");
+            Application.SetSystemVariable("WIPEOUTFRAME", 0);
 
             ObjectId wipeId = ObjectId.Null;
             try
@@ -3089,12 +3156,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             }
             finally
             {
-                // 恢复系统变量原值，确保不影响图纸中其他 Wipeout
+                // 恢复系统变量原值
                 Application.SetSystemVariable("WIPEOUTFRAME", oldWipeoutFrame);
             }
 
             return wipeId;
         }
+
 
         /// <summary>
         /// 调整三个实体的绘图次序：从下到上依次为 entityBelow -> mask -> entityAbove
@@ -3107,40 +3175,26 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         public void SetDrawOrderBetween(Transaction tr, Database db,
             ObjectId entityBelow, ObjectId mask, ObjectId entityAbove)
         {
-            // 参数有效性检查
-            if (entityBelow.IsNull || mask.IsNull || entityAbove.IsNull)
-                return;
+            if (entityBelow.IsNull || mask.IsNull || entityAbove.IsNull) return;
 
-            // 1. 获取模型空间的 BlockTableRecord
+            // 获取模型空间
             var bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-            if (bt == null) return;
-
             var msId = bt[BlockTableRecord.ModelSpace];
             var ms = tr.GetObject(msId, OpenMode.ForRead) as BlockTableRecord;
-            if (ms == null) return;
 
-            // 2. 通过 BlockTableRecord 获取绘图次序表的 ObjectId
-            //    如果图形中还没有绘图次序表，此属性会自动创建一个
+            // DrawOrderTableId 属性会自动创建 DrawOrderTable（若尚不存在）
             ObjectId dotId = ms.DrawOrderTableId;
             if (dotId.IsNull) return;
 
-            // 3. 打开绘图次序表（写入模式）
             var dot = tr.GetObject(dotId, OpenMode.ForWrite) as DrawOrderTable;
             if (dot == null) return;
 
-            // 3. 按“从下到上”的顺序调整：
-            //    a. 将 entityBelow 移到所有对象的最底层（作为基准）
+            // 按顺序调整
             dot.MoveToBottom(new ObjectIdCollection { entityBelow });
-
-            //    b. 将 mask 移到 entityBelow 的正上方
             dot.MoveAbove(new ObjectIdCollection { mask }, entityBelow);
-
-            //    c. 将 entityAbove 移到 mask 的正上方
             dot.MoveAbove(new ObjectIdCollection { entityAbove }, mask);
 
-            // 4. 强制刷新图形，使调整立即生效
-            db.TransactionManager.QueueForGraphicsFlush();        // 刷新图形队列
-            //Application.DocumentManager.MdiActiveDocument.Editor.Regen(); // 完全重绘
+            db.TransactionManager.QueueForGraphicsFlush();
         }
 
         private bool IsPipeBlock(BlockReference br)
