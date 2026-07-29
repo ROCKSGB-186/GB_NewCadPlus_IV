@@ -2637,9 +2637,11 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                     var existingPipes = GetExistingPipes(db, tr);
 
                                     // 计算遮罩尺寸
-                                    double maskSize;
+                                    //double maskSize = 5 * AutoCadHelper.GetScale();
+                                    double maskSize = 0;
+                                    // 
                                     if (sampleInfo.PipeBodyTemplate is Polyline poly && poly.ConstantWidth > 0)
-                                        maskSize = Math.Max(1.0, poly.ConstantWidth * 1.5);
+                                        maskSize = Math.Max(1.0, poly.ConstantWidth * 10);
                                     else
                                         maskSize = Math.Max(1.0, wpfScale * 0.5);
 
@@ -2738,7 +2740,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         PipelineTopologyHelper.PostProcessAfterPipePlaced(tr, newPipeId, isOutlet ? "Outlet" : "Inlet");
 
                         // 继承图层
-                       
+
                         if (newBr != null) newBr.Layer = sampleInfo.PipeBodyTemplate.Layer;
 
                         // 保存最新的属性到上次属性缓存（包含 PIPELINETITLE, TAG_NO, START_POINT, END_POINT）
@@ -2776,113 +2778,113 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         }
 
 
-                          /*                     
-                         
-                          if (newPipeId != ObjectId.Null)  // 新块插入成功
-                           {
-                               // 获取新管道块参照（需可写，以便后续可能删除）
-                               var newPipeBr = tr.GetObject(newPipeId, OpenMode.ForWrite) as BlockReference;
-                               if (newPipeBr != null)
-                               {
-                                   // 提取新管道的路径顶点列表（世界坐标）
-                                   var newPath = GetPipePathVertices(newPipeBr, tr);
-                                   if (newPath != null && newPath.Count >= 2)
-                                   {
-                                       // 获取模型中所有已有管道块
-                                       var existingPipes = GetExistingPipes(db, tr);
+        /*                     
 
-                                       // ---- 计算动态遮罩尺寸 ----
-                                       double maskSize;
-                                       // 优先从样例块的主体多段线读取恒定宽度，若无则基于全局比例
-                                       if (sampleInfo.PipeBodyTemplate is Polyline poly && poly.ConstantWidth > 0)
-                                           maskSize = Math.Max(1.0, poly.ConstantWidth * 1.5); // 宽度×1.5倍
-                                       else
-                                           maskSize = Math.Max(1.0, wpfScale * 0.5);            // 全局比例×0.5
+        if (newPipeId != ObjectId.Null)  // 新块插入成功
+         {
+             // 获取新管道块参照（需可写，以便后续可能删除）
+             var newPipeBr = tr.GetObject(newPipeId, OpenMode.ForWrite) as BlockReference;
+             if (newPipeBr != null)
+             {
+                 // 提取新管道的路径顶点列表（世界坐标）
+                 var newPath = GetPipePathVertices(newPipeBr, tr);
+                 if (newPath != null && newPath.Count >= 2)
+                 {
+                     // 获取模型中所有已有管道块
+                     var existingPipes = GetExistingPipes(db, tr);
 
-                                       // 遍历所有已有管道
-                                       foreach (var oldBr in existingPipes)
-                                       {
-                                           if (oldBr.ObjectId == newPipeBr.ObjectId) continue; // 跳过自身
+                     // ---- 计算动态遮罩尺寸 ----
+                     double maskSize;
+                     // 优先从样例块的主体多段线读取恒定宽度，若无则基于全局比例
+                     if (sampleInfo.PipeBodyTemplate is Polyline poly && poly.ConstantWidth > 0)
+                         maskSize = Math.Max(1.0, poly.ConstantWidth * 1.5); // 宽度×1.5倍
+                     else
+                         maskSize = Math.Max(1.0, wpfScale * 0.5);            // 全局比例×0.5
 
-                                           // 提取旧管道路径
-                                           var oldPath = GetPipePathVertices(oldBr, tr);
-                                           if (oldPath == null || oldPath.Count < 2) continue;
+                     // 遍历所有已有管道
+                     foreach (var oldBr in existingPipes)
+                     {
+                         if (oldBr.ObjectId == newPipeBr.ObjectId) continue; // 跳过自身
 
-                                           // 计算两条路径的所有交点
-                                           var intersections = GetPathIntersections(newPath, oldPath);
-                                           if (intersections.Count == 0) continue; // 无交点
+                         // 提取旧管道路径
+                         var oldPath = GetPipePathVertices(oldBr, tr);
+                         if (oldPath == null || oldPath.Count < 2) continue;
 
-                                           // ---- 过滤掉端点附近的交叉点（视为连接，不处理） ----
-                                           double endpointTol = Math.Max(1.0, wpfScale * 0.3); // 端点容差
-                                           var nonEndpointIntersections = intersections.Where(p =>
-                                               !IsNearEndpoint(p, newPath, endpointTol) && // 不在新管道端点
-                                               !IsNearEndpoint(p, oldPath, endpointTol)     // 不在旧管道端点
-                                           ).ToList();
+                         // 计算两条路径的所有交点
+                         var intersections = GetPathIntersections(newPath, oldPath);
+                         if (intersections.Count == 0) continue; // 无交点
 
-                                           if (nonEndpointIntersections.Count == 0)
-                                           {
-                                               ed.WriteMessage("\n交叉点位于管道端点，自动连接（无遮罩）。");
-                                               continue; // 跳过该管道
-                                           }
+                         // ---- 过滤掉端点附近的交叉点（视为连接，不处理） ----
+                         double endpointTol = Math.Max(1.0, wpfScale * 0.3); // 端点容差
+                         var nonEndpointIntersections = intersections.Where(p =>
+                             !IsNearEndpoint(p, newPath, endpointTol) && // 不在新管道端点
+                             !IsNearEndpoint(p, oldPath, endpointTol)     // 不在旧管道端点
+                         ).ToList();
 
-                                           // 取第一个非端点交叉点
-                                           var intersection = nonEndpointIntersections[0];
+                         if (nonEndpointIntersections.Count == 0)
+                         {
+                             ed.WriteMessage("\n交叉点位于管道端点，自动连接（无遮罩）。");
+                             continue; // 跳过该管道
+                         }
 
-                                           // 获取旧管道名称（优先从属性中读取“名称”，否则用块名）
-                                           string oldName = "未知";
-                                           var attrs = GetEntityAttributeMap(tr, oldBr);
-                                           if (attrs.TryGetValue("名称", out var nm)) oldName = nm;
-                                           else oldName = oldBr.Name ?? "未知";
+                         // 取第一个非端点交叉点
+                         var intersection = nonEndpointIntersections[0];
 
-                                           // 弹出交叉处理对话框
-                                           using (var dlg = new PipeCrossingDialog(oldName))
-                                           {
-                                               dlg.ShowDialog();
-                                               switch (dlg.SelectedAction)
-                                               {
-                                                   case PipeCrossingDialog.CrossingAction.Connect:
-                                                       // 交叉相连：不做任何额外处理
-                                                       break;
+                         // 获取旧管道名称（优先从属性中读取“名称”，否则用块名）
+                         string oldName = "未知";
+                         var attrs = GetEntityAttributeMap(tr, oldBr);
+                         if (attrs.TryGetValue("名称", out var nm)) oldName = nm;
+                         else oldName = oldBr.Name ?? "未知";
 
-                                                   case PipeCrossingDialog.CrossingAction.Cover:
-                                                       // 不相连且覆盖：旧管道在下，遮罩居中，新管道在上
-                                                       {
-                                                           // 创建遮罩（Wipeout）
-                                                           var maskId = CreateBackgroundMask(intersection, maskSize, tr, db, sampleInfo.PipeBodyTemplate.Layer);
-                                                           // 调整绘图次序：旧管道 -> 遮罩 -> 新管道
-                                                           SetDrawOrderBetween(tr, db,
-                                                               entityBelow: oldBr.ObjectId,
-                                                               mask: maskId,
-                                                               entityAbove: newPipeId);
-                                                       }
-                                                       break;
+                         // 弹出交叉处理对话框
+                         using (var dlg = new PipeCrossingDialog(oldName))
+                         {
+                             dlg.ShowDialog();
+                             switch (dlg.SelectedAction)
+                             {
+                                 case PipeCrossingDialog.CrossingAction.Connect:
+                                     // 交叉相连：不做任何额外处理
+                                     break;
 
-                                                   case PipeCrossingDialog.CrossingAction.Under:
-                                                       // 不相连且在下方：新管道在下，遮罩居中，旧管道在上
-                                                       {
-                                                           var maskId = CreateBackgroundMask(intersection, maskSize, tr, db, sampleInfo.PipeBodyTemplate.Layer);
-                                                           SetDrawOrderBetween(tr, db,
-                                                               entityBelow: newPipeId,
-                                                               mask: maskId,
-                                                               entityAbove: oldBr.ObjectId);
-                                                       }
-                                                       break;
+                                 case PipeCrossingDialog.CrossingAction.Cover:
+                                     // 不相连且覆盖：旧管道在下，遮罩居中，新管道在上
+                                     {
+                                         // 创建遮罩（Wipeout）
+                                         var maskId = CreateBackgroundMask(intersection, maskSize, tr, db, sampleInfo.PipeBodyTemplate.Layer);
+                                         // 调整绘图次序：旧管道 -> 遮罩 -> 新管道
+                                         SetDrawOrderBetween(tr, db,
+                                             entityBelow: oldBr.ObjectId,
+                                             mask: maskId,
+                                             entityAbove: newPipeId);
+                                     }
+                                     break;
 
-                                                   case PipeCrossingDialog.CrossingAction.Cancel:
-                                                       // 取消：删除新插入的管道块
-                                                       newPipeBr.Erase(true);
-                                                       tr.Commit();
-                                                       ed.WriteMessage("\n操作已取消。");
-                                                       return;
-                                               }
-                                           }
-                                           // 目前只处理第一个交叉管道（若需处理多个，可移除外层 break）
-                                           break;
-                                       }
-                                   }
-                               }
-                           }                                 
-                         */
+                                 case PipeCrossingDialog.CrossingAction.Under:
+                                     // 不相连且在下方：新管道在下，遮罩居中，旧管道在上
+                                     {
+                                         var maskId = CreateBackgroundMask(intersection, maskSize, tr, db, sampleInfo.PipeBodyTemplate.Layer);
+                                         SetDrawOrderBetween(tr, db,
+                                             entityBelow: newPipeId,
+                                             mask: maskId,
+                                             entityAbove: oldBr.ObjectId);
+                                     }
+                                     break;
+
+                                 case PipeCrossingDialog.CrossingAction.Cancel:
+                                     // 取消：删除新插入的管道块
+                                     newPipeBr.Erase(true);
+                                     tr.Commit();
+                                     ed.WriteMessage("\n操作已取消。");
+                                     return;
+                             }
+                         }
+                         // 目前只处理第一个交叉管道（若需处理多个，可移除外层 break）
+                         break;
+                     }
+                 }
+             }
+         }                                 
+       */
 
 
         /// <summary>
