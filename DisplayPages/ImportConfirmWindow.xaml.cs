@@ -360,6 +360,7 @@ namespace GB_NewCadPlus_IV.Views
                         {
                             // 执行上传与保存到数据库的操作
                             await this._mainWindow.UploadFileAndSaveToDatabase(this._dto);
+                            //await fileManager.uploadFileAndSaveToDatabase(this._dto);
                             this.CloseDialogWithResult(true); // 成功则关闭对话并返回 true
                             prevCursor = (Cursor)null;
                         }

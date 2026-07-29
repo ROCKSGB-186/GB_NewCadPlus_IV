@@ -16,7 +16,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                ReloadCalcCsvTables(true);
+                ReloadCalcCsvTables(true); // 强制重新加载CSV
             }
             catch (Exception ex)
             {
@@ -117,5 +117,6 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show($"插入计算表失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+        
     }
 }

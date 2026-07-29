@@ -10,6 +10,9 @@ using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace GB_NewCadPlus_IV.Helpers
 {
+    /// <summary>
+    /// 插入图元的辅助方法（支持整图复制、属性继承、重叠判定等）
+    /// </summary>
     public static class InsertGraphicHelper
     {
         /// <summary>
@@ -152,7 +155,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 粗精结合的重叠判定：先包围盒，再尝试曲线求交
         /// </summary>
-        private static bool IsEntityOverlap(Entity source, Entity target)
+        public static bool IsEntityOverlap(Entity source, Entity target)
         {
             // 源实体包围盒获取失败，直接不重叠
             if (!TryGetEntityExtents(source, out var e1)) return false;
@@ -216,7 +219,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 规范化属性键名（用于同名匹配增强）
         /// </summary>
-        private static string NormalizePropertyKey(string raw)
+        public static string NormalizePropertyKey(string raw)
         {
             // 空值直接返回空串
             if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
@@ -301,7 +304,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 对候选重叠实体打分（分数越高越优先）
         /// </summary>
-        private static double ComputeOverlapCandidateScore(BlockReference insertingBr, Entity candidate)
+        public static double ComputeOverlapCandidateScore(BlockReference insertingBr, Entity candidate)
         {
             // 空对象直接最低分
             if (insertingBr == null || candidate == null) return double.MinValue;
@@ -372,10 +375,10 @@ namespace GB_NewCadPlus_IV.Helpers
             if (string.IsNullOrWhiteSpace(rawKey)) return false;
 
             // 黑名单先拦截（绝对禁止）
-            if (IsBlacklistedPropertyKey(rawKey)) return false;
+            if (JsonHelper.IsBlacklistedPropertyKey(rawKey)) return false;
 
             // 未启用白名单时，黑名单外都允许
-            if (!_propertySyncUseWhitelistTemplate) return true;
+            if (!JsonHelper._propertySyncUseWhitelistTemplate) return true;
 
             // 白名单为空时，不允许任何字段（安全兜底）
             if (activeWhitelist == null || activeWhitelist.Count == 0) return false;
@@ -682,7 +685,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static Dictionary<string, string> BuildMergedPropertyMapFromCandidates(
             DBTrans tr,
-            List<OverlapCandidate> candidates,
+            List<JsonHelper.OverlapCandidate> candidates,
             HashSet<string> activeWhitelist)
         {
             // 返回字典（不区分大小写）
@@ -757,7 +760,7 @@ namespace GB_NewCadPlus_IV.Helpers
             // 总结果日志
             try
             {
-                LogManager.Instance.LogInfo($"\n多来源属性合并完成（白名单模式={_propertySyncUseWhitelistTemplate}），合并字段数={merged.Count}");
+                LogManager.Instance.LogInfo($"\n多来源属性合并完成（白名单模式={JsonHelper._propertySyncUseWhitelistTemplate}），合并字段数={merged.Count}");
             }
             catch { }
 
@@ -772,457 +775,23 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 属性同步策略配置（第二版增强）
         /// </summary>
         // 是否优先同层来源（true 时同层会加权，且可额外筛选）
-        private static readonly bool _propertySyncPreferSameLayer = true;
+        public static readonly bool _propertySyncPreferSameLayer = true;
 
         // 最多参与合并的重叠候选数量（防止大图性能波动）
-        private static readonly int _propertySyncMaxCandidates = 8;
+        public static readonly int _propertySyncMaxCandidates = 8;
 
         // 最多合并字段数量（防止异常图元导致字段爆炸）
-        private static readonly int _propertySyncMaxMergedFields = 200;
+        public static readonly int _propertySyncMaxMergedFields = 200;
 
         // 黑名单字段（这些字段不参与“交叠继承”）
-        private static readonly HashSet<string> _propertySyncBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {   "ID","GUID","UUID","OBJECTID","HANDLE",
-            "CREATEDAT","UPDATEDAT","CREATETIME","UPDATETIME","TIMESTAMP",
-            "CREATEDBY","UPDATEDBY","USER","USERNAME","OWNER",
-            "VERSION","REVISION","REV",
-            "FILENAME","FILEPATH","FILEHASH","PREVIEWIMAGEPATH","PREVIEWIMAGENAME",
-            "BLOCKNAME","LAYERNAME",
-            "NAME", // 新增：禁止继承“名称”字段
-            "名称"  // 新增：禁止继承中文“名称”字段
+        public static readonly HashSet<string> _propertySyncBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {   "ID","GUID","UUID","OBJECTID","HANDLE", "CREATEDAT","UPDATEDAT","CREATETIME","UPDATETIME","TIMESTAMP",
+            "CREATEDBY","UPDATEDBY","USER","USERNAME","OWNER", "VERSION","REVISION","REV", "FILENAME","FILEPATH",
+            "FILEHASH","PREVIEWIMAGEPATH","PREVIEWIMAGENAME", "BLOCKNAME","LAYERNAME", "NAME", "名称" 
         };
 
-        /// <summary>
-        /// 候选来源实体模型
-        /// </summary>
-        private sealed class OverlapCandidate
-        {
-            // 候选实体对象
-            public Entity Entity { get; set; }
+       
 
-            // 候选评分（越高越优先）
-            public double Score { get; set; }
-
-            // 是否与插入对象同层
-            public bool IsSameLayer { get; set; }
-
-            // 实体标识字符串（日志用）
-            public string Identity { get; set; } = string.Empty;
-        }
-
-        /// <summary>
-        /// 判断字段是否在黑名单中（支持归一化后判断）
-        /// </summary>
-        private static bool IsBlacklistedPropertyKey(string rawKey)
-        {
-            // 空键直接当黑名单处理
-            if (string.IsNullOrWhiteSpace(rawKey)) return true;
-
-            // 原始键去空白
-            string key = rawKey.Trim();
-
-            // 原始键命中黑名单
-            if (_propertySyncBlacklist.Contains(key)) return true;
-
-            // 归一化键命中黑名单
-            string nKey = NormalizePropertyKey(key);
-            if (!string.IsNullOrWhiteSpace(nKey) && _propertySyncBlacklist.Contains(nKey)) return true;
-
-            // 未命中黑名单
-            return false;
-        }
-
-        /// <summary>
-        /// 获取“所有重叠候选”并按评分排序（第二版增强）
-        /// </summary>
-        private static List<OverlapCandidate> FindOverlappedCandidates(DBTrans tr, BlockReference insertingBr, int maxCandidates = 8)
-        {
-            // 准备结果集合
-            var list = new List<OverlapCandidate>();
-
-            // 参数校验
-            if (tr == null || insertingBr == null) return list;
-
-            // 读取插入对象图层
-            string insertLayer = string.Empty;
-            try { insertLayer = (insertingBr.Layer ?? string.Empty).Trim(); } catch { insertLayer = string.Empty; }
-
-            // 遍历当前空间全部实体
-            foreach (ObjectId id in tr.CurrentSpace)
-            {
-                // 跳过自身
-                if (id == insertingBr.ObjectId) continue;
-
-                // 读取候选实体
-                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                // 无效实体跳过
-                if (ent == null || ent.IsErased) continue;
-
-                // 重叠判定，未重叠跳过
-                if (!IsEntityOverlap(insertingBr, ent)) continue;
-
-                // 计算候选分数
-                double score = ComputeOverlapCandidateScore(insertingBr, ent);
-
-                // 记录同层标识
-                bool sameLayer = false;
-                try
-                {
-                    string l2 = (ent.Layer ?? string.Empty).Trim();
-                    sameLayer = !string.IsNullOrWhiteSpace(insertLayer) &&
-                                !string.IsNullOrWhiteSpace(l2) &&
-                                string.Equals(insertLayer, l2, StringComparison.OrdinalIgnoreCase);
-                }
-                catch
-                {
-                    sameLayer = false;
-                }
-
-                // 组装候选对象
-                var candidate = new OverlapCandidate
-                {
-                    Entity = ent,
-                    Score = score,
-                    IsSameLayer = sameLayer,
-                    Identity = $"Id={ent.ObjectId},Type={ent.GetType().Name},Layer={ent.Layer}"
-                };
-
-                // 加入候选列表
-                list.Add(candidate);
-            }
-
-            // 排序规则：优先同层（可配置）+ 再按评分降序
-            IEnumerable<OverlapCandidate> ordered = list;
-            if (_propertySyncPreferSameLayer)
-            {
-                ordered = ordered
-                    .OrderByDescending(c => c.IsSameLayer)
-                    .ThenByDescending(c => c.Score);
-            }
-            else
-            {
-                ordered = ordered.OrderByDescending(c => c.Score);
-            }
-
-            // 截断候选数量，控制性能
-            var result = ordered.Take(Math.Max(1, maxCandidates)).ToList();
-
-            // 输出候选日志
-            try
-            {
-                LogManager.Instance.LogInfo($"\n重叠候选数量: 原始={list.Count}, 参与合并={result.Count}");
-                for (int i = 0; i < result.Count; i++)
-                {
-                    var c = result[i];
-                    LogManager.Instance.LogInfo($"\n候选[{i + 1}] Score={c.Score:F6}, SameLayer={c.IsSameLayer}, {c.Identity}");
-                }
-            }
-            catch
-            {
-                // 日志异常不影响流程
-            }
-
-            // 返回候选集合
-            return result;
-        }
-
-        /// <summary>
-        /// 白名单模板配置（第三版增强）
-        /// 说明：键使用“归一化字段名”（NormalizePropertyKey 后）
-        /// </summary>
-        // 是否启用白名单模板控制（启用后，仅允许白名单字段被继承）
-        private static readonly bool _propertySyncUseWhitelistTemplate = false;
-
-        /// <summary>
-        /// 解析当前插入图元所属专业模板键
-        /// </summary>
-        private static string ResolvePropertySyncTemplateKey(BlockReference insertingBr)
-        {
-            // 优先从按钮名推断（你项目里按钮名语义最明确）
-            string btnName = (VariableDictionary.btnFileName ?? string.Empty).Trim().ToUpperInvariant();
-            // 其次从图层名推断
-            string layer = string.Empty;
-            try { layer = (insertingBr?.Layer ?? string.Empty).Trim().ToUpperInvariant(); } catch { layer = string.Empty; }
-
-            // 拼接统一判断文本
-            string text = $"{btnName}|{layer}";
-
-            // 工艺
-            if (text.Contains("GY") || text.Contains("工艺")) return "GY";
-            // 暖通
-            if (text.Contains("NT") || text.Contains("暖通")) return "NT";
-            // 给排水
-            if (text.Contains("GPS") || text.Contains("给排水") || text.Contains("水")) return "GPS";
-            // 电气
-            if (text.Contains("DQ") || text.Contains("电气")) return "DQ";
-            // 自控
-            if (text.Contains("ZK") || text.Contains("自控")) return "ZK";
-            // 建筑
-            if (text.Contains("JZ") || text.Contains("建筑")) return "JZ";
-            // 结构
-            if (text.Contains("JG") || text.Contains("结构")) return "JG";
-
-            // 无法识别时走默认模板
-            return "DEFAULT";
-        }
-
-        #region 第三版
-        /// <summary>
-        /// 白名单模板 JSON 路径（可手工编辑）
-        /// </summary>
-        private static readonly string _propertySyncWhitelistJsonPath = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "GB_NewCadPlus_IV",
-                "property-sync-whitelist.json");
-
-        /// <summary>
-        /// 白名单模板缓存（热加载后存这里）
-        /// </summary>
-        private static Dictionary<string, HashSet<string>> _propertySyncWhitelistTemplatesRuntime =
-            new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// 白名单文件最近写入时间（用于热加载判断）
-        /// </summary>
-        private static DateTime _propertySyncWhitelistJsonLastWriteUtc = DateTime.MinValue;
-
-        /// <summary>
-        /// 白名单热加载锁，避免并发读写冲突
-        /// </summary>
-        private static readonly object _propertySyncWhitelistLock = new object();
-
-        /// <summary>
-        /// 构建内置默认白名单模板（JSON 不存在或解析失败时兜底）
-        /// </summary>
-        private static Dictionary<string, HashSet<string>> BuildDefaultWhitelistTemplates()
-        {
-            // 创建默认模板字典
-            var dict = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-
-            // 默认模板
-            dict["DEFAULT"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","DISPLAYNAME","TYPE","MODEL","SPEC","MATERIAL",
-        "DN","PN","QTY","UNIT","REMARK","CODE","NO"
-    };
-
-            // 工艺模板
-            dict["GY"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","MODEL","SPEC","MATERIAL","DN","PN","QTY","UNIT","REMARK",
-        "PIPEMATERIAL","PIPESPEC","VALVEMODEL","PUMPMODEL","WORKINGPRESSURE"
-    };
-
-            // 暖通模板
-            dict["NT"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","MODEL","SPEC","MATERIAL","DN","QTY","UNIT","REMARK",
-        "AIRVOLUME","WINDSPEED","PIPEMATERIAL","INSULATIONTHICKNESS"
-    };
-
-            // 给排水模板
-            dict["GPS"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","MODEL","SPEC","MATERIAL","DN","QTY","UNIT","REMARK",
-        "PRESSURE","PIPEMATERIAL","PIPELEVEL"
-    };
-
-            // 电气模板
-            dict["DQ"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","MODEL","SPEC","QTY","UNIT","REMARK",
-        "POWERRATING","VOLTAGE","CABLESPEC","CABLEMODEL"
-    };
-
-            // 自控模板
-            dict["ZK"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","MODEL","SPEC","QTY","UNIT","REMARK",
-        "SIGNALTYPE","IOPOINT","CONTROLMODE"
-    };
-
-            // 建筑模板
-            dict["JZ"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","TYPE","SPEC","QTY","UNIT","REMARK","ROOMNO","LEVEL"
-    };
-
-            // 结构模板
-            dict["JG"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "TAG","NAME","TYPE","SPEC","QTY","UNIT","REMARK","CONCRETEGRADE","STEELGRADE"
-    };
-
-            // 返回默认模板
-            return dict;
-        }
-
-        /// <summary>
-        /// 把模板字段做归一化（与属性匹配规则一致）
-        /// </summary>
-        private static HashSet<string> NormalizeWhitelistFields(IEnumerable<string> fields)
-        {
-            // 创建结果集合
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (fields == null) return set;
-
-            // 逐个归一化后入集合
-            foreach (var f in fields)
-            {
-                string n = NormalizePropertyKey(f ?? string.Empty);
-                if (!string.IsNullOrWhiteSpace(n))
-                    set.Add(n);
-            }
-
-            return set;
-        }
-
-        /// <summary>
-        /// 尝试把默认模板写出到 JSON（首次生成，方便用户编辑）
-        /// </summary>
-        private static void EnsureWhitelistSeedJson()
-        {
-            try
-            {
-                // 文件已存在则不覆盖
-                if (System.IO.File.Exists(_propertySyncWhitelistJsonPath)) return;
-
-                // 确保目录存在
-                string dir = System.IO.Path.GetDirectoryName(_propertySyncWhitelistJsonPath) ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(dir) && !System.IO.Directory.Exists(dir))
-                    System.IO.Directory.CreateDirectory(dir);
-
-                // 取默认模板（写出原始键，不做归一化，便于人读）
-                var defaults = BuildDefaultWhitelistTemplates()
-                    .ToDictionary(k => k.Key, v => v.Value.ToList(), StringComparer.OrdinalIgnoreCase);
-
-                // 序列化为缩进 JSON
-                string json = Newtonsoft.Json.JsonConvert.SerializeObject(defaults, Newtonsoft.Json.Formatting.Indented);
-
-                // 写文件（UTF-8）
-                System.IO.File.WriteAllText(_propertySyncWhitelistJsonPath, json, Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"\n白名单模板种子 JSON 生成失败: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 尝试从 JSON 读取白名单模板
-        /// </summary>
-        private static Dictionary<string, HashSet<string>> LoadWhitelistTemplatesFromJson()
-        {
-            // 准备返回字典
-            var result = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-
-            // 文件不存在直接返回空（上层会兜底）
-            if (!System.IO.File.Exists(_propertySyncWhitelistJsonPath))
-                return result;
-
-            // 读取 JSON 文本
-            string json = System.IO.File.ReadAllText(_propertySyncWhitelistJsonPath, Encoding.UTF8);
-
-            // 反序列化为 字典<模板名, 字段列表>
-            var raw = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, List<string>>>(json);
-
-            // 空配置直接返回空
-            if (raw == null || raw.Count == 0) return result;
-
-            // 逐模板归一化
-            foreach (var kv in raw)
-            {
-                string key = (kv.Key ?? string.Empty).Trim();
-                if (string.IsNullOrWhiteSpace(key)) continue;
-
-                var normalizedSet = NormalizeWhitelistFields(kv.Value ?? new List<string>());
-                if (normalizedSet.Count > 0)
-                    result[key] = normalizedSet;
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// 确保白名单模板已热加载（文件变化则自动重载）
-        /// </summary>
-        private static void EnsureWhitelistTemplatesHotLoaded()
-        {
-            lock (_propertySyncWhitelistLock)
-            {
-                // 先确保有种子文件（首次）
-                EnsureWhitelistSeedJson();
-
-                // 获取当前文件写入时间
-                DateTime lastWrite = DateTime.MinValue;
-                if (System.IO.File.Exists(_propertySyncWhitelistJsonPath))
-                    lastWrite = System.IO.File.GetLastWriteTimeUtc(_propertySyncWhitelistJsonPath);
-
-                // 缓存为空或文件已更新时才重载
-                bool needReload = _propertySyncWhitelistTemplatesRuntime.Count == 0 || lastWrite > _propertySyncWhitelistJsonLastWriteUtc;
-                if (!needReload) return;
-
-                try
-                {
-                    // 优先读 JSON
-                    var loaded = LoadWhitelistTemplatesFromJson();
-
-                    // JSON 无有效模板时使用默认模板
-                    if (loaded.Count == 0)
-                    {
-                        var fallback = BuildDefaultWhitelistTemplates();
-                        _propertySyncWhitelistTemplatesRuntime = fallback
-                            .ToDictionary(k => k.Key, v => NormalizeWhitelistFields(v.Value), StringComparer.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        _propertySyncWhitelistTemplatesRuntime = loaded;
-                        // 确保 DEFAULT 存在
-                        if (!_propertySyncWhitelistTemplatesRuntime.ContainsKey("DEFAULT"))
-                            _propertySyncWhitelistTemplatesRuntime["DEFAULT"] = NormalizeWhitelistFields(BuildDefaultWhitelistTemplates()["DEFAULT"]);
-                    }
-
-                    // 更新版本时间戳
-                    _propertySyncWhitelistJsonLastWriteUtc = lastWrite;
-
-                    LogManager.Instance.LogInfo($"\n白名单模板热加载成功: {_propertySyncWhitelistJsonPath}");
-                }
-                catch (Exception ex)
-                {
-                    // 异常时回退默认模板
-                    var fallback = BuildDefaultWhitelistTemplates();
-                    _propertySyncWhitelistTemplatesRuntime = fallback
-                        .ToDictionary(k => k.Key, v => NormalizeWhitelistFields(v.Value), StringComparer.OrdinalIgnoreCase);
-
-                    LogManager.Instance.LogInfo($"\n白名单模板热加载失败，已回退默认模板: {ex.Message}");
-                }
-            }
-        }
-
-        /// <summary>
-        /// 获取当前激活白名单（热加载版）
-        /// </summary>
-        private static HashSet<string> GetActiveWhitelist(BlockReference insertingBr)
-        {
-            // 先执行热加载
-            EnsureWhitelistTemplatesHotLoaded();
-
-            // 按专业解析模板键（你已有 ResolvePropertySyncTemplateKey）
-            string key = ResolvePropertySyncTemplateKey(insertingBr);
-
-            // 命中专业模板优先
-            if (_propertySyncWhitelistTemplatesRuntime.TryGetValue(key, out var set) && set != null && set.Count > 0)
-                return set;
-
-            // 兜底 DEFAULT
-            if (_propertySyncWhitelistTemplatesRuntime.TryGetValue("DEFAULT", out var def) && def != null)
-                return def;
-
-            // 最终兜底空集合
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        }
-
-        #endregion
 
         #endregion
 
@@ -1549,7 +1118,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         var overlapSourcePropertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                         // 调用 FindOverlappedCandidates 查找当前插入点附近所有可能重叠的候选图元
-                        var overlapCandidates = FindOverlappedCandidates(tr, fileEntity, _propertySyncMaxCandidates);
+                        var overlapCandidates = JsonHelper.FindOverlappedCandidates(tr, fileEntity, _propertySyncMaxCandidates);
 
                         // 记录日志，输出找到的候选图元数量
                         logger.LogInfo($"[DEBUG] 找到重叠候选图元数量: {overlapCandidates.Count}");
@@ -1558,7 +1127,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         if (overlapCandidates.Count > 0)
                         {
                             // 调用 GetActiveWhitelist 根据当前图元的专业类型获取对应的属性白名单
-                            var activeWhitelist = GetActiveWhitelist(fileEntity);
+                            var activeWhitelist = JsonHelper.GetActiveWhitelist(fileEntity);
 
                             // 调用 BuildMergedPropertyMapFromCandidates 从候选图元中合并属性，并应用白名单/黑名单过滤
                             overlapSourcePropertyMap = BuildMergedPropertyMapFromCandidates(tr, overlapCandidates, activeWhitelist);

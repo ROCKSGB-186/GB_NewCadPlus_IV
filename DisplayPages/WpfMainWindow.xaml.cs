@@ -11,6 +11,7 @@ using GB_NewCadPlus_IV.DisplayPages;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
+using GB_NewCadPlus_IV.ViewModels;
 using GB_NewCadPlus_IV.Views;
 using IFoxCAD.Cad;
 using Microsoft.CSharp.RuntimeBinder;
@@ -19,8 +20,8 @@ using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;  // 仅用于创建 .xlsx 工作簿
 using NPOI.SS.Util;          // 用于 CellRangeAddress 等辅助类
+using NPOI.XSSF.UserModel;  // 仅用于创建 .xlsx 工作簿
 using Org.BouncyCastle.Asn1.Cms;
 using System;
 using System.CodeDom.Compiler;
@@ -57,13 +58,13 @@ using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using System.Windows.Controls;
 using static GB_NewCadPlus_IV.FunctionalMethod.DatabaseManager;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Binding = System.Windows.Data.Binding;
 using Border = System.Windows.Controls.Border;
 using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
+using CellType = NPOI.SS.UserModel.CellType;
 using ComboBox = System.Windows.Controls.ComboBox;
 using ContextMenu = System.Windows.Controls.ContextMenu;
 using Control = System.Windows.Controls.Control;
@@ -80,9 +81,9 @@ using Panel = System.Windows.Controls.Panel;
 using Pen = System.Windows.Media.Pen;
 using Point = System.Windows.Point;
 using SystemColors = System.Windows.SystemColors;
+using Table = Autodesk.AutoCAD.DatabaseServices.Table;
 using TextBox = System.Windows.Controls.TextBox;
 using UserControl = System.Windows.Controls.UserControl;
-using CellType = NPOI.SS.UserModel.CellType;
 
 namespace GB_NewCadPlus_IV
 {
@@ -271,6 +272,7 @@ namespace GB_NewCadPlus_IV
             
             _fileManager = null;
             _categoryManager = null;
+            this.DataContext = new PipeCalcViewModel();// 初始化计算表
 
             // 层管理器与层数据源初始化（仅对象创建，实际数据在 InitializeLayerDataGrid 中绑定）
             _layerManager = new LayerManager();
@@ -280,7 +282,7 @@ namespace GB_NewCadPlus_IV
             InitializeLayerDataGrid();
 
             // 初始化计算 CSV 表结构（方法实现可能在后续段）
-            InitializeCalcCsvTables();
+            //InitializeCalcCsvTables();
         }
         #endregion
 
@@ -292,7 +294,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (LayerDataGrid == null) return;
+                if (LayerDataGrid == null) return; // 检查对象是否为空
                 LayerDataGrid.AutoGenerateColumns = false;
                 LayerDataGrid.ItemsSource = _layerData;
             }
@@ -2499,8 +2501,8 @@ namespace GB_NewCadPlus_IV
 
             var miUpdate = new System.Windows.Controls.MenuItem { Header = "更新图元" };
             miUpdate.CommandParameter = row.Item;
-            miUpdate.Click += ReplaceFileMenuItem_Click;
-            cm.Items.Add(miUpdate);
+            miUpdate.Click += ReplaceFileMenuItem_Click;// 更新图元按钮事件
+            cm.Items.Add(miUpdate);// 更新图元
 
             var miUpdatePreview = new System.Windows.Controls.MenuItem { Header = "更新预览图" };
             miUpdatePreview.CommandParameter = row.Item;
@@ -2575,19 +2577,19 @@ namespace GB_NewCadPlus_IV
                 // 获取被点击菜单项的数据上下文（要替换的文件记录对象）
                 if (!(sender is MenuItem menuItem))
                     return;
-
+                // 获取菜单项的数据上下文
                 object? target = menuItem.CommandParameter ?? menuItem.DataContext;
                 if (target == null)
                 {
                     // 尝试通过父级 ContextMenu 和 PlacementTarget（如 DataGridRow）获取
-                    var parent = VisualTreeHelper.GetParent(menuItem);
+                    var parent = VisualTreeHelper.GetParent(menuItem);// 获取右键选项的父级
                     while (!(parent is ContextMenu) && parent != null)
-                        parent = VisualTreeHelper.GetParent(parent);
-
+                        parent = VisualTreeHelper.GetParent(parent);//
+                    //如果父级是 ContextMenu，则尝试获取 PlacementTarget
                     if (parent is ContextMenu cm && cm.PlacementTarget is DataGridRow row)
-                        target = row.DataContext;
+                        target = row.DataContext;// 获取 DataGridRow 的数据上下文
                 }
-
+                // 如果DataGridRow 的数据上下文为空，则无法获取要替换的文件记录
                 if (target == null)
                 {
                     MessageBox.Show("未能识别要替换的文件记录。", "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
@@ -2609,7 +2611,7 @@ namespace GB_NewCadPlus_IV
                 if (ofd.ShowDialog() != DialogResult.OK)
                     return;
 
-                string localPath = ofd.FileName;
+                string localPath = ofd.FileName;// 获取选择的文件路径
                 if (!File.Exists(localPath))
                 {
                     MessageBox.Show("所选文件不存在。", "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
@@ -3044,49 +3046,7 @@ namespace GB_NewCadPlus_IV
             CategoryPropertiesDataGrid.ItemsSource = initialRows;
             LogManager.Instance.LogInfo("初始化分类属性编辑网格成功:InitializeCategoryPropertyGrid()");
         }
-
-        /// <summary>
-        /// 初始化属性编辑网格
-        /// </summary>
-        //private async void AddFileInitializeFilePropertiesGrid()
-        //{
-        //    try
-        //    {
-        //        var properties = new List<CategoryPropertyEditModel>
-        //          {
-        //          // 文件存储表(cad_file_storage)相关属性
-        //          new CategoryPropertyEditModel { PropertyName1 = "显示名称", PropertyValue1 = Path.GetFileNameWithoutExtension(_selectedFilePath), PropertyName2 = "元素块名", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "层名", PropertyValue1 = "TJ(  专业  )", PropertyName2 = "颜色索引", PropertyValue2 = "40" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "描述", PropertyValue1 = "", PropertyName2 = "版本", PropertyValue2 = "1" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "是否公开", PropertyValue1 = "是", PropertyName2 = "创建者", PropertyValue2 = Environment.UserName },
-        //          new CategoryPropertyEditModel { PropertyName1 = "是否天正", PropertyValue1 = "否" },
-        //          // 文件属性表(cad_file_attributes)相关属性
-        //          new CategoryPropertyEditModel { PropertyName1 = "长度", PropertyValue1 = "", PropertyName2 = "宽度", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "高度", PropertyValue1 = "", PropertyName2 = "角度", PropertyValue2 = "0" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "基点X", PropertyValue1 = "0", PropertyName2 = "基点Y", PropertyValue2 = "0" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "基点Z", PropertyValue1 = "0", PropertyName2 = "介质", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "规格", PropertyValue1 = "", PropertyName2 = "材质", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "标准号", PropertyValue1 = "", PropertyName2 = "功率", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "容积", PropertyValue1 = "", PropertyName2 = "压力", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "温度", PropertyValue1 = "", PropertyName2 = "直径", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "外径", PropertyValue1 = "", PropertyName2 = "内径", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "厚度", PropertyValue1 = "", PropertyName2 = "重量", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "型号", PropertyValue1 = "", PropertyName2 = "备注", PropertyValue2 = "" },
-
-        //          // 文件标签表(file_tags)相关属性（可以添加多个标签）
-        //          new CategoryPropertyEditModel { PropertyName1 = "标签1", PropertyValue1 = "", PropertyName2 = "标签2", PropertyValue2 = "" },
-        //          new CategoryPropertyEditModel { PropertyName1 = "标签3", PropertyValue1 = "", PropertyName2 = "", PropertyValue2 = "" }
-        //          };
-
-        //        CategoryPropertiesDataGrid.ItemsSource = properties;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogManager.Instance.LogInfo($"初始化属性编辑失败: {ex.Message}");
-        //    }
-        //}
-
-
+        
         /// <summary>
         /// 添加文件时初始化属性编辑网格，包含管道相关的标准属性
         /// </summary>
@@ -4957,6 +4917,8 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+  
+
         /// <summary>
         /// 上传当前选中的图形文件到服务器（无参便捷方法）
         /// 内部自动从 UI 控件和字段中收集上传所需的数据
@@ -5061,8 +5023,7 @@ namespace GB_NewCadPlus_IV
             else
                 LogManager.Instance.LogWarning($"[上传失败] {message}");
         }
-
-
+        
         /// <summary>
         /// 上传文件到服务器并保存元数据
         /// </summary>
@@ -5230,9 +5191,8 @@ namespace GB_NewCadPlus_IV
                 // 注意：dwgStream 和 previewStream 会被 MultipartFormDataContent 在 Dispose 时处理
             }
         }
-
         #endregion
-       
+
 
         #region 各专业按键
 
@@ -5315,7 +5275,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private void TextBox_绘图比例_TextChanged(object sender, TextChangedEventArgs e)
         {
-            SaveDrawingConfig();
+            //SaveDrawingConfig();
         }
         #endregion
 
@@ -7065,6 +7025,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                // 检查数据库连接
                 if (this._databaseManager == null || !this._databaseManager.IsDatabaseAvailable)
                 {
                     int num1 = (int)MessageBox.Show("数据库未连接，无法执行导入操作。", "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
@@ -7393,7 +7354,7 @@ namespace GB_NewCadPlus_IV
             //Env.Document.SendStringToExecute("PreviewPipeGeometry ", false, false, false);
         }
 
-        private void 表格同步_Click(object sender, RoutedEventArgs e)
+        private async void 表格同步_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -7404,23 +7365,22 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 在 AutoCAD 文档锁内进行交互选择并判断表类型
                 using (doc.LockDocument())
                 {
                     var ed = doc.Editor;
 
-                    // 让用户选择一个 Table 对象
                     var peo = new Autodesk.AutoCAD.EditorInput.PromptEntityOptions("\n请选择要同步的表格（Table）：");
                     peo.SetRejectMessage("\n请选择一个表格对象。");
                     peo.AddAllowedClass(typeof(Autodesk.AutoCAD.DatabaseServices.Table), true);
 
-                    var per = ed.GetEntity(peo);
+                    var per = ed.GetEntity(peo); // 把选中的对象获取为实体对象
                     if (per.Status != Autodesk.AutoCAD.EditorInput.PromptStatus.OK)
                         return;
-
+                    //开始事务
                     using (var tr = doc.Database.TransactionManager.StartTransaction())
                     {
-                        var table = tr.GetObject(per.ObjectId, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForRead) as Autodesk.AutoCAD.DatabaseServices.Table;
+                        // 获取表格对象
+                        var table = tr.GetObject(per.ObjectId, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForRead) as Autodesk.AutoCAD.DatabaseServices.Table; 
                         if (table == null)
                         {
                             MessageBox.Show("选中的对象不是表格。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -7429,22 +7389,16 @@ namespace GB_NewCadPlus_IV
 
                         // 读取前几行作为表头用于判断（最多读取前3行）
                         int headerRowsToCheck = Math.Min(3, table.Rows.Count);
-                        // 创建一个 StringBuilder 用于存储表头文本 拼接表头文本
-                        var headerTextSb = new System.Text.StringBuilder();
-                        // 遍历每一行 遍历表格的前几行和所有列
+                        var headerTextSb = new System.Text.StringBuilder();  // 用于存储表头文本
                         for (int r = 0; r < headerRowsToCheck; r++)
                         {
-                            // 遍历每一列
                             for (int c = 0; c < table.Columns.Count; c++)
                             {
                                 try
                                 {
-                                    // 尝试获取单元格文本 读取单元格文本
                                     var cellText = (table.Cells[r, c].TextString ?? string.Empty).Trim();
-                                    // 检查单元格文本是否非空
                                     if (!string.IsNullOrEmpty(cellText))
                                     {
-                                        // 将单元格文本添加到表头文本中 拼接单元格文本
                                         headerTextSb.Append(cellText).Append(" ");
                                     }
                                 }
@@ -7454,36 +7408,90 @@ namespace GB_NewCadPlus_IV
                                 }
                             }
                         }
-                        // 将表头文本转换为字符串 拼接后的表头文本
                         string headerText = headerTextSb.ToString();
 
-                        // 关键词判断：若包含任一管道关键词则判定为管道表；包含设备关键词则判定为设备表
-                        var pipeKeywords = new[] { "管道", "直径", "外径", "内径", "厚度", "单位", "数量", "米", "长度", "规格" };
-                        var equipKeywords = new[] { "部件ID", "部件编号", "序号", "名称", "型号", "材质", "数量", "规格", "部件" };
-                        // 判断表头文本是否包含管道关键词 判断表头文本中是否包含关键词
-                        bool looksLikePipe = pipeKeywords.Any(k => !string.IsNullOrWhiteSpace(k) && headerText.IndexOf(k, System.StringComparison.OrdinalIgnoreCase) >= 0);
-                        // 设备表 判断表头文本是否包含设备关键词
-                        bool looksLikeEquip = equipKeywords.Any(k => !string.IsNullOrWhiteSpace(k) && headerText.IndexOf(k, System.StringComparison.OrdinalIgnoreCase) >= 0);
-                        // 选择命令 根据判断结果选择要执行的命令
+                        // -----------------------------------------------------------------
+                        // 关键词定义（可根据实际表头增加/调整）
+                        // -----------------------------------------------------------------
+                        var pipeKeywords = new[] {
+                            "PIPELINETITLE", "PIPE_OD", "PIPE_ID", "PIPE_THK",
+                            "SCHEDULE", "PIPE_TYPE", "PIPE_CLASS", "PIPE_MATL"
+                        };
+                        var equipKeywords = new[] {
+                             "阀门", "法兰", "电机", "泵", "DRIVE_MODE"
+                         };
+                        // ★ 新增：计算表关键词（涵盖脱硫系统计算、泵计算、管道计算等）
+                        var calcKeywords = new[] {
+                             "脱硫系统", "入口SO2", "出口SO2", "大气压", "出口温度",
+                             "标况烟气量", "工况烟气量", "烟囱出口风速", "烟囱出口直径",
+                             "浆液循环总量", "循环泵选型", "氧化区有效容积", "氧化区直径",
+                             "循环泵流量", "扬程", "电机系数", "计算功率", "推荐电机功率",
+                             "进口管道尺寸", "出口管道尺寸", "介质", "使用条件", "流速",
+                             "管道尺寸", "核算流速", "氧化风机选型", "氧化风量", "氧化风压",
+                             "石灰石浆液泵", "石灰石纯度", "浆液密度", "系统数量",
+                             "运行时长", "泵台数", "效率", "电机功率选型"
+                         };
+
+                        // 判断表类型
+                        bool looksLikePipe = pipeKeywords.Any(k => !string.IsNullOrWhiteSpace(k) &&
+                            headerText.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0);
+                        bool looksLikeEquip = equipKeywords.Any(k => !string.IsNullOrWhiteSpace(k) &&
+                            headerText.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0);
+                        bool looksLikeCalc = calcKeywords.Any(k => !string.IsNullOrWhiteSpace(k) &&
+                            headerText.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0);
+
                         string chosenCommand = null;
-                        // 管道表 根据判断结果选择命令
-                        if (looksLikePipe && !looksLikeEquip)
+
+                        // ★ 优先处理计算表（因为计算表可能同时匹配管道/设备关键词）
+                        if (looksLikeCalc)
                         {
-                            // 管道表 管道表同步
+                            // 收集参数：忽略设备名列，只取参数名和值
+                            var calcProps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            int startRow = 0;   // 如果第一行是标题，可改为 1
+                            for (int r = startRow; r < table.Rows.Count; r++)
+                            {
+                                if (table.Columns.Count < 2) continue;
+
+                                // 根据列数决定列索引：
+                                // 3列：参数名在列1，值在列2
+                                // 2列：参数名在列0，值在列1
+                                int nameCol = (table.Columns.Count >= 3) ? 1 : 0;
+                                int valueCol = (table.Columns.Count >= 3) ? 2 : 1;
+                                string paramName = (table.Cells[r, nameCol].TextString ?? string.Empty).Trim();
+                                string paramValue = (table.Cells[r, valueCol].TextString ?? string.Empty).Trim();
+
+                                if (!string.IsNullOrEmpty(paramName))
+                                    calcProps[paramName] = paramValue;   // 重复参数时后面的覆盖前面的
+                            }
+
+                            tr.Commit();
+
+                            if (calcProps.Count == 0)
+                            {
+                                ed.WriteMessage("\n表格中没有有效的参数。");
+                                return;
+                            }
+
+                            ed.WriteMessage($"\n共提取 {calcProps.Count} 个参数。");
+                            await SyncCalcPropsToBlocksAsync(calcProps);
+                            return;
+                        }
+                        else if (looksLikePipe && !looksLikeEquip)
+                        {
                             chosenCommand = "SyncTableToEntities ";
                         }
                         else if (looksLikeEquip && !looksLikePipe)
                         {
-                            // 设备表 设备表同步
                             chosenCommand = "SyncDeviceTableToBlocks ";
                         }
-                        else
+                        else if (looksLikePipe && looksLikeEquip)
                         {
-                            // 无法明确判断或两者同时匹配，询问用户确认
-                            var result = MessageBox.Show("未能自动判断表类型或同时匹配到管道/设备特征。\n请选择要执行的同步类型：\n\n[是] - 设备表同步（表 -> 图元）\n[否] - 管道表同步（表 -> 管道实体）\n[取消] - 取消操作",
-                                                         "请选择表类型",
-                                                         MessageBoxButton.YesNoCancel,
-                                                         MessageBoxImage.Question);
+                            // 同时匹配管道和设备特征，询问用户
+                            var result = MessageBox.Show(
+                                "未能自动判断表类型或同时匹配到管道/设备特征。\n请选择要执行的同步类型：\n\n[是] - 设备表同步（表 -> 图元）\n[否] - 管道表同步（表 -> 管道实体）\n[取消] - 取消操作",
+                                "请选择表类型",
+                                MessageBoxButton.YesNoCancel,
+                                MessageBoxImage.Question);
 
                             if (result == MessageBoxResult.Cancel)
                             {
@@ -7491,24 +7499,40 @@ namespace GB_NewCadPlus_IV
                             }
                             else if (result == MessageBoxResult.Yes)
                             {
-                                // 设备表同步
                                 chosenCommand = "SyncDeviceTableToBlocks ";
                             }
                             else
                             {
-                                // 管道表同步
                                 chosenCommand = "SyncTableToEntities ";
                             }
+                        }
+                        else
+                        {
+                            // 没有任何关键词匹配，提示用户选择所有可能的同步方式
+                            var result = MessageBox.Show(
+                                "未能自动判断表类型。\n请选择要执行的同步类型：\n\n[是] - 设备表同步\n[否] - 管道表同步\n[取消] - 取消操作\n（若为计算表，暂无法处理，请检查命令）",
+                                "请选择表类型",
+                                MessageBoxButton.YesNoCancel,
+                                MessageBoxImage.Question);
+
+                            if (result == MessageBoxResult.Cancel) return;
+                            if (result == MessageBoxResult.Yes)
+                                chosenCommand = "SyncDeviceTableToBlocks ";
+                            else
+                                chosenCommand = "SyncTableToEntities ";
                         }
 
                         tr.Commit();
 
-                        // 通过 Env.Document.SendStringToExecute 调用对应的命令（命令内部会再次提示选择或使用当前上下文）
+                        // 发送命令到 AutoCAD 命令行
                         if (!string.IsNullOrEmpty(chosenCommand))
                         {
-                            // 在发送命令前提示用户（可省略）
                             ed.WriteMessage($"\n将执行: {chosenCommand.Trim()}");
                             Env.Document.SendStringToExecute(chosenCommand, false, false, false);
+                        }
+                        else
+                        {
+                            ed.WriteMessage("\n未识别可用的同步命令，操作取消。");
                         }
                     }
                 }
@@ -7517,9 +7541,131 @@ namespace GB_NewCadPlus_IV
             {
                 MessageBox.Show($"表格同步失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-
         }
 
+        /// <summary>
+        /// 同步计算表
+        /// </summary>
+        /// <param name="props"> </param>
+        /// <returns></returns>
+        private async Task SyncCalcPropsToBlocksAsync(Dictionary<string, string> props)
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var ed = doc.Editor;
+
+            // 选择要同步的块参照
+            var selOpts = new PromptSelectionOptions
+            {
+                RejectPaperspaceViewport = true,
+                MessageForAdding = "\n请选择要同步属性的图元（块参照）："
+            };
+            var selRes = ed.GetSelection(selOpts);
+            if (selRes.Status != PromptStatus.OK || selRes.Value.Count == 0)
+            {
+                ed.WriteMessage("\n未选择任何图元，操作取消。");
+                return;
+            }
+
+            // 预先将中文参数名翻译为英文 Tag，构建 Tag -> 值 的字典（加速匹配）
+            var tagToValue = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in props)
+            {
+                string targetTag = FindCanonicalTagByChineseName(kvp.Key); // 尝试获取英文标签
+                if (!string.IsNullOrEmpty(targetTag) && !tagToValue.ContainsKey(targetTag))
+                {
+                    // 同时应用单位换算
+                    string finalValue = PerformUnitConversionIfNeeded(targetTag, kvp.Value);
+                    tagToValue[targetTag] = finalValue;
+                }
+            }
+
+            if (tagToValue.Count == 0)
+            {
+                ed.WriteMessage("\n没有参数能在字典中找到对应的英文标签，请检查 DictionaryHelper._canonicalToAliases 配置。");
+                return;
+            }
+
+            int matchedBlocks = 0;
+            int assignedAttributes = 0;
+
+            using (var tr = doc.Database.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in selRes.Value.GetObjectIds())
+                {
+                    if (!(tr.GetObject(id, OpenMode.ForWrite) is BlockReference br)) continue;
+
+                    BlockTableRecord btr = tr.GetObject(br.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+                    if (btr == null || !btr.HasAttributeDefinitions) continue;
+
+                    foreach (ObjectId attId in br.AttributeCollection)
+                    {
+                        if (!attId.IsValid || attId.IsErased) continue;
+                        var attRef = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
+                        if (attRef == null) continue;
+
+                        if (tagToValue.TryGetValue(attRef.Tag, out string newValue))
+                        {
+                            attRef.TextString = newValue;
+                            assignedAttributes++;
+                        }
+                    }
+                    matchedBlocks++;
+                }
+
+                tr.Commit();
+            }
+
+            ed.WriteMessage($"\n同步完成：处理 {matchedBlocks} 个图元，共赋值 {assignedAttributes} 个属性。");
+        }
+        
+
+        /// <summary>
+        /// 根据中文列名从 DictionaryHelper._canonicalToAliases 中反向查找英文属性标签
+        /// </summary>
+        /// <param name="chineseColumnName">表格中的中文列名</param>
+        /// <returns>英文属性 Tag，若未找到则返回 null</returns>
+        private string FindCanonicalTagByChineseName(string chineseColumnName)
+        {
+            // 精确匹配 + 忽略大小写
+            foreach (var kvp in DictionaryHelper._canonicalToAliases)
+            {
+                foreach (var alias in kvp.Value)
+                {
+                    if (string.Equals(alias, chineseColumnName, StringComparison.OrdinalIgnoreCase))
+                        return kvp.Key;
+                }
+            }
+
+            // 如果精确匹配失败，尝试包含匹配（宽松模式）
+            string trimmed = chineseColumnName.Trim();
+            foreach (var kvp in DictionaryHelper._canonicalToAliases)
+            {
+                foreach (var alias in kvp.Value)
+                {
+                    if (alias.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        trimmed.IndexOf(alias, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return kvp.Key;
+                }
+            }
+            return null;
+            
+        }
+        /// <summary>
+        /// 根据属性标签判断是否需要进行单位换算
+        /// </summary>
+        /// <param name="tag">标题</param>
+        /// <param name="rawValue">行值</param>
+        /// <returns></returns>
+        private string PerformUnitConversionIfNeeded(string tag, string rawValue)
+        {
+            if (tag.Equals("ATM_PRESSURE", StringComparison.OrdinalIgnoreCase) && double.TryParse(rawValue, out double pa))
+                return (pa / 1000.0).ToString("F2");  // Pa → kPa
+            if (tag.Equals("STACK_EXIT_DIA", StringComparison.OrdinalIgnoreCase) && double.TryParse(rawValue, out double mm))
+                return (mm / 1000.0).ToString("F3");  // mm → m
+            return rawValue;
+        }
+      
         private void 导出表格_Click(object sender, RoutedEventArgs e)
         {
             Env.Document.SendStringToExecute("ExportTableToExcel ", false, false, false);
@@ -9304,7 +9450,7 @@ namespace GB_NewCadPlus_IV
         {
             if (string.IsNullOrWhiteSpace(username)) return false; // 空用户名不是管理员
             var low = username.Trim().ToLowerInvariant(); // 规范为小写比较
-            return low == "sa" || low == "root" || low == "admin"; // 三个默认管理员用户名
+            return low == "sa" || low == "root" || low == "admin" || low == "sysdba"; // 三个默认管理员用户名
         }
 
         /// <summary>
@@ -11214,7 +11360,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private string ExportSectionsToMasterCsv(List<ExcelCalcSection> sections)
         {
-            string outputPath = Path.Combine(GetCalcCsvExternalDirectory(), CalcCsvMasterFileName);
+            string outputPath = Path.Combine(GetCalcCsvExternalDirectory(), CalcCsvMasterFileName); // 
 
             var allRows = sections
                 .SelectMany(s => s.Rows)
@@ -11318,7 +11464,7 @@ namespace GB_NewCadPlus_IV
 
             try
             {
-                string masterPath = ResolveCalcCsvPath(CalcCsvMasterFileName);
+                string masterPath = ResolveCalcCsvPath(CalcCsvMasterFileName); // 
 
                 if (File.Exists(masterPath))
                 {
@@ -11352,6 +11498,10 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+        /// <summary>
+        /// 从总表 CSV 重新加载计算数据（总表模式）
+        /// </summary>
+        /// <param name="masterPath"></param>
         private void ReloadFromMasterCalcCsv(string masterPath)
         {
             var allRows = LoadCalcCsvRows(masterPath, string.Empty);
@@ -11374,6 +11524,11 @@ namespace GB_NewCadPlus_IV
             BuildDynamicCalcGrids(sections);
         }
 
+        /// <summary>
+        /// 根据 GridName 获取 GroupBox Header（用于总表模式）
+        /// </summary>
+        /// <param name="gridName"> Grid名</param>
+        /// <returns></returns>
         private static string GetCalcGroupHeaderByGridName(string gridName)
         {
             string name = (gridName ?? string.Empty).Trim();
@@ -12136,7 +12291,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                ReloadCalcCsvTables(false);
+                ReloadCalcCsvTables(false); // 重载所有 CSV 表，false 表示不弹提示
             }
             catch (Exception ex)
             {
@@ -13656,6 +13811,11 @@ namespace GB_NewCadPlus_IV
             LogManager.Instance.LogInfo("已取消使用默认存储路径，将允许手动指定路径");
         }
 
+        private void 重载计算表_Click(object sender, RoutedEventArgs e)
+        {
+            var pipeCalcViewModel = new PipeCalcViewModel();// 创建一个 PipeCalcViewModel 实例
+                pipeCalcViewModel.LoadData(); // 加载数据
+        }
 
        
     }

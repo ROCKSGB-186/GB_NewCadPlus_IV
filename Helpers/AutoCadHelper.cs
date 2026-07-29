@@ -139,13 +139,6 @@ namespace GB_NewCadPlus_IV.Helpers
         private static double _cachedScale = 1.0;
 
         /// <summary>
-        /// 获取当前绘图比例（优先使用用户在WPF界面输入的值）
-        /// </summary>
-        /// <param name="useCache">是否使用缓存</param>
-        /// <returns>绘图比例</returns>
-        private static readonly object _lock = new object();
-
-        /// <summary>
         /// 获取绘图比例
         /// </summary>
         /// <param name="useCache">是否优先使用缓存值</param>
@@ -155,15 +148,17 @@ namespace GB_NewCadPlus_IV.Helpers
             try
             {
                 // 2. 从界面读取（按优先级：WinForm > WPF > 默认值）
-                double scale = ReadScaleFromUI();
-
-                // 3. 如果读取成功，更新缓存
-                //if (scale > 0)
-                //{
-                //    UpdateScaleCache(scale);
-                //    return scale;
-                //}
-
+                double scale;
+                // 优先 WinForm
+                if (VariableDictionary.winForm_Status)
+                {
+                     scale = GetDrawingScaleFrom_Winform();
+                   
+                }
+                else
+                {
+                    scale = GetDrawingScaleFrom_Wpf();
+                }
                 // 4. 所有方法都失败，返回默认值
                 LogManager.Instance.LogInfo($"使用比例 {scale}");
                 return scale;
@@ -174,27 +169,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 return 1.0;
             }
         }
-
-        /// <summary>
-        /// 从界面读取比例值
-        /// </summary>
-        private static double ReadScaleFromUI()
-        {
-            // 优先 WinForm
-            if (VariableDictionary.winForm_Status)
-            {
-                double scale = GetDrawingScaleFrom_Winform();
-                if (scale > 0) return scale;
-            }
-            // 再尝试 WPF
-            if (VariableDictionary.wpfWindows_Status)
-            {
-                double scale = GetDrawingScaleFrom_Wpf();
-                if (scale > 0) return scale;
-            }
-            return 0;
-        }
-
+        
         /// <summary>
         /// 从 WinForm 界面读取比例值
         /// </summary>
@@ -231,16 +206,37 @@ namespace GB_NewCadPlus_IV.Helpers
         {
             try
             {
-                var _wpfWindowsLoadScad = new WpfMainWindow();
-                VariableDictionary.wpfTextBoxScale = _wpfWindowsLoadScad.LoadDrawingConfig();
+                var instance = WpfMainWindow.Instance;      // 获取当前 WPF 界面实例
+                if (instance == null)
+                    return 100.0;                           // 无实例时的默认值
 
+                var textBox = instance.FindName("TextBox绘图比例") as System.Windows.Controls.TextBox;
+                if (textBox == null)
+                    return 100.0;
+
+                // 优先取输入文本
+                string text = textBox.Text;
+                if (!string.IsNullOrWhiteSpace(text) && double.TryParse(text, out double result))
+                {
+                    VariableDictionary.wpfTextBoxScale = result; // 保持原有缓存
+                    return result;
+                }
+
+                // 文本为空或非法时，尝试取 Tag 值
+                if (textBox.Tag is string tagValue && double.TryParse(tagValue, out double tagResult))
+                {
+                    VariableDictionary.wpfTextBoxScale = tagResult;
+                    return tagResult;
+                }
+
+                return 100.0; // 最终默认值
             }
             catch (Exception ex)
             {
-                // 记录或忽略错误（根据项目日志策略）
-                try { Application.DocumentManager.MdiActiveDocument?.Editor?.WriteMessage($"\nGetDrawingScaleFrom_Wpf 异常: {ex.Message}"); } catch { }
+                // 静默记录日志
+                LogManager.Instance.LogWarning($"GetDrawingScaleFrom_Wpf 异常: {ex.Message}");
+                return 100.0;
             }
-            return VariableDictionary.wpfTextBoxScale;
         }
         
         /// <summary>
@@ -256,25 +252,6 @@ namespace GB_NewCadPlus_IV.Helpers
             return string.Empty;
         }
         
-        /// <summary>
-        /// 更新比例缓存
-        /// </summary>
-        private static void UpdateScaleCache(double scale)
-        {
-            lock (_lock)
-            {
-                if (VariableDictionary.winForm_Status)
-                    VariableDictionary.winformTextBoxScale = scale;
-                else
-                {
-                    VariableDictionary.wpfTextBoxScale = scale;
-                }
-
-                
-                    
-            }
-        }
-      
         /// <summary>
         /// 安全的日志记录方法，防止并发访问问题
         /// </summary>

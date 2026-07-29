@@ -1,1 +1,0 @@
-Please open Helpers\PipeDirectionHelper.cs for editing.

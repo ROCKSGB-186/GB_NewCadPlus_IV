@@ -139,6 +139,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
     }
 
 }
+
 /// <summary>
 /// 辅助类，用于处理TextBox的值
 /// </summary>
@@ -152,39 +153,11 @@ public static class TextBoxValueHelper
         if (textBox == null)
             return string.Empty;
 
-
         if (!string.IsNullOrWhiteSpace(textBox.Text))
             return textBox.Text.Trim();
 
         return textBox.Tag?.ToString() ?? string.Empty;
     }
-
-    /// <summary>
-    /// 获取TextBox的数值
-    /// </summary>
-    public static double GetNumericValueOrDefault(System.Windows.Controls.TextBox textBox, double defaultValue = 0)
-    {
-        string value = GetTextBoxValue(textBox);
-        if (double.TryParse(value, out double result))
-        {
-            return result;
-        }
-        return defaultValue;
-    }
-
-    /// <summary>
-    /// 获取TextBox的整数值  
-    /// </summary>
-    public static int GetIntTextBoxValue(System.Windows.Controls.TextBox textBox, int defaultValue = 0)
-    {
-        string value = GetTextBoxValue(textBox);
-        if (int.TryParse(value, out int result))
-        {
-            return result;
-        }
-        return defaultValue;
-    }
-
 }
 
 

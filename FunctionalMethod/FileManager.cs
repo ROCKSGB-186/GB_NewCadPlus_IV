@@ -1,6 +1,9 @@
+using System.Drawing.Drawing2D;
 using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.UniFiedStandards;
-using System.Data;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows;
@@ -22,8 +25,8 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 数据库管理器
         /// </summary>
-        private readonly DatabaseManager _databaseManager;
-     
+        private readonly DatabaseManager _databaseManager ;
+
         /// <summary>
         /// 分类管理器
         /// </summary>
@@ -295,6 +298,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             // 1) 优先读取系统配置 SourceRoot
             string sourceRootRaw = await databaseManager.GetSystemConfigValueAsync("SourceRoot").ConfigureAwait(false);
             LogManager.Instance.LogInfo($"[{operationName}] 读取 SourceRoot 原始值: {sourceRootRaw}");
+            // 转成服务器路径
             string sourceRoot = EnsureDirectoryPath(ResolveServerStoragePath(sourceRootRaw, serverIp, operationName), operationName);
             if (!string.IsNullOrWhiteSpace(sourceRoot))
             {
@@ -331,25 +335,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             // 5) 数据库可用但无可用服务器路径配置时，阻止上传
             throw new InvalidOperationException("系统配置 SourceRoot 与运行时存储路径均为空，无法确定服务器存储路径。请先在设置中配置存储路径，并确认登录页服务器IP正确。");
         }
-
-        /// <summary>
-        /// 检查目录是否可写
-        /// </summary>
-        private bool IsDirectoryWritable(string directoryPath)
-        {
-            try
-            {
-                string testFilePath = Path.Combine(directoryPath, "test_write_permission.tmp");/// 测试文件路径
-                File.WriteAllText(testFilePath, "test");/// 创建测试文件/ 尝试写入测试文件
-                File.Delete(testFilePath);/// 删除测试文件
-                return true;
-            }
-            catch
-            {
-                return false;/// 如果发生异常，则返回false/ 如果写入失败，返回不可写
-            }
-        }
-
+        
         /// <summary>
         /// 获取管道属性保存路径
         /// </summary>
@@ -560,46 +546,6 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 System.Diagnostics.Debug.WriteLine($"[FileManager] SaveLastPipeAttributes failed: {ex.Message}");
             }
         }
-
-        /// <summary>
-        /// 计算文件的哈希值
-        /// </summary>
-        /// <param name="stream">文件流</param>
-        /// <returns>文件的哈希值</returns>
-        public static async Task<string> CalculateFileHashAsync(Stream stream)
-        {
-            if (stream == null) throw new ArgumentNullException(nameof(stream));
-
-            bool canSeek = stream.CanSeek;
-            long originalPosition = canSeek ? stream.Position : 0;
-            if (canSeek)
-            {
-                stream.Position = 0;
-            }
-
-            try
-            {
-                // 在后台线程执行 ComputeHash（同步读取），避免在 UI 线程执行耗时的 CPU/IO 操作
-                byte[] hash = await Task.Run(() =>
-                {
-                    using (var sha = SHA256.Create())
-                    {
-                        // ComputeHash 会从当前流位置读取到末尾
-                        return sha.ComputeHash(stream);
-                    }
-                }).ConfigureAwait(false);
-
-                return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-            }
-            finally
-            {
-                // 恢复流原始位置（如果流可寻址）
-                if (canSeek)
-                {
-                    stream.Position = originalPosition;
-                }
-            }
-        }
       
         /// <summary>
         /// 解析图元主文件在服务器侧的权威路径。
@@ -610,7 +556,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             {
                 throw new ArgumentNullException(nameof(storage));
             }
-
+            // 获取图元存储根路径
             string root = await ResolveStorageRootPathAsync(databaseManager, operationName).ConfigureAwait(false);
             string rootFull = Path.GetFullPath(root);
 
@@ -646,133 +592,66 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             {
                 throw new InvalidOperationException("图元缺少分类信息，无法解析服务器存储路径。");
             }
-
+            // 按分类类型、分类ID拼接目录
             string categoryDir = Path.Combine(rootFull, storage.CategoryType, storage.CategoryId.ToString());
-
+            // 按文件名拼接文件名
             string targetName = storage.FileStoredName;
             if (string.IsNullOrWhiteSpace(targetName))
             {
+                // 使用原始文件名
                 targetName = !string.IsNullOrWhiteSpace(sourcePath)
                     ? Path.GetFileName(sourcePath)
                     : storage.FileName;
             }
-
+            // 文件名不可为空
             if (string.IsNullOrWhiteSpace(targetName))
             {
                 throw new InvalidOperationException("图元缺少文件名信息，无法解析服务器文件路径。");
             }
-
+            // 按文件名拼接文件路径
             return Path.Combine(categoryDir, targetName);
         }
 
         /// <summary>
-        /// 替换服务器图元主文件，并回写 FileStorage 关键字段。
+        /// 通过 HTTP API 替换服务器上的主 DWG 文件
         /// </summary>
         public async Task<FileStorage> ReplaceGraphicFileAsync(DatabaseManager databaseManager, FileStorage storage, string localPath)
         {
-            if (storage == null)
+            if (storage == null) throw new ArgumentNullException(nameof(storage));
+            if (!File.Exists(localPath)) throw new FileNotFoundException("本地替换文件不存在", localPath);
+
+            // 1. 构建 URL
+            string serverIp = VariableDictionary._serverIP ?? "127.0.0.1";
+            int port = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
+            string url = $"http://{serverIp}:{port}/api/graphics/{storage.Id}/file";
+
+            using var httpClient = new HttpClient();
+            using var form = new MultipartFormDataContent();
+
+            // 2. 添加文件流
+            var fileStream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var fileContent = new StreamContent(fileStream);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            form.Add(fileContent, "dwgFile", Path.GetFileName(localPath));
+
+            // 3. 发送 PUT 请求
+            var response = await httpClient.PutAsync(url, form);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
             {
-                throw new ArgumentNullException(nameof(storage));
+                throw new HttpRequestException($"替换失败 ({(int)response.StatusCode}): {body}");
             }
 
-            if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath))
-            {
-                throw new FileNotFoundException("本地替换文件不存在。", localPath);
-            }
-
-            string serverPath = await ResolveServerGraphicPathAsync(databaseManager, storage, "ReplaceGraphicFileAsync").ConfigureAwait(false);
-            string? serverDir = Path.GetDirectoryName(serverPath);
-            if (string.IsNullOrWhiteSpace(serverDir))
-            {
-                throw new InvalidOperationException("无法解析服务器目标目录。");
-            }
-
-            if (!Directory.Exists(serverDir))
-            {
-                Directory.CreateDirectory(serverDir);
-            }
-
-            if (File.Exists(serverPath))
-            {
-                File.Copy(serverPath, serverPath + ".bak", true);
-            }
-
-            File.Copy(localPath, serverPath, true);
-
-            using (FileStream fs = File.OpenRead(serverPath))
-            {
-                storage.FileHash = await CalculateFileHashAsync(fs).ConfigureAwait(false);
-            }
-
-            FileInfo fi = new FileInfo(serverPath);
-            storage.FilePath = serverPath;
-            storage.FileStoredName = Path.GetFileName(serverPath);
-            storage.FileType = Path.GetExtension(serverPath).ToLowerInvariant();
-            storage.FileSize = fi.Length;
+            // 4. 解析返回结果，更新本地 FileStorage 对象
+            var result = JObject.Parse(body);
+            storage.FilePath = result["filePath"]?.Value<string>();
+            storage.FileStoredName = result["fileStoredName"]?.Value<string>();
+            storage.FileHash = result["fileHash"]?.Value<string>();
+            storage.FileSize = result["fileSize"]?.Value<long>() ?? 0;
+            storage.FileType = Path.GetExtension(localPath).ToLowerInvariant();
             storage.UpdatedAt = DateTime.Now;
 
-            return storage;
-        }
-
-        /// <summary>
-        /// 替换服务器预览图，并回写 FileStorage 关键字段。
-        /// </summary>
-        public async Task<FileStorage> ReplacePreviewFileAsync(DatabaseManager databaseManager, FileStorage storage, string localPreviewPath)
-        {
-            // 参数验证
-            if (storage == null)
-            {
-                throw new ArgumentNullException(nameof(storage));// storage 不能为空
-            }
-            // 验证本地预览图路径有效且文件存在
-            if (string.IsNullOrWhiteSpace(localPreviewPath) || !File.Exists(localPreviewPath))
-            {
-                throw new FileNotFoundException("本地预览图不存在。", localPreviewPath);// 本地预览图路径无效或文件不存在
-            }
-            // 解析服务器预览图目录
-            string serverGraphicPath = await ResolveServerGraphicPathAsync(databaseManager, storage, "ReplacePreviewFileAsync").ConfigureAwait(false);
-            string? targetDir = Path.GetDirectoryName(serverGraphicPath); // 预览图与主文件同目录
-            if (string.IsNullOrWhiteSpace(targetDir))
-            {
-                throw new InvalidOperationException("无法解析服务器预览图目录。"); // 无法从服务器主文件路径解析出目录
-            }
-            // 确保预览图目录存在
-            if (!Directory.Exists(targetDir))
-            {
-                Directory.CreateDirectory(targetDir); // 创建预览图目录
-            }
-            // 确定预览图文件名（优先使用已有配置，否则基于主文件名生成）
-            string ext = Path.GetExtension(localPreviewPath);
-            if (string.IsNullOrWhiteSpace(ext))
-            {
-                ext = ".png";// 默认使用 PNG 作为预览图扩展名
-            }
-            // 预览图文件名优先级：1) storage.PreviewImageName；2) 基于主文件名 + 预览图扩展名；3) 随机生成文件名 + 预览图扩展名
-            string previewName = storage.PreviewImageName;
-            if (string.IsNullOrWhiteSpace(previewName)) // 如果 FileStorage 中没有预览图文件名，则基于主文件名生成预览图文件名
-            {
-                // 从 FileStorage 中获取主文件名（优先 FileStoredName，其次 FileName），并替换扩展名为预览图扩展名
-                previewName = Path.GetFileNameWithoutExtension(storage.FileStoredName ?? storage.FileName ?? Guid.NewGuid().ToString("N")) + ext;
-            }
-            else if (string.IsNullOrWhiteSpace(Path.GetExtension(previewName)))
-            {
-                previewName = Path.GetFileNameWithoutExtension(previewName) + ext; // 如果已有预览图文件名但没有扩展名，则添加预览图扩展名
-            }
-            // 最终预览图目标路径
-            string targetPreviewPath = Path.Combine(targetDir, previewName);
-            // 如果目标预览图已存在，先备份原文件（覆盖同名备份）
-            if (File.Exists(targetPreviewPath))
-            {
-                // 备份现有预览图，命名为原文件名 + ".bak"，如果已存在同名备份则覆盖
-                File.Copy(targetPreviewPath, targetPreviewPath + ".bak", true);
-            }
-            // 将本地预览图复制到服务器目标路径，覆盖同名文件
-            File.Copy(localPreviewPath, targetPreviewPath, true);
-
-            storage.PreviewImagePath = targetPreviewPath; // 更新 FileStorage 中的预览图路径为服务器路径
-            storage.PreviewImageName = Path.GetFileName(targetPreviewPath); // 更新 FileStorage 中的预览图文件名
-            storage.UpdatedAt = DateTime.Now; // 更新时间
-            // 注意：预览图的哈希值和大小不存储在 FileStorage 中，如果需要可以额外计算并存储
             return storage;
         }
 
@@ -858,6 +737,18 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 + Path.DirectorySeparatorChar;
             return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
         }
-        
+
+        /// <summary>
+        /// 计算文件的 SHA-256 哈希值。
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <returns></returns>
+        public static string ComputeSha256(Stream stream)
+        {
+            if (stream.CanSeek) stream.Seek(0, SeekOrigin.Begin);
+            using var sha256 = SHA256.Create();
+            byte[] hash = sha256.ComputeHash(stream);
+            return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+        }
     }
 }

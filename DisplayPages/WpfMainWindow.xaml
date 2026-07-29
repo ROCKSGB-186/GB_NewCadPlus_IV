@@ -7,6 +7,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:wf="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
     xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+    xmlns:displayPages="clr-namespace:GB_NewCadPlus_IV.DisplayPages"
+    xmlns:system="clr-namespace:System;assembly=mscorlib"
     d:Margin="0"
     d:MaxWidth="350"
     d:MinHeight="800"
@@ -51,8 +53,7 @@
                         <RowDefinition Height="2" />
                         <RowDefinition Height="120" />
                     </Grid.RowDefinitions>
-                    <Grid
-                        Grid.Row="0"
+                    <Grid Grid.Row="0"
                         Margin="0,0,0,0"
                         Background="Azure">
                         <Button
@@ -161,8 +162,7 @@
 
                     </Grid>
                     <Grid Grid.Row="1" />
-                    <Grid
-                        Grid.Row="2"
+                    <Grid Grid.Row="2"
                         Height="26"
                         Background="FloralWhite">
                         <Button
@@ -216,7 +216,8 @@
                             FontSize="11" />
                     </Grid>
                     <Grid Grid.Row="3" />
-                    <Grid Grid.Row="4" Background="Azure">
+                    <Grid Grid.Row="4"
+                          Background="Azure">
                         <TabControl
                             x:Name="MajroTabControl"
                             Margin="0,0,0,0"
@@ -375,8 +376,7 @@
                                                         Click="图层字典_Btn_Click"
                                                         Content="图层字典" />
                                                 </WrapPanel>
-                                                <!--  Layer Data Grid  -->
-                                                <!--  推荐使用这种方式  -->
+                                                <!-- 图层数据表 Layer Data Grid  -->
                                                 <DataGrid
                                                     x:Name="LayerDataGrid"
                                                     Grid.Row="1"
@@ -455,18 +455,16 @@
                                 FontWeight="Bold"
                                 Header="工艺">
                                 <TabControl
-                                    x:Name="Major_TabControl"
+                                    x:Name="MajorTabControl"
                                     Padding="1,1,1,1"
                                     FontSize="12">
                                     <TabItem x:Name="工艺图元" Header=" 工艺图元 ">
                                         <ScrollViewer
-                                            Grid.Row="1"
                                             Margin="0,0,0,0"
                                             FontSize="12"
                                             VerticalScrollBarVisibility="Visible">
-
                                             <Grid Width="285 " HorizontalAlignment="Left">
-                                                <Grid Grid.Row="1">
+                                                <Grid >
                                                     <Grid Margin="0">
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="60" />
@@ -620,68 +618,1043 @@
                                                             x:Name="CraftButtonsPanel"
                                                             Grid.Row="2"
                                                             Orientation="Vertical" />
-                                                        <Grid Grid.Row="3" />
-                                                        <Grid Grid.Row="3" />
-                                                        <Grid Grid.Row="4" />
                                                     </Grid>
-
                                                 </Grid>
                                             </Grid>
                                         </ScrollViewer>
                                     </TabItem>
-                                    <TabItem x:Name="计算数据表" Header="  计算数据表  ">
+                                    <TabItem x:Name="工艺管道计算" Header="管道计算表" >
                                         <Grid>
                                             <Grid.RowDefinitions>
-                                                <RowDefinition Height="32" />
+                                                <RowDefinition Height="60" />
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
-                                            <!--  顶部工具栏：后续可继续加“导出模板”等按钮  -->
-                                            <WrapPanel Grid.Row="0" Margin="3,3,3,0">
-                                                <Button
-                                                    x:Name="转换CSV"
-                                                    Width="80"
-                                                    Height="24"
-                                                    Margin="0,0,5,0"
-                                                    Background="#FF0050A0"
-                                                    BorderBrush="#FFC2C6CE"
-                                                    Click="转换CSV按钮_Click"
-                                                    Content="转换CSV"
-                                                    FontSize="12"
-                                                    Foreground="White" />
-                                                <Button
-                                                    x:Name="重载CSV按钮"
-                                                    Width="80"
-                                                    Height="24"
-                                                    Margin="0,0,5,0"
-                                                    Background="#FF0050A0"
-                                                    BorderBrush="#FFC2C6CE"
-                                                    Click="重载CSV按钮_Click"
-                                                    Content="重载CSV"
-                                                    FontSize="12"
-                                                    Foreground="White" />
-                                                <Button
-                                                    x:Name="插入计算表"
-                                                    Width="122"
-                                                    Height="24"
-                                                    Margin="0,0,5,0"
-                                                    Background="#FF0050A0"
-                                                    BorderBrush="#FFC2C6CE"
-                                                    Click="插入计算表_Click"
-                                                    Content="插入计算表"
-                                                    FontSize="12"
-                                                    Foreground="White" />
+                                            <WrapPanel Grid.Row="0" >
+                                                <Button x:Name="重载计算表"
+                                                     Width="88"
+                                                     Height="24"
+                                                     Margin="0,5,5,0"
+                                                     Background="#FF0050A0"
+                                                     BorderBrush="#FFC2C6CE"
+                                                     Click="重载计算表_Click"
+                                                     Content="重载计算表"
+                                                     FontSize="12"
+                                                     Foreground="White" 
+                                                     FontFamily="Microsoft YaHei UI Light" />
+                                                <Button x:Name="插入计算总表"
+                                                     Width="88"
+                                                     Height="24"
+                                                     Margin="0,5,5,0"
+                                                     Background="#FF0050A0"
+                                                     BorderBrush="#FFC2C6CE"
+                                                     Command="{Binding InsertTableCommand}"
+                                                     Content="插入计算表"
+                                                     FontSize="12"
+                                                     Foreground="White" 
+                                                     FontFamily="Microsoft YaHei UI Light"  />
+                                                <Button x:Name="插入计算分表"
+                                                        Width="88"
+                                                        Height="24"
+                                                        Margin="5,5,5,0"
+                                                        Background="#FF0050A0"
+                                                        BorderBrush="#FFC2C6CE"
+                                                        Command="{Binding ExportDeviceTablesCommand}"
+                                                        Content="插入计算分表"
+                                                        FontSize="12"
+                                                        Foreground="White"
+                                                        FontFamily="Microsoft YaHei UI Light" />
+                                                <Button x:Name="设备表导入"
+                                                      Width="88"
+                                                     Height="20"
+                                                     Margin="5,5,0,0"
+                                                     Click="设备表导入_Btn_Click"
+                                                     Content="设备表导入"
+                                                     FontFamily="Microsoft YaHei UI Light" />
+                                                <Button x:Name="转换csv"
+                                                     Width="88"
+                                                     Height="20"
+                                                     Margin="5,5,0,0"
+                                                     Click="转换CSV按钮_Click"
+                                                     Content="转换CSV"
+                                                     FontFamily="Microsoft YaHei UI Light" />
+                                                <Button x:Name="管道设备表开关"
+                                                     Width="88"
+                                                     Height="20"
+                                                     Margin="5,5,0,0"
+                                                     Click="管道设备表开关_Btn_Click"
+                                                     Content="管道设备表开关"
+                                                     FontFamily="Microsoft YaHei UI Light" />
                                             </WrapPanel>
-                                            <!--  计算数据表页签内 ScrollViewer 的内容改为动态容器  -->
-                                            <ScrollViewer
-                                                Grid.Row="1"
-                                                Height="Auto"
-                                                Margin="0,0,0,0"
-                                                FontSize="12"
-                                                VerticalScrollBarVisibility="Visible">
-                                                <StackPanel
-                                                    x:Name="CalcDynamicHost"
-                                                    Width="285"
-                                                    HorizontalAlignment="Left" />
+                                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Visible">
+                                                <StackPanel x:Name="CalcDynamicHost">
+                                                    <!-- 1. 脱硫系统 -->
+                                                    <Expander Header="脱硫系统" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <!-- 1. 入口SO2浓度 -->
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="入口烟气SO2浓度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding InletSO2, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="mg/Nm3" VerticalAlignment="Center"/>
+
+                                                            <!-- 2. 出口SO2浓度 -->
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="出口烟气SO2浓度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding OutletSO2, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="mg/Nm3" VerticalAlignment="Center"/>
+
+                                                            <!-- 3. 大气压 -->
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="当地大气压" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AtmPressure, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="Pa" VerticalAlignment="Center"/>
+
+                                                            <!-- 4. 出口温度 -->
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="脱硫系统出口温度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding OutletTemp, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="℃" VerticalAlignment="Center"/>
+
+                                                            <!-- 5. 标况烟气量 -->
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="单套净化系统出口标况烟气量" VerticalAlignment="Center" FontSize="11"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding StandardFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="Nm3/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 6. 工况烟气量（输出） -->
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="单套净化系统出口工况烟气量" VerticalAlignment="Center" FontSize="11"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding ActualFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="Nm3/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 7. 烟囱出口风速 -->
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="烟囱出口风速" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding StackVelocity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="m/s" VerticalAlignment="Center"/>
+
+                                                            <!-- 8. 烟囱出口直径（输出） -->
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="烟囱出口直径" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding StackDiameter, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 9. 烟囱出口直径取值 -->
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="烟囱出口直径取值" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding StackDiameterAdopted, StringFormat=F0, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 10. 设备数量 -->
+                                                            <TextBlock Grid.Row="9" Grid.Column="0" Text="单套净化系统设备数量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding EquipCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="9" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <!-- 11. 单台脱硫装置标况烟气量（输出） -->
+                                                            <TextBlock Grid.Row="10" Grid.Column="0" Text="单台脱硫装置标况烟气量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding SingleUnitFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="10" Grid.Column="2" FontSize="10"  Text="Nm3/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 12. SO2摩尔数（输出） -->
+                                                            <TextBlock Grid.Row="11" Grid.Column="0" Text="单套净化系统SO2摩尔数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding So2Moles, StringFormat=F4}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="11" Grid.Column="2" FontSize="10"  Text="kmol/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 13. Ca/S -->
+                                                            <TextBlock Grid.Row="12" Grid.Column="0" Text="Ca/S：" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="12" Grid.Column="1" Text="{Binding CaSRatio, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="12" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 14. 液气比 -->
+                                                            <TextBlock Grid.Row="13" Grid.Column="0" Text="液气比" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="13" Grid.Column="1" Text="{Binding LiquidGasRatio, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="13" Grid.Column="2" FontSize="10"  Text="L/Nm3" VerticalAlignment="Center"/>
+
+                                                            <!-- 15. 喷淋层数 -->
+                                                            <TextBlock Grid.Row="14" Grid.Column="0" Text="喷淋层数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="14" Grid.Column="1" Text="{Binding SprayLayers, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="14" Grid.Column="2" FontSize="10"  Text="层" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 2. 循环泵选型 -->
+                                                    <Expander Header="循环泵选型" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <!-- 浆液循环总量 -->
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="浆液循环总量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding TotalSlurryCirc, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 停留时间 -->
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="停留时间" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ResidenceTime, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="min" VerticalAlignment="Center"/>
+
+                                                            <!-- 循环氧化区有效容积 -->
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="循环氧化区有效容积" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding OxidationVolume, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m3" VerticalAlignment="Center"/>
+
+                                                            <!-- 循环氧化区直径 -->
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="循环氧化区直径" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding OxidationDiameter, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <!-- 循环氧化区有效高度 -->
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="循环氧化区有效高度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding OxidationHeight, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <!-- 配置循环泵台数 -->
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="配置循环泵台数（连续运行）" VerticalAlignment="Center" FontSize="11"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding RunningPumps}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <!-- 备用 -->
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="备用" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding PumpSpareCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <!-- 单台循环泵流量（计算） -->
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="单台循环泵流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SinglePumpFlowCalc, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 单台循环泵流量（选型） -->
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="流量（选型）" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding SelectedPumpFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 扬程 -->
+                                                            <TextBlock Grid.Row="9" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding PumpHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="9" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <!-- 电机系数 -->
+                                                            <TextBlock Grid.Row="10" Grid.Column="0" Text="电机系数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding MotorFactor, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="10" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 计算功率 -->
+                                                            <TextBlock Grid.Row="11" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding CalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="11" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <!-- 推荐电机功率 -->
+                                                            <TextBlock Grid.Row="12" Grid.Column="0" Text="推荐电机功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="12" Grid.Column="1" Text="{Binding RecommendedMotorPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="12" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <!-- 电机功率 -->
+                                                            <TextBlock Grid.Row="13" Grid.Column="0" Text="电机功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="13" Grid.Column="1" Text="{Binding MotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="13" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 3. 进口管道尺寸 -->
+                                                    <Expander Header="进口管道尺寸" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <!-- 介质 -->
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="介质" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding MediumOptions}" SelectedItem="{Binding InletMedium}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 使用条件 -->
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="使用条件" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding ConditionOptions}" SelectedItem="{Binding InletCondition}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 流速 -->
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="流速" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding InletVelocity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m/s" VerticalAlignment="Center"/>
+
+                                                            <!-- 管道尺寸（计算） -->
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="管道尺寸" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding CalcInletDiameter, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 取值 -->
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="取值 DN" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding InletDiameter, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 核算流速 -->
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="核算流速" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding CheckInletVelocity, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="m/s" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 4. 出口管道尺寸（循环浆液） -->
+                                                    <Expander Header="出口管道尺寸（循环浆液）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <!-- 介质 -->
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="介质" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding MediumOptions}" SelectedItem="{Binding OutletMedium}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 使用条件 -->
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="使用条件" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding ConditionOptions}" SelectedItem="{Binding OutletCondition}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 流速 -->
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="流速" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding OutletVelocity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m/s" VerticalAlignment="Center"/>
+
+                                                            <!-- 管道尺寸（计算） -->
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="管道尺寸" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding CalcOutletDiameter, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 取值 -->
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="取值 DN" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding OutletDiameter, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 核算流速 -->
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="核算流速" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding CheckOutletVelocity, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="m/s" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 5. 氧化风机选型 -->
+                                                    <Expander Header="氧化风机选型" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <!-- 配置氧化风机台数 -->
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="配置氧化风机台数（连续运行）" VerticalAlignment="Center" FontSize="11"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding FanRunningCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <!-- 备用 -->
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="备用" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FanSpareCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <!-- 所需氧化风量 -->
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="所需氧化风量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding RequiredAir, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="Nm3/min" VerticalAlignment="Center"/>
+
+                                                            <!-- 所需氧化风压 -->
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="所需氧化风压" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding RequiredPressure, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="kPa" VerticalAlignment="Center"/>
+
+                                                            <!-- 扬程 -->
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding FanHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="kPa" VerticalAlignment="Center"/>
+
+                                                            <!-- 电机系数 -->
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="电机系数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding FanMotorFactor, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 流量（选型） -->
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="流量（选型）" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SelectedFanFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <!-- 计算功率 -->
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding FanCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <!-- 推荐电机功率 -->
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="推荐电机功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding FanRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <!-- 电机功率 -->
+                                                            <TextBlock Grid.Row="9" Grid.Column="0" Text="电机功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding FanMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="9" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 出口管道尺寸（氧化风） -->
+                                                    <Expander Header="出口管道尺寸（氧化风）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <!-- 介质 -->
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="介质" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding MediumOptions}" SelectedItem="{Binding FanOutletMedium}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 使用条件 -->
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="使用条件" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding ConditionOptions}" SelectedItem="{Binding FanOutletCondition}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <!-- 流速 -->
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="流速" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding FanOutletVelocity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m/s" VerticalAlignment="Center"/>
+
+                                                            <!-- 管道尺寸（计算） -->
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="管道尺寸" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding CalcFanOutletDiameter, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 取值 -->
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="取值 DN" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding FanOutletDiameter, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="mm" VerticalAlignment="Center"/>
+
+                                                            <!-- 核算流速 -->
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="核算流速" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding CheckFanOutletVelocity, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="m/s" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 6. 石灰石浆液泵（远） -->
+                                                    <Expander x:Name="石灰石浆液泵远" Header="石灰石浆液泵（远）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="石灰石纯度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LimePurity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="石灰石消耗量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LimeConsumption, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="kg/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="浆液密度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SlurryDensity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="kg/m3" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="系统数量(远)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding FarSystemCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="套" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="运行时长" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding FarRunHours, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="泵台数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding FarPumpCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="计算流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding FarCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding FarSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding FarPumpHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="9" Grid.Column="0" Text="电机系数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding FarMotorFactor, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="9" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="10" Grid.Column="0" Text="效率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding FarPumpEfficiency, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="10" Grid.Column="2" FontSize="10"  Text="" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="11" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding FarCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="11" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="12" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="12" Grid.Column="1" Text="{Binding FarRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="12" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="13" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="13" Grid.Column="1" Text="{Binding FarMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="13" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 7. 石灰石浆液泵（近） -->
+                                                    <Expander x:Name="石灰石浆液泵近" Header="石灰石浆液泵（近）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="系统数量(近)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding NearSystemCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="套" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="运行时长" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding NearRunHours, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="泵台数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding NearPumpCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="计算流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding NearCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding NearSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding NearPumpHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="电机系数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding NearMotorFactor, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="效率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding NearPumpEfficiency, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding NearCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="9" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding NearRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="9" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="10" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding NearMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="10" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 8. 石膏排出泵（远） -->
+                                                    <Expander x:Name="石膏排出泵远" Header="石膏排出泵（远）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="石膏产量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding GypsumProduction, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="kg/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="携带水量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding GypsumWaterCarry, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="kg/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="浆液密度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GypsumDensity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="kg/m3" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="石膏浆液流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding GypsumSlurryFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="系统数量(远)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding FarGypsumSystemCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="套" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="运行时长" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding FarGypsumRunHours, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="泵台数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding FarGypsumPumpCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="计算流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding FarGypsumCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding FarGypsumSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="9" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding FarGypsumHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="9" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="10" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding FarGypsumCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="10" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="11" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding FarGypsumRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="11" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="12" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="12" Grid.Column="1" Text="{Binding FarGypsumMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="12" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 9. 石膏排出泵（近） -->
+                                                    <Expander x:Name="石膏排出泵近" Header="石膏排出泵（近）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="系统数量(近)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding NearGypsumSystemCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="套" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="运行时长" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding NearGypsumRunHours, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="泵台数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding NearGypsumPumpCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="计算流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding NearGypsumCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding NearGypsumSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding NearGypsumHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding NearGypsumCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding NearGypsumRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding NearGypsumMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 10. 缓冲泵 -->
+                                                    <Expander x:Name="缓冲泵" Header="缓冲泵" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="运行时长" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding BufferRunHours, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="系统数量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding BufferSystemCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="套" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="泵台数" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding BufferPumpCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="台" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="计算流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding BufferCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding BufferSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding BufferHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding BufferCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BufferRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="8" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding BufferMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="8" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 11. 滤液水泵（远） -->
+                                                    <Expander x:Name="滤液水泵远" Header="滤液水泵（远）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="滤液水密度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding FiltrateDensity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="kg/m3" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="系统数量(远)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FiltrateFarSystemCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="套" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="计算流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding FiltrateFarCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding FiltrateFarSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding FiltrateFarHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding FiltrateFarCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding FiltrateFarRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding FiltrateFarMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="7" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 12. 滤液水泵（近） -->
+                                                    <Expander x:Name="滤液水泵近" Header="滤液水泵（近）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="系统数量(近)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding FiltrateNearSystemCount, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="套" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="计算流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FiltrateNearCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding FiltrateNearSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding FiltrateNearHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding FiltrateNearCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding FiltrateNearRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding FiltrateNearMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 13. 事故泵（远） -->
+                                                    <Expander x:Name="事故泵远" Header="事故泵（远）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="事故浆液密度" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding AccidentDensity, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="kg/m3" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="计算流量(氧化区/8)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AccidentCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AccidentFarSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding AccidentFarHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding AccidentFarCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding AccidentFarRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding AccidentFarMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="6" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 14. 事故泵（近） -->
+                                                    <Expander x:Name="事故泵近" Header="事故泵（近）" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding AccidentNearSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AccidentNearHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AccidentNearCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding AccidentNearRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding AccidentNearMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                    <!-- 15. 地坑泵 -->
+                                                    <Expander x:Name="地坑泵" Header="地坑泵" IsExpanded="True">
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="145"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                                <ColumnDefinition Width="60"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="计算流量(3*3*3/8)" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SumpCalcFlow, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="选型流量" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SumpSelectedFlow, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="1" Grid.Column="2" FontSize="10"  Text="m3/h" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="扬程" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SumpHead, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="10"  Text="m" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="计算功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SumpCalcPower, StringFormat=F2}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="3" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="推荐功率" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding SumpRecommendedPower, StringFormat=F0}" IsReadOnly="True" Background="LightGoldenrodYellow" Margin="2"/>
+                                                            <TextBlock Grid.Row="4" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+
+                                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="电机功率选型" VerticalAlignment="Center"/>
+                                                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SumpMotorPower, UpdateSourceTrigger=PropertyChanged}" Margin="2"/>
+                                                            <TextBlock Grid.Row="5" Grid.Column="2" FontSize="10"  Text="kW" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Expander>
+                                                </StackPanel>
                                             </ScrollViewer>
                                         </Grid>
                                     </TabItem>
@@ -1251,43 +2224,14 @@
                                                             Header="暖通专业条件">
                                                             <WrapPanel x:Name="暖通条件按钮面板" Orientation="Vertical" />
                                                         </GroupBox>
+
                                                     </StackPanel>
                                                 </Grid>
                                             </ScrollViewer>
 
                                         </Grid>
                                     </TabItem>
-                                    <TabItem x:Name="工艺图层" Header="  工 具  ">
-                                        <Grid>
-                                            <WrapPanel Grid.Row="0">
-
-                                                <Button
-                                                    x:Name="设备表导入"
-                                                    Width="88"
-                                                    Height="20"
-                                                    Margin="5,5,0,0"
-                                                    Click="设备表导入_Btn_Click"
-                                                    Content="设备表导入"
-                                                    FontFamily="Microsoft YaHei UI Light" />
-                                                <Button
-                                                    x:Name="设备表导出"
-                                                    Width="88"
-                                                    Height="20"
-                                                    Margin="5,5,0,0"
-                                                    Click="设备表导出_Btn_Click"
-                                                    Content="设备表导出"
-                                                    FontFamily="Microsoft YaHei UI Light" />
-                                                <Button
-                                                    x:Name="管道设备表开关"
-                                                    Width="88"
-                                                    Height="20"
-                                                    Margin="5,5,0,0"
-                                                    Click="管道设备表开关_Btn_Click"
-                                                    Content="管道设备表开关"
-                                                    FontFamily="Microsoft YaHei UI Light" />
-                                            </WrapPanel>
-                                        </Grid>
-                                    </TabItem>
+                                   
                                 </TabControl>
                             </TabItem>
 
@@ -2922,8 +3866,8 @@
                         </TabControl>
                     </Grid>
                     <Grid Grid.Row="5" />
-
-                    <Grid Grid.Row="6" Background="FloralWhite">
+                    <Grid Grid.Row="6"
+                          Background="FloralWhite">
                         <Button
                             x:Name="应用图元"
                             Width="NaN"
@@ -2968,7 +3912,9 @@
                             Tag="100"
                             TextChanged="TextBox_绘图比例_TextChanged" />
                     </Grid>
-                    <Grid Grid.Row="8" Background="Azure">
+                    <Grid Grid.Row="7" />
+                    <Grid Grid.Row="8"
+                          Background="Azure">
                         <ScrollViewer
                             Margin="0,5,0,0"
                             FontFamily="微软雅黑"
