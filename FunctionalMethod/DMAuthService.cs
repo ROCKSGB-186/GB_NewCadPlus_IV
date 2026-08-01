@@ -157,7 +157,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             try
             {
                 using var conn = CreateOpenConnection();
-                ExecuteNonQuery(conn, "UPDATE USERS SET REAL_NAME = DISPLAY_NAME WHERE REAL_NAME IS NULL AND DISPLAY_NAME IS NOT NULL");
+                // USERS 表没有 DISPLAY_NAME 字段，直接使用 USERNAME 回填 REAL_NAME。
                 ExecuteNonQuery(conn, "UPDATE USERS SET REAL_NAME = USERNAME WHERE REAL_NAME IS NULL");
                 ExecuteNonQuery(conn, "UPDATE USERS SET GENDER = '无信息' WHERE GENDER IS NULL");
                 ExecuteNonQuery(conn, "UPDATE USERS SET PHONE = '未填写' WHERE PHONE IS NULL");

@@ -1983,7 +1983,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         if (ent != null)
                             ent.Erase();// 删除原始线段
                     }
-
+                    Application.SetSystemVariable("WIPEOUTFRAME", 0);//设置屏蔽罩的边框为0，关闭；
                     tr.Commit();
                     ed.WriteMessage($"\n管线块已生成：新增/更新属性 [始点][终点][管段号]={extractedPipeNo}。仅显示字段：管道标题。");
                 }
@@ -2786,7 +2786,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         {
                             try { (tr.GetObject(sampleBr.ObjectId, OpenMode.ForWrite) as BlockReference)?.Erase(); } catch { }
                         }
-
+                        Application.SetSystemVariable("WIPEOUTFRAME", 0);//设置屏蔽罩的边框为0，关闭；
                         // 提交事务
                         tr.Commit();
 
@@ -7417,13 +7417,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             // 遍历每一段，生成箭头并在箭头"上方"放置居中对齐的标题文字
             for (int i = 0; i < verticesWorld.Count - 1; i++)
             {
-                var p1 = verticesWorld[i];
-                var p2 = verticesWorld[i + 1];
-                var seg = p2 - p1;
-                if (seg.IsZeroLength()) continue;
+                var p1 = verticesWorld[i];     // 一段管线的P1点；
+                var p2 = verticesWorld[i + 1]; // 管线的P2点；
+                var seg = p2 - p1;             // P2与P1点间的差值；
+                if (seg.IsZeroLength() || seg.Length <= 50.0 * AutoCadHelper.GetScale()) continue;  //判断距离是不是大于50
 
                 var dir = seg.GetNormal();
-                var mid = new Point3d((p1.X + p2.X) / 2.0, (p1.Y + p2.Y) / 2.0, (p1.Z + p2.Z) / 2.0);
+                var mid = new Point3d((p1.X + p2.X) / 2.0, (p1.Y + p2.Y) / 2.0, (p1.Z + p2.Z) / 2.0); //计算P1与P2的中点；
 
                 Polyline? outlineAligned = null;
                 Solid? fillAligned = null;
@@ -7580,18 +7580,19 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <returns>箭头样式元组</returns>
         private (short colorIndex, double length, double height) DetermineArrowStyleByName(string blockName)
         {
-            string nameLower = (blockName ?? string.Empty).ToLowerInvariant();
-            bool isOutlet = nameLower.Contains("出口") || nameLower.Contains("outlet");
-            bool isInlet = nameLower.Contains("入口") || nameLower.Contains("inlet");
+            string nameLower = (blockName ?? string.Empty).ToLowerInvariant();// 检查传进来的块名是不是空
+            bool isOutlet = nameLower.Contains("出口") || nameLower.Contains("outlet"); // 判断块名内有没有"出口"或"outlet"
+
+            bool isInlet = nameLower.Contains("进口") || nameLower.Contains("入口") || nameLower.Contains("inlet"); // 判断块名内有没有"入口"或"inlet"
 
             // 出口=黄色(ACI 2)，入口=绿色(ACI 3)，默认黄色
-            short colorIndex = isInlet ? (short)3 : (short)2;
+            short colorIndex = isInlet ? (short)6 : (short)2;
             if (!isInlet && !isOutlet)
             {
                 colorIndex = 2;
             }
 
-            return (colorIndex, 10.0, 3.0);
+            return (colorIndex, 10.0, 2.0);
         }
 
         /// <summary>
@@ -7616,8 +7617,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             arrow.AddVertexAt(2, leftTop, 0, 0, 0);
             arrow.Closed = true;
             arrow.Layer = pipeTemplate.Layer;
-            //arrow.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, colorIndex);
-            //arrow.Linetype = pipeTemplate.Linetype;
             arrow.LinetypeScale = pipeTemplate.LinetypeScale;
             arrow.LineWeight = pipeTemplate.LineWeight;
             arrow.Elevation = 0;

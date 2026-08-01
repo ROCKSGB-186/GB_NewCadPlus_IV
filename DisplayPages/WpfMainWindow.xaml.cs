@@ -4284,6 +4284,16 @@ namespace GB_NewCadPlus_IV
             public string DisplayText { get; set; }
             //public string DisplayText => string.IsNullOrEmpty(DisplayName) ? Name : DisplayName;
 
+
+            /// <summary>
+            /// 构造函数
+            /// </summary>
+            /// <param name="id"> ID</param>
+            /// <param name="name">名称</param>
+            /// <param name="displayName">显示名称</param>
+            /// <param name="level">层级</param>
+            /// <param name="parentId">父Id</param>
+            /// <param name="data">Object数据</param>
             public CategoryTreeNode(int id, string name, string displayName, int level, int parentId, object data)
             {
                 Id = id;
@@ -4510,16 +4520,13 @@ namespace GB_NewCadPlus_IV
                     System.Windows.MessageBox.Show("请先加载数据库");
                     return;
                 }
-
                 if (_currentDatabaseType == "CAD")
                 {
                     if (_selectedCategoryNode != null)
                     {
                         _currentOperation = ManagementOperationType.AddSubcategory;
                         // 初始化子分类属性编辑界面，预填父分类ID
-                        InitializeSubcategoryPropertiesForEditing(_selectedCategoryNode);
-                        // 显示提示信息
-                        //ShowNewSubcategoryTips(_selectedCategoryNode);
+                        InitializeSubcategoryPropertiesForEditing(_selectedCategoryNode);                       
 
                         LogManager.Instance.LogInfo($"初始化添加子分类界面，父节点: {_selectedCategoryNode.DisplayText}");
                     }
@@ -4839,10 +4846,10 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                bool success = false;
-                bool isFilePropertyUpdate = false;
+                bool success = false;// 操作成功标志
+                bool isFilePropertyUpdate = false;// 是否为文件属性更新
 
-                switch (_currentOperation)
+                switch (_currentOperation)// 根据当前操作类型(主分类、子分类)执行相应的操作
                 {
                     case ManagementOperationType.AddCategory:
                         success = await _categoryManager.ApplyCategoryPropertiesAsync(CategoryPropertiesDataGrid);

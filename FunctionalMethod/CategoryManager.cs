@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using GB_NewCadPlus_IV.Helpers;
 using static GB_NewCadPlus_IV.WpfMainWindow;
 using MessageBox = System.Windows.MessageBox;
 using CadCategory = GB_NewCadPlus_IV.FunctionalMethod.CadCategory;
@@ -52,28 +53,16 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     throw new Exception("分类名称不能为空");
                 }
 
-                // 如果排序序号未提供或<=0，则自动取最大值+1
-                if (sortOrder <= 0)
-                {
-                    sortOrder = await _databaseManager.GetMaxCadCategorySortOrderAsync() + 1;
-                }
+                // 创建分类接口服务；数据库连接和排序号生成统一放在服务器端处理。
+                var categoryApiService = new CategoryApiService();
 
-                // 创建主分类对象（主分类ID由数据库自增生成，因此此处不手动赋Id）
-                var category = new CadCategory
-                {
-                    Name = name,
-                    DisplayName = displayName ?? name,
-                    SortOrder = sortOrder,
-                    SubcategoryIds = "",
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
+                // 通过 HTTP 请求服务器新增主分类，客户端不再直接写入本地数据库。
+                CategoryApiDto createdCategory = await categoryApiService
+                    .AddCategoryAsync(name, displayName ?? name, sortOrder)
+                    .ConfigureAwait(true);
 
-                // 插入数据库
-                int result = await _databaseManager.AddCadCategoryAsync(category);
-
-                // 返回是否插入成功
-                return result > 0;
+                // 服务器返回有效 ID 才视为新增成功。
+                return createdCategory.Id > 0;
             }
             catch (Exception ex)
             {
@@ -86,11 +75,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 应用子分类属性（返回bool值）
         /// </summary>
-        /// <returns></returns>
+        /// <param name="CategoryPropertiesDataGrid">分类属性表数据</param>
+        /// <returns> 返回Bool</returns>
         public async Task<bool> ApplySubcategoryPropertiesAsync( ItemsControl CategoryPropertiesDataGrid)
         {
             try
             {
+                // 从界面数据源读取属性列表
                 var properties = CategoryPropertiesDataGrid.ItemsSource as List<CategoryPropertyEditModel>;
                 if (properties == null || properties.Count == 0)
                 {
@@ -110,43 +101,16 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     throw new Exception("子分类名称不能为空");
                 }
 
-                // 自动生成排序序号（如果未提供或为0）
-                if (sortOrder <= 0)
-                {
-                    sortOrder = await _databaseManager.GetMaxCadSubcategorySortOrderAsync(parentId) + 1;
-                }
+                // 创建分类接口服务；ID、层级和父级列表由服务器统一处理。
+                var categoryApiService = new CategoryApiService();
 
-                // 生成子分类ID
-                int subcategoryId = await CategoryIdGenerator.GenerateSubcategoryIdAsync(_databaseManager, parentId);
+                // 通过服务器事务新增子分类，客户端不再直接写入本地数据库。
+                SubcategoryApiDto createdSubcategory = await categoryApiService
+                    .AddSubcategoryAsync(parentId, name, displayName ?? name, sortOrder)
+                    .ConfigureAwait(true);
 
-                // 确定层级
-                int level = await DetermineCategoryLevelAsync(parentId);
-
-                // 创建子分类对象
-                var subcategory = new CadSubcategory
-                {
-                    Id = subcategoryId,
-                    ParentId = parentId,
-                    Name = name,
-                    DisplayName = displayName ?? name,
-                    SortOrder = sortOrder,
-                    Level = level,
-                    SubcategoryIds = "", // 新建时为空
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-
-                // 添加到数据库
-                int result = await _databaseManager.AddCadSubcategoryAsync(subcategory);
-
-                if (result > 0)
-                {
-                    // 更新父级的子分类列表
-                    await _databaseManager.UpdateParentSubcategoryListAsync(parentId, subcategoryId);
-                    return true;
-                }
-
-                return false;
+                // 服务器返回有效 ID 才视为新增成功。
+                return createdSubcategory.Id >= 10000;
             }
             catch (Exception ex)
             {
@@ -179,25 +143,41 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 // 根据节点类型更新相应的记录
                 if (_selectedCategoryNode.Level == 0 && _selectedCategoryNode.Data is CadCategory category)
                 {
-                    // 更新主分类
-                    category.Name = name;
-                    category.DisplayName = displayName ?? name;
-                    category.SortOrder = sortOrder;
-                    category.UpdatedAt = DateTime.Now;
+                    // 通过服务器更新主分类，客户端不再直接写分类数据库。
+                    var categoryApiService = new CategoryApiService();
+                    CategoryUpdateApiResponse updatedCategory = await categoryApiService
+                        .UpdateCategoryAsync(
+                            category.Id,
+                            name,
+                            displayName ?? name,
+                            sortOrder)
+                        .ConfigureAwait(true);
 
-                    int result = await _databaseManager.UpdateCadCategoryAsync(category);
-                    return result > 0;
+                    // 使用服务器最终保存的值更新当前界面对象。
+                    category.Name = updatedCategory.Name;
+                    category.DisplayName = updatedCategory.DisplayName;
+                    category.SortOrder = updatedCategory.SortOrder;
+                    category.UpdatedAt = DateTime.Now;
+                    return updatedCategory.Success;
                 }
                 else if (_selectedCategoryNode.Data is CadSubcategory subcategory)
                 {
-                    // 更新子分类
-                    subcategory.Name = name;
-                    subcategory.DisplayName = displayName ?? name;
-                    subcategory.SortOrder = sortOrder;
-                    subcategory.UpdatedAt = DateTime.Now;
+                    // 通过服务器更新子分类，客户端不再直接写分类数据库。
+                    var categoryApiService = new CategoryApiService();
+                    CategoryUpdateApiResponse updatedSubcategory = await categoryApiService
+                        .UpdateCategoryAsync(
+                            subcategory.Id,
+                            name,
+                            displayName ?? name,
+                            sortOrder)
+                        .ConfigureAwait(true);
 
-                    int result = await _databaseManager.UpdateCadSubcategoryAsync(subcategory);
-                    return result > 0;
+                    // 使用服务器最终保存的值更新当前界面对象。
+                    subcategory.Name = updatedSubcategory.Name;
+                    subcategory.DisplayName = updatedSubcategory.DisplayName;
+                    subcategory.SortOrder = updatedSubcategory.SortOrder;
+                    subcategory.UpdatedAt = DateTime.Now;
+                    return updatedSubcategory.Success;
                 }
                 else
                 {
@@ -294,17 +274,17 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 处理单个子分类属性
         /// </summary>
-        /// <param name="propertyName"></param>
-        /// <param name="propertyValue"></param>
-        /// <param name="parentId"></param>
-        /// <param name="name"></param>
-        /// <param name="displayName"></param>
-        /// <param name="sortOrder"></param>
+        /// <param name="propertyName">属性名</param>
+        /// <param name="propertyValue">属性值</param>
+        /// <param name="parentId">父Id</param>
+        /// <param name="name">分类名称</param>
+        /// <param name="displayName">显示名</param>
+        /// <param name="sortOrder">排序序号</param>
         private void ProcessSubcategoryProperty(string propertyName, string propertyValue, ref int parentId, ref string name, ref string displayName, ref int sortOrder)
         {
             if (string.IsNullOrEmpty(propertyName) || string.IsNullOrEmpty(propertyValue))
                 return;
-
+            // 处理属性
             switch (propertyName.ToLower().Trim())
             {
                 case "父分类id":
@@ -341,19 +321,24 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
-                // 检查是否有子分类
+                // 服务端不执行级联删除；存在子分类时必须先逐个删除。
                 if (categoryNode.Children.Count > 0)
                 {
-                    if (MessageBox.Show("该主分类下还有子分类，确定要全部删除吗？",
-                                      "警告", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
-                    {
-                        return false;
-                    }
+                    MessageBox.Show(
+                        "该主分类下还有子分类，请先删除所有子分类后再删除主分类。",
+                        "无法删除",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return false;
                 }
 
-                // 从数据库删除主分类
-                int result = await _databaseManager.DeleteCadCategoryAsync(categoryNode.Id);
-                return result > 0;
+                // 创建分类接口服务；主分类删除和数据校验由服务器事务完成。
+                var categoryApiService = new CategoryApiService();
+
+                // 通过服务器删除主分类，客户端不再直接访问数据库。
+                return await categoryApiService
+                    .DeleteCategoryAsync(categoryNode.Id)
+                    .ConfigureAwait(true);
             }
             catch (Exception ex)
             {
@@ -381,62 +366,17 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     }
                 }
 
-                // 从数据库删除子分类
-                int result = await _databaseManager.DeleteCadSubcategoryAsync(subcategoryNode.Id);
-                if (result > 0)
-                {
-                    // 更新父级的子分类列表
-                    await UpdateParentSubcategoryListAfterDeleteAsync(subcategoryNode.ParentId, subcategoryNode.Id);
-                    return true;
-                }
-                return false;
+                // 创建分类接口服务；删除记录和更新父级列表由服务器事务统一完成。
+                var categoryApiService = new CategoryApiService();
+
+                // 通过服务器删除子分类，客户端不再直接访问数据库。
+                return await categoryApiService
+                    .DeleteSubcategoryAsync(subcategoryNode.Id)
+                    .ConfigureAwait(true);
             }
             catch (Exception ex)
             {
                 throw new Exception($"删除子分类失败: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 删除后更新父级子分类列表
-        /// </summary>
-        /// <param name="parentId"></param>
-        /// <param name="deletedSubcategoryId"></param>
-        /// <returns></returns>
-        private async Task UpdateParentSubcategoryListAfterDeleteAsync(int parentId, int deletedSubcategoryId)
-        {
-            try
-            {
-                // 获取父级记录
-                string currentSubcategoryIds = "";
-                if (parentId >= 10000)
-                {
-                    // 父级是子分类
-                    var parentSubcategory = await _databaseManager.GetCadSubcategoryByIdAsync(parentId);
-                    currentSubcategoryIds = parentSubcategory?.SubcategoryIds ?? "";
-                }
-                else
-                {
-                    // 父级是主分类
-                    var categories = await _databaseManager.GetAllCadCategoriesAsync();
-                    var parentCategory = categories.FirstOrDefault(c => c.Id == parentId);
-                    currentSubcategoryIds = parentCategory?.SubcategoryIds ?? "";
-                }
-
-                // 更新子分类列表（移除已删除的ID）
-                if (!string.IsNullOrEmpty(currentSubcategoryIds))
-                {
-                    var ids = currentSubcategoryIds.Split(',').Select(id => id.Trim()).ToList();
-                    ids.Remove(deletedSubcategoryId.ToString());
-                    string newSubcategoryIds = string.Join(",", ids);
-
-                    // 更新数据库
-                    await _databaseManager.UpdateParentSubcategoryListAsync(parentId, newSubcategoryIds);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Instance.LogInfo($"更新父级子分类列表失败: {ex.Message}");
             }
         }
 
@@ -478,13 +418,66 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
+                // 清空旧树节点，避免刷新后把旧数据和服务器新数据混在一起。
                 _categoryTreeNodes.Clear();
 
-                // 获取所有分类和子分类
-                var categories = await databaseManager.GetAllCadCategoriesAsync();
-                var subcategories = await databaseManager.GetAllCadSubcategoriesAsync();
+                // 创建分类 HTTP 服务；分类数据由服务器访问达梦数据库后返回给客户端。
+                var categoryApiService = new CategoryApiService();
 
-                // 构建树结构
+                // 请求服务器分类树接口；这里不再直接调用客户端 DatabaseManager 查询分类表。
+                var apiResponse = await categoryApiService.GetCategoryTreeAsync().ConfigureAwait(true);
+
+                // 将服务器返回的主分类 DTO 转换为客户端现有 CadCategory 模型。
+                var categories = apiResponse.Categories.Select(item => new CadCategory
+                {
+                    // 复制主分类 ID。
+                    Id = item.Id,
+                    // 复制分类名称；服务器返回空值时使用空字符串保护树构建。
+                    Name = item.Name ?? string.Empty,
+                    // 复制显示名称；显示名称为空时回退到分类名称。
+                    DisplayName = string.IsNullOrWhiteSpace(item.DisplayName)
+                        ? item.Name ?? string.Empty
+                        : item.DisplayName,
+                    // 复制父级保存的子分类 ID 列表。
+                    SubcategoryIds = item.SubcategoryIds ?? string.Empty,
+                    // 复制排序号。
+                    SortOrder = item.SortOrder,
+                    // 服务器时间为空时使用 DateTime.MinValue，兼容客户端非空模型。
+                    CreatedAt = item.CreatedAt ?? DateTime.MinValue,
+                    // 服务器时间为空时使用 DateTime.MinValue，兼容客户端非空模型。
+                    UpdatedAt = item.UpdatedAt ?? DateTime.MinValue
+                }).ToList();
+
+                // 将服务器返回的子分类 DTO 转换为客户端现有 CadSubcategory 模型。
+                var subcategories = apiResponse.Subcategories.Select(item => new CadSubcategory
+                {
+                    // 复制子分类 ID。
+                    Id = item.Id,
+                    // 复制父分类 ID，用于客户端构建树关系。
+                    ParentId = item.ParentId,
+                    // 复制子分类名称；服务器返回空值时使用空字符串保护树构建。
+                    Name = item.Name ?? string.Empty,
+                    // 复制显示名称；显示名称为空时回退到子分类名称。
+                    DisplayName = string.IsNullOrWhiteSpace(item.DisplayName)
+                        ? item.Name ?? string.Empty
+                        : item.DisplayName,
+                    // 复制排序号。
+                    SortOrder = item.SortOrder,
+                    // 复制层级。
+                    Level = item.Level,
+                    // 复制下级子分类 ID 列表。
+                    SubcategoryIds = item.SubcategoryIds ?? string.Empty,
+                    // 服务器时间为空时使用 DateTime.MinValue，兼容客户端非空模型。
+                    CreatedAt = item.CreatedAt ?? DateTime.MinValue,
+                    // 服务器时间为空时使用 DateTime.MinValue，兼容客户端非空模型。
+                    UpdatedAt = item.UpdatedAt ?? DateTime.MinValue
+                }).ToList();
+
+                // 记录树数据来源，方便确认本次加载是否经过服务器接口。
+                LogManager.Instance.LogInfo(
+                    $"分类树数据来源=服务器接口，主分类={categories.Count}，子分类={subcategories.Count}");
+
+                // 保留原有客户端树构建逻辑，只替换分类数据来源。
                 BuildCategoryTree(categories, subcategories, _categoryTreeNodes);
 
             }

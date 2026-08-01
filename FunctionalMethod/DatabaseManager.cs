@@ -120,7 +120,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             var props = param.GetType().GetProperties();
             foreach (var prop in props)
             {
-                AddParam(cmd, prop.Name, prop.GetValue(prop) ?? DBNull.Value);
+                // 必须从参数对象本身读取属性值，不能把 PropertyInfo 自己传给 GetValue。
+                // 这一步对达梦原生命令尤其重要，因为达梦不会像 Dapper 一样替我们反射绑定对象。
+                AddParam(cmd, prop.Name, prop.GetValue(param) ?? DBNull.Value);
             }
         }
 
@@ -614,17 +616,133 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <returns></returns>
         //public async Task<dynamic> UpdateCategoryStatisticsAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
         /// <summary>
-        /// 添加 CAD 子分类（最小可编译实现，实际应包含完整逻辑）
+        /// 添加 CAD 子分类。
         /// </summary>
         /// <param name="args"></param>
         /// <returns></returns>
-        public async Task<dynamic> AddCadSubcategoryAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
+        public async Task<int> AddCadSubcategoryAsync(params object[] args)
+        {
+            // CategoryManager 传入的是一个 CadSubcategory 对象，保留 params 形式兼容旧调用方。
+            var subcategory = args?.FirstOrDefault() as CadSubcategory;
+            if (subcategory == null || subcategory.Id <= 0 || subcategory.ParentId <= 0 || string.IsNullOrWhiteSpace(subcategory.Name))
+            {
+                return 0;
+            }
+
+            try
+            {
+                // 使用统一连接和写入方法，自动适配 MySQL 与达梦参数格式。
+                using var connection = GetConnection();
+                const string sql = @"
+                    INSERT INTO cad_subcategories
+                        (id, parent_id, name, display_name, sort_order, level, subcategory_ids)
+                    VALUES
+                        (@Id, @ParentId, @Name, @DisplayName, @SortOrder, @Level, @SubcategoryIds)";
+
+                // 保存前统一处理字符串，避免数据库中出现无意义的首尾空格。
+                subcategory.Name = subcategory.Name.Trim();
+                subcategory.DisplayName = string.IsNullOrWhiteSpace(subcategory.DisplayName)
+                    ? subcategory.Name
+                    : subcategory.DisplayName.Trim();
+                subcategory.SubcategoryIds = subcategory.SubcategoryIds ?? string.Empty;
+
+                return await ExecuteWriteAsync(connection, null, sql, subcategory).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // 记录数据库类型，便于区分 MySQL 和达梦的表结构/主键问题。
+                LogManager.Instance.LogInfo($"AddCadSubcategoryAsync({_adapter.DatabaseType}) 出错: {ex.Message}");
+                return 0;
+            }
+        }
         /// <summary>
-        /// 更新父分类的子分类列表（最小可编译实现，实际应包含完整逻辑）
+        /// 更新父分类的子分类列表。
         /// </summary>
         /// <param name="args"></param>
         /// <returns></returns>
-        public async Task<dynamic> UpdateParentSubcategoryListAsync(params object[] args) { return await Task.FromResult<dynamic>(false); }
+        public async Task<int> UpdateParentSubcategoryListAsync(params object[] args)
+        {
+            // 新增调用传入 parentId + 子分类ID；删除调用传入 parentId + 完整ID字符串。
+            if (args == null || args.Length < 2 || !TryConvertToInt(args[0], out var parentId) || parentId <= 0)
+            {
+                return 0;
+            }
+
+            try
+            {
+                string subcategoryIds;
+                if (args[1] is string suppliedIds)
+                {
+                    // 删除场景：调用方已经计算出移除后的完整列表。
+                    subcategoryIds = suppliedIds ?? string.Empty;
+                }
+                else if (TryConvertToInt(args[1], out var childId))
+                {
+                    // 新增场景：先读出旧列表，再追加新 ID，且不重复追加。
+                    var currentIds = await GetParentSubcategoryIdsAsync(parentId).ConfigureAwait(false);
+                    var ids = ParseSubcategoryIds(currentIds);
+                    if (!ids.Contains(childId.ToString()))
+                    {
+                        ids.Add(childId.ToString());
+                    }
+                    subcategoryIds = string.Join(",", ids);
+                }
+                else
+                {
+                    return 0;
+                }
+
+                // 主分类 ID 小于 10000，子分类父级 ID 从 10000 开始，这是现有项目约定。
+                const string categorySql = "UPDATE cad_categories SET subcategory_ids = @SubcategoryIds WHERE id = @ParentId";
+                const string subcategorySql = "UPDATE cad_subcategories SET subcategory_ids = @SubcategoryIds WHERE id = @ParentId";
+                var sql = parentId >= 10000 ? subcategorySql : categorySql;
+
+                using var connection = GetConnection();
+                return await ExecuteWriteAsync(connection, null, sql, new { ParentId = parentId, SubcategoryIds = subcategoryIds }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogInfo($"UpdateParentSubcategoryListAsync({_adapter.DatabaseType}) 出错: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 读取父级当前保存的子分类 ID 列表。
+        /// </summary>
+        private async Task<string> GetParentSubcategoryIdsAsync(int parentId)
+        {
+            if (parentId >= 10000)
+            {
+                var parentSubcategory = await GetCadSubcategoryByIdAsync(parentId).ConfigureAwait(false);
+                return parentSubcategory?.SubcategoryIds ?? string.Empty;
+            }
+
+            var categories = await GetAllCadCategoriesAsync().ConfigureAwait(false);
+            return categories.FirstOrDefault(c => c.Id == parentId)?.SubcategoryIds ?? string.Empty;
+        }
+
+        /// <summary>
+        /// 将逗号分隔的 ID 字符串整理为去空格、不重复的列表。
+        /// </summary>
+        private static List<string> ParseSubcategoryIds(string ids)
+        {
+            return (ids ?? string.Empty)
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(id => id.Trim())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+
+        /// <summary>
+        /// 安全转换旧 params 调用传入的整数参数。
+        /// </summary>
+        private static bool TryConvertToInt(object value, out int result)
+        {
+            result = 0;
+            return value != null && int.TryParse(value.ToString(), out result);
+        }
 
         /// <summary>
         /// 更新 CAD 子分类
@@ -1099,14 +1217,46 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// </summary>
         public async Task<int> AddCadCategoryAsync(CadCategory category)
         {
-            using var connection = GetConnection();
-            var sql = @"INSERT INTO cad_categories (name, display_name, sort_order) 
-                VALUES (@Name, @DisplayName, @SortOrder)";
-            var affected = await ExecuteWriteAsync(connection, null, sql, category).ConfigureAwait(false);
+            // 先做服务层校验，避免把空分类名称写入两个数据库。
+            if (category == null || string.IsNullOrWhiteSpace(category.Name))
+            {
+                return 0;
+            }
 
-            // 异步触发同步（保证分类与部门一致）
-            _ = SyncDepartmentsFromCadCategoriesAsync();
-            return affected;
+            try
+            {
+                // 使用统一连接入口，由适配器决定创建 MySQL 还是达梦连接。
+                using var connection = GetConnection();
+
+                // SQL 使用中性 @ 参数，ExecuteWriteAsync 会按数据库类型转换并绑定参数。
+                const string sql = @"INSERT INTO cad_categories (name, display_name, sort_order)
+                    VALUES (@Name, @DisplayName, @SortOrder)";
+
+                // 显示名称为空时使用分类名称，保持历史 MySQL 数据行为一致。
+                category.DisplayName = string.IsNullOrWhiteSpace(category.DisplayName)
+                    ? category.Name.Trim()
+                    : category.DisplayName.Trim();
+
+                // 去除名称首尾空格，避免出现肉眼相同但实际不同的分类。
+                category.Name = category.Name.Trim();
+
+                // 统一执行写入，兼容 MySQL 的 Dapper 路径和达梦的原生 ADO.NET 路径。
+                var affected = await ExecuteWriteAsync(connection, null, sql, category).ConfigureAwait(false);
+
+                // 保留原有部门同步行为；分类记录成功后再异步修正映射。
+                if (affected > 0)
+                {
+                    _ = SyncDepartmentsFromCadCategoriesAsync();
+                }
+
+                return affected;
+            }
+            catch (Exception ex)
+            {
+                // 记录数据库类型和异常，便于后续分别排查 MySQL/达梦差异。
+                LogManager.Instance.LogInfo($"AddCadCategoryAsync({_adapter.DatabaseType}) 出错: {ex.Message}");
+                return 0;
+            }
         }
 
         /// <summary>
@@ -1674,11 +1824,29 @@ WHEN NOT MATCHED THEN INSERT (config_key, config_value) VALUES (s.config_key, s.
         /// </summary>
         public async Task<int> GetMaxCadCategorySortOrderAsync()
         {
+            // COALESCE 同时被 MySQL 和达梦支持，统一返回空表时的 0。
             const string sql = "SELECT COALESCE(MAX(sort_order), 0) FROM cad_categories";
 
-            using var connection = new MySqlConnection(_connectionString);
-            var result = await connection.QuerySingleOrDefaultAsync<int>(sql);
-            return result;
+            try
+            {
+                // 不再直接 new MySqlConnection，避免达梦模式仍然访问 MySQL。
+                using var connection = GetConnection();
+                connection.Open();
+
+                // 使用适配器规范化 SQL，保留同一套查询代码供两个数据库使用。
+                using var command = connection.CreateCommand();
+                command.CommandText = _adapter.NormalizeSql(sql);
+
+                // MAX 结果可能是数据库特定的数值类型，因此统一通过 Convert 转换。
+                var result = await Task.Run(() => command.ExecuteScalar()).ConfigureAwait(false);
+                return result == null || result == DBNull.Value ? 0 : Convert.ToInt32(result);
+            }
+            catch (Exception ex)
+            {
+                // 排序号查询失败时不能静默使用不确定值，记录后抛出给分类管理器处理。
+                LogManager.Instance.LogInfo($"GetMaxCadCategorySortOrderAsync({_adapter.DatabaseType}) 出错: {ex.Message}");
+                throw;
+            }
         }
 
         /// <summary>
