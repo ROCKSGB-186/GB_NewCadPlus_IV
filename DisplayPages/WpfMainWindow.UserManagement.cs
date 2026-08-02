@@ -24,7 +24,7 @@ namespace GB_NewCadPlus_IV
 
         /// <summary>
         /// 新增用户按钮点击处理（界面事件绑定）
-        /// 逻辑：检查部门选择 -> 调用用户编辑对话 -> 调用 _svc.AddUser -> 刷新用户列表
+        /// 逻辑：检查部门选择 -> 调用用户编辑对话 -> 调用服务器 API -> 刷新用户列表
         /// </summary>
         private void BtnAddUserManaged_Click(object sender, RoutedEventArgs e)
         {
@@ -38,15 +38,13 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 确保用户服务已初始化
-                if (!EnsureSvcInitialized(host, port, dbType, user, pwd)) return;
-
                 // 打开用户编辑对话（新增）
                 if (!ShowUserEditorDialog(null, "新增用户", out var result)) return;
 
                 // 执行新增
                 string deptName = string.IsNullOrWhiteSpace(selectedDept.Name) ? (selectedDept.RealName ?? string.Empty) : selectedDept.Name;
-                bool ok = _svc.AddUser(result.Username, result.Password, selectedDept.Id, deptName, result.Role, result.IsActive, result.RealName, result.Gender, result.Phone, result.Email);
-                if (!ok)
+                var response = _apiService.AddUserAsync(result.Username, result.Password, selectedDept.Id, deptName, result.Role, result.IsActive, result.RealName, result.Gender, result.Phone, result.Email).GetAwaiter().GetResult();
+                if (!response.Success)
                 {
                     MessageBox.Show("新增用户失败，可能是用户名已存在。", "失败", MessageBoxButton.OK, MessageBoxImage.Hand);
                     return;
@@ -66,7 +64,7 @@ namespace GB_NewCadPlus_IV
 
         /// <summary>
         /// 编辑用户按钮点击处理（界面事件绑定）
-        /// 逻辑：检查选中用户 -> 打开编辑对话 -> 调用 _svc.UpdateUser -> 刷新用户列表
+        /// 逻辑：检查选中用户 -> 打开编辑对话 -> 调用服务器 API -> 刷新用户列表
         /// </summary>
         private void BtnEditUserManaged_Click(object sender, RoutedEventArgs e)
         {
@@ -80,8 +78,6 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 确保服务已初始化
-                if (!EnsureSvcInitialized(host, port, dbType, user, pwd)) return;
-
                 // 打开编辑对话并获取结果
                 if (!ShowUserEditorDialog(selectedUser, "编辑用户", out var result)) return;
 
@@ -93,7 +89,7 @@ namespace GB_NewCadPlus_IV
                 string deptName = selDept == null ? string.Empty : (string.IsNullOrWhiteSpace(selDept.Name) ? selDept.RealName ?? string.Empty : selDept.Name);
 
                 // 调用服务更新用户（如果密码为空则不修改密码）
-                bool ok = _svc.UpdateUser(
+                var response = _apiService.UpdateUserAsync(
                     selectedUser.Id,
                     result.Username,
                     result.Role,
@@ -104,9 +100,9 @@ namespace GB_NewCadPlus_IV
                     result.RealName,
                     result.Gender,
                     result.Phone,
-                    result.Email);
+                    result.Email).GetAwaiter().GetResult();
 
-                if (!ok)
+                if (!response.Success)
                 {
                     MessageBox.Show("编辑用户失败。", "失败", MessageBoxButton.OK, MessageBoxImage.Hand);
                     return;
@@ -126,7 +122,7 @@ namespace GB_NewCadPlus_IV
 
         /// <summary>
         /// 删除用户按钮点击处理
-        /// 逻辑：确认 -> 调用 _svc.DeleteUser -> 刷新列表与部门
+        /// 逻辑：确认 -> 调用服务器 API -> 刷新列表与部门
         /// </summary>
         private void BtnDeleteUserManaged_Click(object sender, RoutedEventArgs e)
         {
@@ -141,9 +137,7 @@ namespace GB_NewCadPlus_IV
                 if (MessageBox.Show($"确认删除用户：{selectedUser.Username} ?", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Exclamation) != MessageBoxResult.Yes)
                     return;
 
-                if (!EnsureSvcInitialized(host, port, dbType, user, pwd)) return;
-
-                if (!_svc.DeleteUser(selectedUser.Id))
+                if (!_apiService.DeleteUserAsync(selectedUser.Id).GetAwaiter().GetResult().Success)
                 {
                     MessageBox.Show("删除用户失败。", "失败", MessageBoxButton.OK, MessageBoxImage.Hand);
                     return;

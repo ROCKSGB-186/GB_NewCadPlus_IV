@@ -1,4 +1,4 @@
-using Dapper;
+using GB_NewCadPlus_IV.Helpers;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using System;
@@ -54,15 +54,7 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                // 否则从服务读取部门
-                var svc = new DMAuthService(_host, _port.ToString(),
-                    string.IsNullOrWhiteSpace(VariableDictionary._dbUserName) ? "SYSDBA" : VariableDictionary._dbUserName,
-                    string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord) ? "675756SGBsgb" : VariableDictionary._dbPassWord);
-                svc.EnsureAllTablesExist();
-                // 先尝试同步分类到部门（幂等）
-                try { svc.SyncDepartmentsFromCadCategories(); } catch { /* 忽略同步异常 */ }
-
-                var depts = svc.GetDepartmentsWithCounts();
+                var depts = new DepartmentApiService().GetDepartmentsWithCountsAsync().GetAwaiter().GetResult();
                 if (depts != null && depts.Count > 0)
                 {
                     CmbDept.ItemsSource = depts.Select(d => new { Id = d.Id, Name = d.Name }).ToList();
@@ -125,23 +117,17 @@ namespace GB_NewCadPlus_IV
             BtnRegister.IsEnabled = false;
             TxtStatus.Text = "正在注册...";
 
-            var svc = new DMAuthService(_host, _port.ToString(),
-                string.IsNullOrWhiteSpace(VariableDictionary._dbUserName) ? "SYSDBA" : VariableDictionary._dbUserName,
-                string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord) ? "675756SGBsgb" : VariableDictionary._dbPassWord);
-            svc.EnsureAllTablesExist();
-            try { svc.SyncDepartmentsFromCadCategories(); } catch { }
-
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
                 try
                 {
-                    // DMAuthService 当前签名：RegisterUser(string username, string password, int departmentId = 0, string departmentName = "")
-                    var created = svc.RegisterUser(username, pwd, departmentId: deptId, departmentName: string.Empty);
+                    // 注册时保存手机号和邮箱，供后续修改密码时进行身份核验。
+                    var response = await new AuthUserDepartmentApiService().RegisterAsync(username, pwd, deptId, phone: TxtPhone.Text.Trim(), email: TxtEmail.Text.Trim(), cancellationToken: default).ConfigureAwait(false);
 
                     Dispatcher.Invoke(() =>
                     {
                         BtnRegister.IsEnabled = true;
-                        if (created)
+                        if (response.Success)
                         {
                             RegistrationSucceeded = true;
                             MessageBox.Show("注册成功，请使用新账号登录。", "注册成功", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -150,7 +136,7 @@ namespace GB_NewCadPlus_IV
                         }
                         else
                         {
-                            TxtStatus.Text = "注册失败，请检查用户名是否已存在或联系管理员。";
+                            TxtStatus.Text = response.Message;
                         }
                     });
                 }

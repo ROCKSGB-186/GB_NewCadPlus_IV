@@ -40,6 +40,13 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private readonly string _configPath;
 
+        // 记录当前账号连续登录失败次数，切换账号后会重新计数。
+        private string _failureUsername = string.Empty;
+        private int _loginFailureCount;
+        private string _savedUsername = string.Empty;
+        // 防止程序初始化时恢复用户名触发账号切换逻辑。
+        private bool _isLoadingConfig;
+
         /// <summary>
         /// 如果登录成功且可以连接数据库，此属性由 LoginWindow 构造并返回给调用方（可能为 null 表示未能连接 DB）
         /// </summary>
@@ -93,22 +100,22 @@ namespace GB_NewCadPlus_IV
                 // 4. 将 UI 状态同步到全局变量（统一操作，消除分散赋值）
                 SyncUiToGlobalVariables();
 
-                // 5. TCP 连通性检测
+                // 5. 检测服务器 API 端口；数据库端口只供后续数据库连接使用。
+                int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
                 TxtStatus.Text = $"正在检测服务器连接... (数据库类型: {selectedDb})";
                 bool tcpOk = await Task.Run(() =>
                     TestNetworkConnection(VariableDictionary._serverIP,
-                        VariableDictionary._dataBaseServerPort, 3000));
+                        apiPort, 3000));
 
                 if (!tcpOk)
                 {
-                    TxtStatus.Text = $"无法连接到服务器 {VariableDictionary._serverIP}:{VariableDictionary._dataBaseServerPort}，请检查IP/端口。";
+                    TxtStatus.Text = $"无法连接到服务器 {VariableDictionary._serverIP}:{apiPort}，请检查服务器 API 是否启动。";
                     CmbDepartments.ItemsSource = null;
                     return;
                 }
 
                 // 6. 尝试加载部门列表
-                bool loaded = await TryLoadDepartmentsAsync(VariableDictionary._serverIP,
-                    VariableDictionary._dataBaseServerPort);
+                bool loaded = await TryLoadDepartmentsAsync(VariableDictionary._serverIP, apiPort);
                 if (loaded)
                 {
                     TxtStatus.Text = $"已连接 {selectedDb} 并加载部门。";
@@ -133,6 +140,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                _isLoadingConfig = true;
                 if (!File.Exists(_configPath)) // 配置文件不存在时直接返回，保持 UI 默认值
                     return;
 
@@ -146,6 +154,7 @@ namespace GB_NewCadPlus_IV
                 Login_ServerIP.Text = cfg.ServerIP ?? string.Empty; // 登录服务器 IP
                 Login_DataBaseserverPort.Text = cfg.DataBaseserverPort ?? string.Empty; // 登录服务器端口
                 Login_Username.Text = cfg.Username ?? string.Empty; // 登录用户名
+                _savedUsername = Login_Username.Text.Trim();
 
                 // 恢复密码（若保存了加密凭证）
                 if (cfg.SavePassword && !string.IsNullOrWhiteSpace(cfg.EncryptedPassword))
@@ -186,6 +195,10 @@ namespace GB_NewCadPlus_IV
             {
                 // 配置损坏时不应阻止窗口显示，仅记录日志
                 LogManager.Instance.LogError($"加载登录配置失败: {ex.Message}");
+            }
+            finally
+            {
+                _isLoadingConfig = false;
             }
         }
 
@@ -319,43 +332,16 @@ namespace GB_NewCadPlus_IV
 
 
         /// <summary>
-        /// 尝试使用 DMAuthService 读取部门并填充下拉框，返回是否成功
+        /// 使用服务器 API 读取部门并填充下拉框，返回是否成功
         /// </summary>
         private async Task<bool> TryLoadDepartmentsAsync(string host, int port)
         {
             try
             {
-                var selectedDb = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant();
-                var uiUser = string.IsNullOrWhiteSpace(VariableDictionary._dbUserName)
-                    ? (selectedDb == "MYSQL" ? "root" : "SYSDBA")
-                    : VariableDictionary._dbUserName.Trim();
-                var uiPwd = string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord)
-                    ? (selectedDb == "MYSQL" ? "123456" : "675756SGBsgb")
-                    : VariableDictionary._dbPassWord;
-
-                // 确保使用正确的 DB 类型（优先 UI 选择）
-                try
-                {
-                    if (CmbDatabaseType?.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
-                        selectedDb = s.ToUpper().Trim();
-                }
-                catch { }
-
-                List<DepartmentModel> depts;
-                if (selectedDb == "MYSQL")
-                {
-                    var mySvc = new MySqlAuthService(host, port.ToString(), uiUser, uiPwd);
-                    mySvc.EnsureAllTablesExist();
-                    try { mySvc.SyncDepartmentsFromCadCategories(); } catch { }
-                    depts = mySvc.GetDepartmentsWithCounts();
-                }
-                else
-                {
-                    var svc = new DMAuthService(host, port.ToString(), uiUser, uiPwd);
-                    svc.EnsureAllTablesExist();
-                    try { svc.SyncDepartmentsFromCadCategories(); } catch { }
-                    depts = svc.GetDepartmentsWithCounts();
-                }
+                VariableDictionary._serverIP = host;
+                VariableDictionary._apiPort = port > 0 ? port : 10010;
+                var departmentApi = new DepartmentApiService();
+                List<DepartmentModel> depts = await departmentApi.GetDepartmentsWithCountsAsync();
 
                 // 调试日志：检查 DisplayName 是否有值
                 if (depts != null && depts.Count > 0)
@@ -425,10 +411,24 @@ namespace GB_NewCadPlus_IV
             VariableDictionary._userName = Login_Username.Text.Trim(); // 更新全局用户名
             VariableDictionary._passWord = Login_Password.Password.Trim(); // 更新全局密码
 
+            if (string.IsNullOrWhiteSpace(VariableDictionary._userName))
+            {
+                TxtStatus.Text = "请输入用户名。";
+                Login_Username.Focus();
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(VariableDictionary._passWord))
+            {
+                TxtStatus.Text = "请输入密码。";
+                Login_Password.Focus();
+                return;
+            }
+
             BtnLogin.IsEnabled = false; // 禁用登录按钮，防止重复点击
             TxtStatus.Text = "正在连接并验证用户..."; // 更新状态提示
             // 1) 先做快速 TCP 连通性检测；失败则直接退回 FormMain
-            bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort));
+            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
+            bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, apiPort));
             if (!tcpOk)
             {
                 TxtStatus.Text = "无法连接服务器，将进入本地工具界面。";
@@ -450,37 +450,8 @@ namespace GB_NewCadPlus_IV
                 {
                     try
                     {
-                        // 判定是否为 MySQL 模式
-
-                        if (VariableDictionary._databaseType == "MYSQL")
-                        {
-                            // --- MySQL 分支 ---
-                            // 使用数据库管理凭据（root）初始化服务，确保具有建表和查询系统表的权限
-                            // 注意：如果您环境中的 MySQL root 密码不同，请调整此处或从配置读取
-                            var svc = new MySqlAuthService(
-                                VariableDictionary._serverIP,
-                                VariableDictionary._dataBaseServerPort.ToString(),
-                                VariableDictionary._dbUserName,
-                                VariableDictionary._dbPassWord
-                            );
-                            svc.EnsureAllTablesExist(); // 确保业务表结构完整
-                            // 最终使用用户输入的账号密码在 USERS 表中进行业务身份认证
-                            return svc.AuthenticateUser(VariableDictionary._userName, VariableDictionary._passWord);
-                        }
-                        else
-                        {
-                            // --- 达梦 (DM) 分支 ---
-                            // 修正 root cause：使用 SYSDBA 管理员账号建立物理连接，解决 6001 用户名错误
-                            var svc = new DMAuthService(
-                                VariableDictionary._serverIP,
-                                VariableDictionary._dataBaseServerPort.ToString(),
-                                VariableDictionary._dbUserName,
-                                VariableDictionary._dbPassWord
-                            );
-                            svc.EnsureAllTablesExist(); // 强制初始化或检查表结构
-                            // 在物理连接成功的基础上，通过 SQL 查询验证应用用户身份
-                            return svc.AuthenticateUser(VariableDictionary._userName, VariableDictionary._passWord);
-                        }
+                        var authApi = new AuthUserDepartmentApiService();
+                        return authApi.AuthenticateAsync(VariableDictionary._userName, VariableDictionary._passWord).GetAwaiter().GetResult();
                     }
                     catch (Exception exInner)
                     {
@@ -574,37 +545,18 @@ namespace GB_NewCadPlus_IV
                 }
                 else
                 {
-                    // 认证失败：在 UI 线程交互
-                    var res = MessageBox.Show("用户不存在或密码错误。是否注册新用户？", "登录失败", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    if (res == MessageBoxResult.Yes)
+                    // 认证失败只统计当前账号，避免不同账号之间相互影响。
+                    RegisterLoginFailure(VariableDictionary._userName);
+                    if (_loginFailureCount >= 5)
                     {
-                        var deptList = new List<(int Id, string Name)>();
-                        try
-                        {
-                            if (CmbDepartments.ItemsSource != null)
-                            {
-                                foreach (var item in CmbDepartments.ItemsSource)
-                                {
-                                    var t = item.GetType();
-                                    var pid = t.GetProperty("Id");
-                                    var pname = t.GetProperty("Name");
-                                    if (pid != null && pname != null)
-                                    {
-                                        int id = Convert.ToInt32(pid.GetValue(item));
-                                        string name = Convert.ToString(pname.GetValue(item));
-                                        deptList.Add((id, name));
-                                    }
-                                }
-                            }
-                        }
-                        catch { }
-
-                        var regWin = new RegisterUserWindow(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort, deptList) { Owner = this };
-                        var regRes = regWin.ShowDialog();
-                        if (regRes == true && regWin.RegistrationSucceeded)
-                            TxtStatus.Text = "注册成功，请使用新用户登录。";
-                        else
-                            TxtStatus.Text = "未注册。";
+                        var resetResult = MessageBox.Show("当前账号已连续登录失败5次，是否修改密码？", "登录失败", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                        if (resetResult == MessageBoxResult.Yes)
+                            OpenResetPasswordWindow();
+                        _loginFailureCount = 0;
+                    }
+                    else
+                    {
+                        TxtStatus.Text = $"用户名或密码错误，当前账号已失败 {_loginFailureCount} 次。";
                     }
                 }
             }
@@ -671,16 +623,17 @@ namespace GB_NewCadPlus_IV
             TxtStatus.Text = "正在连接服务器...";
 
             // 先做 TCP 层检测，快速反馈
-            bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort));
+            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
+            bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, apiPort));
             if (!tcpOk)
             {
-                MessageBox.Show($"无法连接到服务器 {VariableDictionary._serverIP}:{VariableDictionary._dataBaseServerPort}，请检查IP、端口或网络。", "连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"无法连接到服务器 API {VariableDictionary._serverIP}:{apiPort}，请检查服务器是否启动。", "连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
                 TxtStatus.Text = "连接失败，请检查服务器IP或端口。";
                 return;
             }
 
             // TCP 成功后尝试读取并初始化部门（TryLoadDepartmentsAsync 已包含初始化与同步）
-            var loaded = await TryLoadDepartmentsAsync(VariableDictionary._serverIP, VariableDictionary._dataBaseServerPort);
+            var loaded = await TryLoadDepartmentsAsync(VariableDictionary._serverIP, apiPort);
             if (loaded)
             {
                 TxtStatus.Text = "服务器连接成功，部门已加载。";
@@ -705,7 +658,56 @@ namespace GB_NewCadPlus_IV
         /// <param name="e"></param>
         private void ForgetPassword_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("请联系管理员重置密码，或在注册界面重新创建账号。", "忘记密码", MessageBoxButton.OK, MessageBoxImage.Information);
+            OpenResetPasswordWindow();
+        }
+
+        private void Login_Username_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            // 配置恢复阶段不处理文本变化，避免启动时误清空已保存密码。
+            if (_isLoadingConfig)
+                return;
+            string username = Login_Username.Text.Trim();
+            if (string.Equals(username, _failureUsername, StringComparison.OrdinalIgnoreCase))
+                return;
+            _failureUsername = username;
+            _loginFailureCount = 0;
+            // 当前账号没有通过保存密码恢复时，输入新账号必须清除旧账号密码。
+            if (!IsSavedUsername(username))
+            {
+                Login_Password.Password = string.Empty;
+                ChkSavePassword.IsChecked = false;
+            }
+        }
+
+        private void RegisterLoginFailure(string username)
+        {
+            // 失败次数只针对当前账号统计，切换账号后从零开始。
+            if (!string.Equals(_failureUsername, username, StringComparison.OrdinalIgnoreCase))
+            {
+                _failureUsername = username;
+                _loginFailureCount = 0;
+            }
+            _loginFailureCount++;
+        }
+
+        private bool IsSavedUsername(string username)
+        {
+            // 只有账号与已保存账号一致且密码确实存在时，才允许保留当前密码。
+            return !string.IsNullOrWhiteSpace(username) &&
+                   string.Equals(username, _savedUsername, StringComparison.OrdinalIgnoreCase) &&
+                   ChkSavePassword.IsChecked == true &&
+                   !string.IsNullOrWhiteSpace(Login_Password.Password);
+        }
+
+        private void OpenResetPasswordWindow()
+        {
+            // 修改密码窗口继续通过服务器 API 操作，不在客户端直接访问用户表。
+            var window = new ResetPasswordWindow { Owner = this };
+            window.SetUsername(Login_Username.Text.Trim());
+            window.ShowDialog();
+            Login_Password.Password = string.Empty;
+            ChkSavePassword.IsChecked = false;
+            _loginFailureCount = 0;
         }
         /// <summary>
         /// 端口输入框预处理事件处理程序
@@ -783,85 +785,14 @@ namespace GB_NewCadPlus_IV
 
         private async void BtnTestServer测试服务器_Click(object sender, RoutedEventArgs e)
         {
-            // 禁用按钮，避免重复点击
             BtnTestServer测试服务器.IsEnabled = false;
-            TxtStatus.Text = "正在测试服务器连接并读取数据库架构...";
-            //var user = "";
-            //var pwd = "";
+            TxtStatus.Text = "正在测试服务器连接...";
             try
             {
-                // 根据所选数据库类型执行不同测试
-                string selectedDb = VariableDictionary._databaseType ?? "DM";
-                try
-                {
-                    if (CmbDatabaseType != null && CmbDatabaseType.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
-                        selectedDb = s.ToUpper().Trim();
-                }
-                catch { }
-
-                if (selectedDb == "MYSQL")
-                {
-                    // 测试 MySQL 连接
-                    var dataBaseserver = Login_ServerIP.Text.Trim();
-                    VariableDictionary._serverIP = dataBaseserver;
-                    var dataBaseServerPort = Login_DataBaseserverPort.Text.Trim();
-                    VariableDictionary._dataBaseServerPort = int.TryParse(dataBaseServerPort, out int port) ? port : 5236;
-                    // 优先使用 UI 中填写的用户名，否则回退到 VariableDictionary 中可能已保存的用户名
-                    //var user = string.IsNullOrWhiteSpace(Login_Username.Text) ? (VariableDictionary._userName ?? string.Empty) : Login_Username.Text.Trim();
-                    //var pwd = Login_Password.Password.Trim();
-                    // 记录用于测试的目标信息（不记录明文密码）
-                    LogManager.Instance.LogInfo($"测试 MySQL 连接: {dataBaseserver}:{dataBaseServerPort} user = root ");
-                    string dbPart = string.IsNullOrWhiteSpace(VariableDictionary._dataBaseName) ? string.Empty : $"Database={VariableDictionary._dataBaseName};";
-                    var connStr = $"Server={dataBaseserver};Port={dataBaseServerPort};{dbPart}User Id=root;Password=123456;";
-                    try
-                    {
-                        using var conn = new MySqlConnection(connStr);
-                        conn.Open();
-                        // 简单查询服务器版本以验证可用性
-                        using var cmd = conn.CreateCommand();
-                        cmd.CommandText = "SELECT VERSION();";
-                        var ver = cmd.ExecuteScalar();
-                        TxtStatus.Text = $"MySQL 连接成功，版本: {ver}";
-                    }
-                    catch (MySql.Data.MySqlClient.MySqlException exMy)
-                    {
-                        // 常见情况：认证失败（Access denied）或网络/端口不可达
-                        LogManager.Instance.LogError($"测试 MySQL 连接失败: {exMy}");
-                        if (exMy.Message != null && exMy.Message.Contains("Access denied"))
-                        {
-                            TxtStatus.Text = "认证失败：请检查用户名/密码或用户权限（Access denied）。";
-                            MessageBox.Show("MySQL 认证失败：请确认用户名和密码正确，且用户在目标主机/端口上具有登录权限。若是 localhost/127.0.0.1，请确保为对应主机创建了用户（例如 'sa'@'localhost' 与 'sa'@'127.0.0.1'）。", "连接失败", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        }
-                        else
-                        {
-                            TxtStatus.Text = $"操作失败：{exMy.Message}";
-                            MessageBox.Show($"测试 MySQL 连接失败：{exMy.Message}", "连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
-                        }
-                    }
-                    catch (Exception exMy)
-                    {
-                        LogManager.Instance.LogError($"测试 MySQL 连接失败(通用异常): {exMy}");
-                        TxtStatus.Text = $"操作失败：{exMy.Message}";
-                    }
-                }
-                else
-                {
-                    // 构建参数数组用于 DMDatabaseReader
-                    string[] args = new string[]
-                    {
-                        Login_ServerIP.Text.Trim(), // 服务器地址
-                        Login_DataBaseserverPort.Text.Trim(), // 服务器端口
-                        //Login_Username.Text.Trim(), // 用户名
-                        //Login_Password.Password.Trim() // 密码
-                        "SYSDBA",
-                        "675756SGBsgb"
-                    };
-
-                    // 调用 DMDatabaseReaderMethod 方法
-                    GB_NewCadPlus_IV.DMDatabaseReader.DMDatabaseReader.DMDatabaseReaderMethod(args);
-
-                    TxtStatus.Text = "数据库架构读取完成，详细信息请查看控制台输出。";
-                }
+                VariableDictionary._serverIP = Login_ServerIP.Text.Trim();
+                VariableDictionary._apiPort = 10010;
+                var departments = await new DepartmentApiService().GetDepartmentsWithCountsAsync();
+                TxtStatus.Text = $"服务器连接成功，已读取 {departments.Count} 个部门。";
             }
             catch (Exception ex)
             {

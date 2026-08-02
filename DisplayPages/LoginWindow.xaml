@@ -59,7 +59,7 @@
                 Margin="2,0,0,2"
                 FontSize="12"
                 Text="用户名：" />
-            <TextBox x:Name="Login_Username" Height="26" />
+            <TextBox x:Name="Login_Username" Height="26" TextChanged="Login_Username_TextChanged" />
 
             <TextBlock
                 Margin="2,8,0,2"
@@ -76,7 +76,7 @@
                     Margin="0,0,12,0"
                     Content="保存密码" />
                 <TextBlock Width="60" Margin="200,0,0,0"><Hyperlink Click="ForgetPassword_Click">
-                        <Run Text="忘记密码？" />
+                    <Run Text="修改密码" />
                     </Hyperlink></TextBlock>
             </StackPanel>
             <!--<TextBlock Margin="0,6,0,0" Width="65" HorizontalAlignment="Right">

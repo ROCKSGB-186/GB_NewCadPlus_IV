@@ -141,6 +141,9 @@ namespace GB_NewCadPlus_IV
         /// 数据库管理器实例（外部注入或内部创建）
         /// </summary>
         private DatabaseManager? _databaseManager;
+        private readonly GraphicApiService _graphicApiService = new GraphicApiService();
+        private readonly AuthUserDepartmentApiService _apiService = new AuthUserDepartmentApiService();
+        private readonly DepartmentApiService _departmentApiService = new DepartmentApiService();
         /// <summary>
         /// 当前选中的分类节点
         /// </summary>
@@ -1357,16 +1360,8 @@ namespace GB_NewCadPlus_IV
                 }
                 panel.Children.Clear();
 
-                if (_databaseManager != null && _databaseManager.IsDatabaseAvailable)
-                {
-                    LogManager.Instance.LogInfo("使用数据库模式加载 " + categoryName);
-                    _ = LoadButtonsFromDatabaseForCategory(categoryName, panel);
-                }
-                else
-                {
-                    LogManager.Instance.LogInfo("使用Resources文件夹模式加载 " + categoryName);
-                    LoadButtonsFromResources(categoryName, panel);
-                }
+                LogManager.Instance.LogInfo("使用服务器模式加载 " + categoryName);
+                _ = LoadButtonsFromDatabaseForCategory(categoryName, panel);
             }
             catch (Exception ex)
             {
@@ -1382,22 +1377,21 @@ namespace GB_NewCadPlus_IV
             try
             {
                 LogManager.Instance.LogInfo($"=== 开始从数据库加载分类 {categoryName} ===");
-                if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
-                {
-                    LogManager.Instance.LogInfo("数据库管理器不可用，回退到 Resources");
-                    LoadButtonsFromResources(categoryName, panel);
-                    return;
-                }
-
-                var category = await _databaseManager.GetCadCategoryByNameAsync(categoryName);
+                var categoryNode = _categoryTreeNodes.FirstOrDefault(n =>
+                    n.Level == 0 && (string.Equals(n.Name, categoryName, StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(n.DisplayText, categoryName, StringComparison.OrdinalIgnoreCase)));
+                var category = categoryNode?.Data as CadCategory;
                 if (category == null)
                 {
-                    LogManager.Instance.LogInfo("数据库中未找到分类: " + categoryName);
+                    LogManager.Instance.LogInfo("服务器分类树中未找到分类: " + categoryName);
                     LoadButtonsFromResources(categoryName, panel);
                     return;
                 }
 
-                var subcategories = await _databaseManager.GetCadSubcategoriesByCategoryIdAsync(category.Id);
+                var subcategories = categoryNode.Children
+                    .Select(n => n.Data)
+                    .OfType<CadSubcategory>()
+                    .ToList();
                 panel.Children.Clear();
                 if (subcategories.Count == 0)
                 {
@@ -1425,7 +1419,7 @@ namespace GB_NewCadPlus_IV
             try
             {
                 
-                var files = await _databaseManager.GetFilesByCategoryIdAsync(category.Id, "main");
+                 var files = await _graphicApiService.GetFilesByCategoryIdAsync(category.Id, "main");
                
                 if (files.Count > 0)
                 {
@@ -1458,7 +1452,7 @@ namespace GB_NewCadPlus_IV
                 int colorIndex = 0;
                 foreach (var sub in subcategories.OrderBy(s => s.SortOrder))
                 {
-                    var files = await _databaseManager.GetFilesByCategoryIdAsync(sub.Id, "sub");
+                    var files = await _graphicApiService.GetFilesByCategoryIdAsync(sub.Id, "sub");
                     var section = CreateSubcategorySection(sub.DisplayName, bgColors[colorIndex % bgColors.Count]);
                     var host = section.Child as StackPanel;
                     if (files.Count > 0)
@@ -1610,13 +1604,14 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (_databaseManager == null) { LogManager.Instance.LogInfo("数据库管理器未初始化"); return; }
+                LogManager.Instance.LogInfo($"开始从服务器加载分类 {folderName} 的按钮");
+                var categoryNode = _categoryTreeNodes.FirstOrDefault(n =>
+                    n.Level == 0 && (string.Equals(n.Name, folderName, StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(n.DisplayText, folderName, StringComparison.OrdinalIgnoreCase)));
+                var category = categoryNode?.Data as CadCategory;
+                if (category == null) { LogManager.Instance.LogInfo("服务器分类树中未找到分类: " + folderName); return; }
 
-                LogManager.Instance.LogInfo($"开始从数据库加载分类 {folderName} 的按钮");
-                var category = await _databaseManager.GetCadCategoryByNameAsync(folderName);
-                if (category == null) { LogManager.Instance.LogInfo("未找到分类: " + folderName); return; }
-
-                var subcategories = await _databaseManager.GetCadSubcategoriesByCategoryIdAsync(category.Id);
+                var subcategories = categoryNode.Children.Select(n => n.Data).OfType<CadSubcategory>().ToList();
                 var bgColors = new List<System.Windows.Media.Color> { Colors.FloralWhite, Colors.Azure, Colors.FloralWhite };
                 int colorIndex = 0;
 
@@ -1636,7 +1631,7 @@ namespace GB_NewCadPlus_IV
                     var header = new TextBlock { Text = sub.DisplayName, FontSize = 14, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2), Foreground = new SolidColorBrush(Colors.DarkBlue) };
                     sectionPanel.Children.Add(header);
 
-                    var graphics = await _databaseManager.GetFileStorageBySubcategoryIdAsync(sub.Id);
+                    var graphics = await _graphicApiService.GetFilesByCategoryIdAsync(sub.Id, "sub");
                     if (graphics.Count > 0)
                     {
                         graphics.Sort((x, y) => x.DisplayName.CompareTo(y.DisplayName));
@@ -1964,35 +1959,7 @@ namespace GB_NewCadPlus_IV
         /// <returns>如果服务初始化成功返回 true，否则返回 false</returns>
         private bool EnsureSvcInitialized(string host, int port, string dbType, string dbUser, string dbPwd)
         {
-            // 防御性编码，所有分支都捕获异常并写日志，不让 UI 直接崩溃
-            try
-            {
-                if (string.Equals(dbType, "MYSQL", StringComparison.OrdinalIgnoreCase))
-                {
-                    // MySqlAuthService 构造器需要传入 port（字符串形式）
-                    _authServiceDynamic = new MySqlAuthService(host, port.ToString(), dbUser, dbPwd); // 创建 MySQL 认证服务
-                }
-                else
-                {
-                    // DMAuthService 也需要 host, port, user, pwd（将 port 转为字符串）
-                    _authServiceDynamic = new DMAuthService(host, port.ToString(), dbUser, dbPwd); // 创建 DM 认证服务
-                }
-
-                // ✅ 如果执行到这里没有抛出异常，说明初始化成功
-                return true;
-            }
-            catch (Exception ex)
-            {
-                // 记录失败原因并把实例置空，后续逻辑需检查 _authServiceDynamic 是否为 null
-                LogManager.Instance.LogInfo("EnsureSvcInitialized 创建认证服务失败: " + ex.Message);
-                _authServiceDynamic = null;
-
-                // ✅ 可选：根据记忆规范，失败时提示用户
-                // MessageBox.Show($"初始化认证服务失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-
-                // ✅ 返回 false 表示初始化失败
-                return false;
-            }
+            return _apiService != null;
         }
         
         /// <summary>
@@ -2002,9 +1969,8 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (!EnsureSvcInitialized(host, port, dbType, user, pwd)) return;
-                var users = _svc.GetUsersByDepartmentId(departmentId);  // 假设 DMAuthService 存在此方法
-                UsersGrid.ItemsSource = users;
+                if (_apiService == null) return;
+                UsersGrid.ItemsSource = _apiService.GetUsersAsync(departmentId).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -2019,33 +1985,14 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                // 1. 确保服务已初始化
-                if (_svc == null)
-                {
-                    // 如果 _svc 还没初始化，尝试初始化它
-                    // 注意：这里需要你有 host, port 等变量，或者从 VariableDictionary 读取
-                    string host = VariableDictionary._serverIP;
-                    int dataBaseServerPort = VariableDictionary._dataBaseServerPort;
-                    int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-                    string dbType = VariableDictionary._databaseType;
-                    string user = VariableDictionary._dbUserName;
-                    string pwd = VariableDictionary._dbPassWord;
-
-                    if (!EnsureSvcInitialized(host, dataBaseServerPort, dbType, user, pwd))
-                    {
-                        LogManager.Instance.LogInfo("RefreshDepartmentsAsync: 服务初始化失败");
-                        return;
-                    }
-                }
-
-                // 2. 调用 DMAuthService 的现有方法
-                // GetDepartmentsWithCounts 是同步方法，如果担心阻塞 UI，可以包在 Task.Run 中
-                var departments = await Task.Run(() => _svc.GetDepartmentsWithCounts());
+                if (_departmentApiService == null) return;
+                var departments = await _departmentApiService.GetDepartmentsWithCountsAsync();
 
                 // 3. 绑定到 Grid
                 if (DepartmentsGrid != null)
                 {
                     DepartmentsGrid.ItemsSource = departments;
+                    DepartmentsGrid.Items.Refresh();
                 }
 
                 LogManager.Instance.LogInfo($"RefreshDepartmentsAsync: 成功加载 {departments.Count} 个部门");
@@ -2053,6 +2000,7 @@ namespace GB_NewCadPlus_IV
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"RefreshDepartmentsAsync 异常: {ex.Message}");
+                throw;
             }
         }
 
@@ -5848,12 +5796,6 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (_databaseManager == null)
-                {
-                    LogManager.Instance.LogInfo("数据库管理器未初始化");
-                    return;
-                }
-
                 List<FileStorage> files = new List<FileStorage>();
 
                 //LogManager.Instance.LogInfo($"开始加载分类 {categoryNode.Id} ({categoryNode.DisplayText}) 的文件");
@@ -5863,14 +5805,14 @@ namespace GB_NewCadPlus_IV
                 {
                     // 主分类
                     LogManager.Instance.LogInfo($"加载主分类 {category.Name} (ID: {category.Id}) 的文件");
-                    files = await _databaseManager.GetFilesByCategoryIdAsync(category.Id, "main");
+                    files = await _graphicApiService.GetFilesByCategoryIdAsync(category.Id, "main");
                 }
                 else if (categoryNode.Data is CadSubcategory subcategory)
                 {
                     // 子分类
 
                     LogManager.Instance.LogInfo($"加载子分类 {subcategory.Name} (ID: {subcategory.Id}) 的文件");
-                    files = await _databaseManager.GetFilesByCategoryIdAsync(subcategory.Id, "sub");
+                    files = await _graphicApiService.GetFilesByCategoryIdAsync(subcategory.Id, "sub");
                 }
                 else
                 {
@@ -5878,7 +5820,7 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
-                LogManager.Instance.LogInfo($"从数据库查询到 {files.Count} 个文件");
+                LogManager.Instance.LogInfo($"从服务器查询到 {files.Count} 个文件");
 
                 // 调试输出文件信息
                 DebugFileData(files);
@@ -6474,7 +6416,7 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                if (_selectedCategoryNode == null || _databaseManager == null || !_databaseManager.IsDatabaseAvailable)
+                if (_selectedCategoryNode == null)
                     return;
 
                 var nodeData = _selectedCategoryNode.Data;
@@ -6482,11 +6424,11 @@ namespace GB_NewCadPlus_IV
 
                 if (nodeData is CadCategory main)
                 {
-                    files = await _databaseManager.GetFilesByCategoryIdAsync(main.Id, "main");
+                    files = await _graphicApiService.GetFilesByCategoryIdAsync(main.Id, "main");
                 }
                 else if (nodeData is CadSubcategory sub)
                 {
-                    files = await _databaseManager.GetFilesByCategoryIdAsync(sub.Id, "sub");
+                    files = await _graphicApiService.GetFilesByCategoryIdAsync(sub.Id, "sub");
                 }
 
                 if (files != null)
@@ -10309,8 +10251,10 @@ namespace GB_NewCadPlus_IV
                     ? (dbType == "MYSQL" ? "123456" : "675756SGBsgb")
                     : VariableDictionary._dbPassWord;
 
-                _svc = new DMAuthService(host, port, dbUser, dbPwd);
-                LogManager.Instance.LogInfo($"部门服务初始化: host={host}, port={port}, dbType={dbType}, dbUser={dbUser}");
+                LogManager.Instance.LogInfo($"部门服务使用服务器 API: host={host}, apiPort={VariableDictionary._apiPort}");
+                VariableDictionary._serverIP = host;
+                if (VariableDictionary._apiPort <= 0)
+                    VariableDictionary._apiPort = 10010;
                 RefreshDepartmentsAsync();
             }
             catch (Exception ex)
@@ -10318,35 +10262,45 @@ namespace GB_NewCadPlus_IV
                 TxtStatus.Text = "初始化失败：" + ex.Message;
             }
         }
-
+                
         /// <summary>
-        /// 数据库服务
-        /// </summary>
-        private DMAuthService _svc;
-
-        /// <summary>
-        /// 按分类同步部门
+        /// 从服务器获取部门及部门用户数量
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
         private async void BtnSync_Click(object sender, RoutedEventArgs e)
         {
-            TxtStatus.Text = "正在按分类同步部门...";
+            TxtStatus.Text = "正在获取部门...";
+            if (sender is Button button)
+                button.IsEnabled = false;
+
             try
             {
-                await Task.Run(() =>
-                {
-                    // 确保所有必要的表都已存在（包括分类表和部门表）
-                    _svc.EnsureAllTablesExist();
-                    // 执行同步
-                    _svc.SyncDepartmentsFromCadCategories();
-                });
-                RefreshDepartmentsAsync();
-                MessageBox.Show("同步完成。", "信息", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
+                    VariableDictionary._serverIP = "127.0.0.1";
+                if (VariableDictionary._apiPort <= 0)
+                    VariableDictionary._apiPort = 10010;
+
+                LogManager.Instance.LogInfo($"开始获取部门：API={VariableDictionary._serverIP}:{VariableDictionary._apiPort}");
+                var departments = await _departmentApiService.GetDepartmentsWithCountsAsync();
+                DepartmentsGrid.ItemsSource = departments;
+                DepartmentsGrid.Items.Refresh();
+
+                string message = $"已获取 {departments.Count} 个部门。";
+                LogManager.Instance.LogInfo($"获取部门完成：{message}");
+                TxtStatus.Text = message;
+                MessageBox.Show(message, "获取完成", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                TxtStatus.Text = "同步失败：" + ex.Message;
+                TxtStatus.Text = "获取部门失败：" + ex.Message;
+                LogManager.Instance.LogInfo("获取部门失败：" + ex);
+                MessageBox.Show(TxtStatus.Text, "获取失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (sender is Button currentButton)
+                    currentButton.IsEnabled = true;
             }
         }
 
@@ -10365,8 +10319,8 @@ namespace GB_NewCadPlus_IV
                         ? result.ManagerUserId
                         : null;
 
-                    var id = _svc.AddDepartment(result.Name, result.RealName, result.Description, mgrId, result.SortOrder);
-                    if (id > 0)
+                    var response = _apiService.AddDepartmentAsync(result.Name, result.RealName, result.Description, result.SortOrder, mgrId).GetAwaiter().GetResult();
+                    if (response.Success)
                     {
                         RefreshDepartmentsAsync();
                         System.Windows.MessageBox.Show("新增部门成功。", "成功", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
@@ -10405,8 +10359,8 @@ namespace GB_NewCadPlus_IV
                         ? edited.ManagerUserId
                         : null;
 
-                    var ok = _svc.UpdateDepartment(sel.Id, edited.Name, edited.RealName, edited.Description, edited.SortOrder, mgrId, edited.IsActive);
-                    if (ok)
+                    var response = _apiService.UpdateDepartmentAsync(sel.Id, edited.Name, edited.RealName, edited.Description, edited.SortOrder, mgrId, edited.IsActive).GetAwaiter().GetResult();
+                    if (response.Success)
                     {
                         RefreshDepartmentsAsync();
                         System.Windows.MessageBox.Show("修改成功。", "成功", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
@@ -10433,8 +10387,8 @@ namespace GB_NewCadPlus_IV
             var sel = DepartmentsGrid.SelectedItem as DepartmentModel;
             if (sel == null) { MessageBox.Show("请先选择一个部门", "提示", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             if (MessageBox.Show($"确认删除部门：{sel.RealName} ?\n删除后该部门下用户将被置为未分配。", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-            var ok = _svc.DeleteDepartment(sel.Id);
-            if (ok)
+            var response = _apiService.DeleteDepartmentAsync(sel.Id).GetAwaiter().GetResult();
+            if (response.Success)
             {
                 RefreshDepartmentsAsync();
                 MessageBox.Show("删除成功。", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -10588,8 +10542,8 @@ namespace GB_NewCadPlus_IV
             var username = (TxtSearchUser.Text ?? "").Trim();
             if (string.IsNullOrEmpty(username)) { MessageBox.Show("请输入要分配的用户名", "提示", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
 
-            var ok = _svc.AssignUserToDepartmentByUsername(username, sel.Id);
-            if (ok)
+            var response = _apiService.AssignUserToDepartmentAsync(username, sel.Id).GetAwaiter().GetResult();
+            if (response.Success)
             {
                 LoadUsersForDepartment(sel.Id);
                 MessageBox.Show($"用户 {username} 已分配到 {sel.RealName}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);

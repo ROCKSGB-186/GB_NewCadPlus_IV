@@ -4886,7 +4886,7 @@
                                 Width="90"
                                 Margin="0,0,3,0"
                                 Click="BtnSync_Click"
-                                Content="按分类同步部门" />
+                                Content="获取部门" />
                             <Button
                                 x:Name="BtnAddDept"
                                 Width="80"

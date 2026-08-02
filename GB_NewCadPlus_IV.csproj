@@ -11,9 +11,9 @@
 		<Platforms>AnyCPU;x64</Platforms>
 		<AssemblyName>$(MSBuildProjectName)</AssemblyName>
 		<ErrorReport>prompt</ErrorReport>
-                <AssemblyVersion>3.26.0730.137</AssemblyVersion>
-                <FileVersion>3.26.0730.137</FileVersion>
-                <Version>3.26.0730.137</Version>      
+                <AssemblyVersion>3.26.0803.138</AssemblyVersion>
+                <FileVersion>3.26.0803.138</FileVersion>
+                <Version>3.26.0803.138</Version>      
 	</PropertyGroup>
 
 
