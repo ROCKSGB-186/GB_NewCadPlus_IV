@@ -772,53 +772,67 @@ namespace GB_NewCadPlus_IV
         /// 刷新所有主分类面板（按主分类名称依次触发加载）
         /// </summary>
         /// <returns></returns>
+        /// <summary>
+        /// 异步刷新所有主分类面板（工艺、建筑、结构等），从数据库重新加载按钮
+        /// </summary>
         private async Task RefreshAllCategoryPanelsAsync()
         {
             try
             {
+                // 检查数据库管理器是否可用，若不可用则跳过刷新并记录日志
                 if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
                 {
                     LogManager.Instance.LogInfo("RefreshAllCategoryPanelsAsync：数据库不可用，跳过面板刷新");
                     return;
                 }
 
+                // 定义所有需要刷新的主分类名称（与界面 Tab 标题一致）
                 string[] majorCategories = new string[]
                 {
                     "工艺","建筑","结构","电气","给排水","暖通","自控","总图","公共图"
                 };
 
+                // 遍历每个主分类，逐一刷新其面板
                 foreach (var majorItem in majorCategories)
                 {
                     try
                     {
+                        // 根据分类名称获取对应的 WrapPanel 面板
                         var majorPanel = GetPanelByFolderName(majorItem);
                         if (majorPanel == null)
                         {
+                            // 若未找到面板，记录日志并跳过该分类
                             LogManager.Instance.LogInfo($"RefreshAllCategoryPanelsAsync：未找到面板 {majorItem}，跳过");
                             continue;
                         }
+
+                        // 从数据库异步加载该分类下的按钮数据并填充到面板中
                         await LoadButtonsFromDatabase(majorItem, majorPanel);
+
+                        // 短暂延迟 60ms，避免连续大量操作导致 UI 卡顿，同时给界面更新留出时间
                         await Task.Delay(60);
                     }
                     catch (Exception ex)
                     {
+                        // 捕获单个分类加载时的异常，记录日志后继续处理后续分类（不中断整体流程）
                         LogManager.Instance.LogInfo($"RefreshAllCategoryPanelsAsync: 加载分类 {majorItem} 时出错: {ex.Message}");
                     }
                 }
 
+                // 记录所有主分类面板刷新完成
                 LogManager.Instance.LogInfo("RefreshAllCategoryPanelsAsync: 所有主分类面板刷新完成");
             }
             catch (Exception ex)
             {
+                // 捕获整个刷新流程中的未预期异常，记录日志
                 LogManager.Instance.LogInfo("RefreshAllCategoryPanelsAsync 异常: " + ex.Message);
             }
         }
-
         #endregion
-        
+
 
         #region // 第二阶段：预览与图片缓存相关方法（可直接替换到 WpfMainWindow.xaml.cs 的相应区域）;说明：包含预览路径解析、本地缓存保证、图片加载与内存缓存等方法，均带中文注释便于理解与维护。
-        
+
         /// <summary>
         /// 生成默认预览图片（优先从嵌入资源加载，失败则生成占位图）
         /// </summary>
@@ -1302,45 +1316,94 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// TabControl 选择改变处理（打开分类面板或加载 CSV 表）
         /// </summary>
-        private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        // 异步处理 TabControl 选择变更事件
+        private async void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
             {
+                // 记录事件触发日志
                 LogManager.Instance.LogInfo("TabControl选择改变事件触发");
+
+                // 如果没有新增的选中项，则直接返回
                 if (e.AddedItems.Count == 0) return;
 
+                // 获取新增选中项并尝试转换为 TabItem
                 var added = e.AddedItems[0] as TabItem;
                 if (added == null) return;
 
+                // 获取当前选中 Tab 的标题（去除首尾空白）
                 var header = (added.Header?.ToString() ?? string.Empty).Trim();
                 LogManager.Instance.LogInfo("选中的TabItem: " + header);
 
+                // 如果选中的是“计算数据表”选项卡
                 if (string.Equals(header, "计算数据表", StringComparison.OrdinalIgnoreCase))
                 {
+                    // 若动态宿主容器存在且尚无子元素，则重新加载计算数据表（不强制刷新）
                     if (CalcDynamicHost != null && CalcDynamicHost.Children.Count == 0)
                     {
                         try { ReloadCalcCsvTables(false); }
                         catch (Exception ex) { LogManager.Instance.LogWarning("打开计算数据表时加载失败: " + ex.Message); }
                     }
                 }
+                // 如果选中的是主分类选项卡（工艺、建筑、结构、电气、给排水、暖通、自控、总图、公共图）
                 else if (new[] { "工艺", "建筑", "结构", "电气", "给排水", "暖通", "自控", "总图", "公共图" }.Contains(header))
                 {
-                    LoadButtonsForMainCategoryTab(added, header);
-                    if (header == "工艺") LoadConditionButtons();
+                    // 异步等待该主分类下的动态按钮加载完成，避免异步任务尚未执行就显示空面板
+                    await LoadButtonsForMainCategoryTabAsync(added, header);
+
+                    // 如果是“工艺”页，还需要单独等待条件图元面板的按钮加载完成
+                    if (header == "工艺")
+                    {
+                        await LoadConditionButtonsAsync();
+                    }
                 }
+                // 如果选中的是“图元集”或“图层管理”等子选项卡（通常位于某个主分类下）
                 else if (header.Contains("图元集") || header.Contains("图层管理"))
                 {
+                    // 查找所属的父级 TabItem（即主分类选项卡）
                     var parent = FindParentTabItem(added);
                     if (parent != null)
                     {
+                        // 获取父级标题作为分类名称
                         var categoryName = (parent.Header?.ToString() ?? string.Empty).Trim();
+                        // 同步加载该主分类下的按钮（因为此处可能是子选项卡切换，不需要异步等待）
                         LoadButtonsForMainCategoryTab(parent, categoryName);
                     }
                 }
+                // 其他情况不做特殊处理
             }
             catch (Exception ex)
             {
+                // 捕获任何异常并记录错误日志
                 LogManager.Instance.LogError("处理TabControl选择改变时出错: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 异步加载主分类按钮，保证分类数据准备完成后再创建界面按钮。
+        /// </summary>
+        private async Task LoadButtonsForMainCategoryTabAsync(TabItem tabItem, string categoryName)
+        {
+            try
+            {
+                // 分类树尚未完成初始化时，先从服务器重新加载一次分类数据。
+                if (_categoryTreeNodes == null || _categoryTreeNodes.Count == 0)
+                    await InitializeCategoryTreeAsync();
+
+                var panel = GetPanelByFolderName(categoryName);// 根据分类名称获取对应的 WrapPanel
+                if (panel == null)
+                {
+                    LogManager.Instance.LogWarning($"未找到分类 {categoryName} 对应的按钮面板。");
+                    return;
+                }
+
+                // 清除旧按钮，避免重复加载和旧分类按钮残留。
+                panel.Children.Clear();
+                await LoadButtonsFromDatabaseForCategory(categoryName, panel);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"异步加载分类 {categoryName} 按钮失败：{ex.Message}");
             }
         }
 
@@ -1370,17 +1433,24 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 从数据库加载一个主分类的按钮（包含处理子分类与直达文件）
+        /// 从数据库加载指定分类的按钮到 WrapPanel 面板（包含处理子分类与直达文件）
         /// </summary>
+        /// <param name="categoryName">分类名称（如“工艺”、“建筑”等）</param>
+        /// <param name="panel">承载按钮的 WrapPanel 面板</param>
         private async Task LoadButtonsFromDatabaseForCategory(string categoryName, WrapPanel panel)
         {
             try
             {
+                // 记录开始加载日志
                 LogManager.Instance.LogInfo($"=== 开始从数据库加载分类 {categoryName} ===");
-                var categoryNode = _categoryTreeNodes.FirstOrDefault(n =>
-                    n.Level == 0 && (string.Equals(n.Name, categoryName, StringComparison.OrdinalIgnoreCase) ||
-                                     string.Equals(n.DisplayText, categoryName, StringComparison.OrdinalIgnoreCase)));
+
+                // 在缓存的分类树节点中查找一级节点（Level == 0），匹配名称或显示文本（忽略大小写）
+                var categoryNode = FindMainCategoryNode(categoryName);
+
+                // 获取节点中存储的业务数据对象（CadCategory）
                 var category = categoryNode?.Data as CadCategory;
+
+                // 若未找到该分类，则回退使用本地资源加载按钮
                 if (category == null)
                 {
                     LogManager.Instance.LogInfo("服务器分类树中未找到分类: " + categoryName);
@@ -1388,24 +1458,32 @@ namespace GB_NewCadPlus_IV
                     return;
                 }
 
+                // 获取该分类下的所有子分类（子节点数据为 CadSubcategory）
                 var subcategories = categoryNode.Children
                     .Select(n => n.Data)
                     .OfType<CadSubcategory>()
                     .ToList();
+
+                // 清空面板现有内容
                 panel.Children.Clear();
+
+                // 如果没有子分类，则直接加载该分类下的文件（按钮）
                 if (subcategories.Count == 0)
                 {
                     await LoadFilesDirectlyForCategory(category, panel);
                 }
                 else
                 {
+                    // 否则按子分类分组加载文件
                     await LoadFilesBySubcategories(category, subcategories, panel);
                 }
 
+                // 记录加载完成日志
                 LogManager.Instance.LogInfo($"=== 完成加载分类 {categoryName} ===");
             }
             catch (Exception ex)
             {
+                // 若发生异常，记录错误并回退使用本地资源加载
                 LogManager.Instance.LogInfo($"从数据库加载分类 {categoryName} 时出错: {ex.Message}");
                 LoadButtonsFromResources(categoryName, panel);
             }
@@ -1577,6 +1655,31 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
+        /// 根据页面主分类标题查找分类树节点，兼容数据库分类名称中的数字编号前缀。
+        /// </summary>
+        private CategoryTreeNode? FindMainCategoryNode(string categoryName)
+        {
+            if (_categoryTreeNodes == null || string.IsNullOrWhiteSpace(categoryName))
+                return null;
+
+            string NormalizeCategoryName(string value)
+            {
+                var normalized = (value ?? string.Empty).Trim();
+                normalized = normalized.Replace('－', '-').Replace('—', '-').Replace('‐', '-');
+                normalized = Regex.Replace(normalized, @"^[0-9０-９]+\s*[-_\.、\s]+", string.Empty);
+                return normalized.Trim();
+            }
+
+            string requestedName = NormalizeCategoryName(categoryName);
+            return _categoryTreeNodes.FirstOrDefault(n =>
+                n.Level == 0 &&
+                (string.Equals(n.Name?.Trim(), categoryName.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(n.DisplayText?.Trim(), categoryName.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(NormalizeCategoryName(n.Name ?? string.Empty), requestedName, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(NormalizeCategoryName(n.DisplayText ?? string.Empty), requestedName, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        /// <summary>
         /// 根据主分类名字返回对应的 WrapPanel 引用（从 XAML 成员中查找）
         /// </summary>
         private WrapPanel GetPanelByFolderName(string folderName)
@@ -1600,23 +1703,42 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 从数据库加载分类下的按钮（更通用的批量接口，已在其它方法中调用）
         /// </summary>
+        /// <summary>
+        /// 从服务器数据库异步加载指定文件夹（分类）下的按钮，并按子分类分组展示到 WrapPanel 面板中
+        /// </summary>
+        /// <param name="folderName">分类名称（如“工艺”、“建筑”等）</param>
+        /// <param name="panel">承载按钮的 WrapPanel 面板</param>
         private async Task LoadButtonsFromDatabase(string folderName, WrapPanel panel)
         {
             try
             {
+                // 记录开始加载日志
                 LogManager.Instance.LogInfo($"开始从服务器加载分类 {folderName} 的按钮");
-                var categoryNode = _categoryTreeNodes.FirstOrDefault(n =>
-                    n.Level == 0 && (string.Equals(n.Name, folderName, StringComparison.OrdinalIgnoreCase) ||
-                                     string.Equals(n.DisplayText, folderName, StringComparison.OrdinalIgnoreCase)));
-                var category = categoryNode?.Data as CadCategory;
-                if (category == null) { LogManager.Instance.LogInfo("服务器分类树中未找到分类: " + folderName); return; }
 
+                // 在缓存的分类树节点中查找一级节点（Level == 0），匹配名称或显示文本（忽略大小写）
+                var categoryNode = FindMainCategoryNode(folderName);
+
+                // 获取节点中存储的业务数据对象（CadCategory）
+                var category = categoryNode?.Data as CadCategory;
+
+                // 若未找到该分类，则记录日志并返回（不做任何加载）
+                if (category == null)
+                {
+                    LogManager.Instance.LogInfo("服务器分类树中未找到分类: " + folderName);
+                    return;
+                }
+
+                // 获取该分类下的所有子分类（子节点数据为 CadSubcategory）
                 var subcategories = categoryNode.Children.Select(n => n.Data).OfType<CadSubcategory>().ToList();
+
+                // 定义一组背景颜色，用于交替显示子分类区块
                 var bgColors = new List<System.Windows.Media.Color> { Colors.FloralWhite, Colors.Azure, Colors.FloralWhite };
                 int colorIndex = 0;
 
+                // 遍历每个子分类，为每个子分类生成一个独立的区块（Border）
                 foreach (var sub in subcategories)
                 {
+                    // 创建边框容器，作为子分类的卡片样式
                     var border = new Border
                     {
                         BorderBrush = new SolidColorBrush(Colors.Gray),
@@ -1627,47 +1749,95 @@ namespace GB_NewCadPlus_IV
                         Background = new SolidColorBrush(bgColors[colorIndex % bgColors.Count]),
                         HorizontalAlignment = HorizontalAlignment.Left
                     };
+
+                    // 内部垂直面板，用于放置标题和按钮行
                     var sectionPanel = new StackPanel { Margin = new Thickness(3) };
-                    var header = new TextBlock { Text = sub.DisplayName, FontSize = 14, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2), Foreground = new SolidColorBrush(Colors.DarkBlue) };
+
+                    // 子分类标题（显示 DisplayName）
+                    var header = new TextBlock
+                    {
+                        Text = sub.DisplayName,
+                        FontSize = 14,
+                        FontWeight = FontWeights.Bold,
+                        Margin = new Thickness(0, 0, 0, 2),
+                        Foreground = new SolidColorBrush(Colors.DarkBlue)
+                    };
                     sectionPanel.Children.Add(header);
 
+                    // 异步调用 API 获取该子分类下的所有图形文件
                     var graphics = await _graphicApiService.GetFilesByCategoryIdAsync(sub.Id, "sub");
+
+                    // 如果存在文件，则按显示名称排序，并分列显示按钮
                     if (graphics.Count > 0)
                     {
+                        // 按显示名称排序
                         graphics.Sort((x, y) => x.DisplayName.CompareTo(y.DisplayName));
+
+                        // 每行显示3个按钮
                         int cols = 3;
                         for (int i = 0; i < graphics.Count; i += cols)
                         {
+                            // 创建水平行面板
                             var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+
+                            // 在当前行中生成最多 cols 个按钮
                             for (int j = 0; j < cols && i + j < graphics.Count; ++j)
                             {
                                 var g = graphics[i + j];
                                 string btnName = g.DisplayName;
+
+                                // 处理按钮显示名称：若包含下划线，则截取下划线后的部分作为显示名
                                 if (!string.IsNullOrWhiteSpace(btnName))
                                 {
                                     int idx = btnName.LastIndexOf('_');
                                     btnName = idx < 0 || idx + 1 >= btnName.Length ? btnName.Trim() : btnName.Substring(idx + 1).Trim();
                                 }
-                                var button = new Button { Content = btnName, Width = 88, Height = 22, Margin = new Thickness(0, 0, 5, 0), Tag = new ButtonTagCommandInfo { Type = "FileStorage", ButtonName = btnName, fileStorage = g } };
+
+                                // 创建按钮，设置宽度、高度、边距，并将文件对象存入 Tag 以备后续使用
+                                var button = new Button
+                                {
+                                    Content = btnName,
+                                    Width = 88,
+                                    Height = 22,
+                                    Margin = new Thickness(0, 0, 5, 0),
+                                    Tag = new ButtonTagCommandInfo { Type = "FileStorage", ButtonName = btnName, fileStorage = g }
+                                };
+
+                                // 附加动态按钮的点击事件等处理逻辑
                                 AttachDynamicButtonHandlers(button);
+
+                                // 将按钮添加到当前行
                                 row.Children.Add(button);
                             }
+
+                            // 将该行添加到子分类面板
                             sectionPanel.Children.Add(row);
                         }
                     }
                     else
                     {
-                        var no = new TextBlock { Text = "暂无文件", FontSize = 12, Margin = new Thickness(5, 0, 0, 3), Foreground = new SolidColorBrush(Colors.Gray) };
+                        // 若无文件，则显示“暂无文件”提示
+                        var no = new TextBlock
+                        {
+                            Text = "暂无文件",
+                            FontSize = 12,
+                            Margin = new Thickness(5, 0, 0, 3),
+                            Foreground = new SolidColorBrush(Colors.Gray)
+                        };
                         sectionPanel.Children.Add(no);
                     }
 
+                    // 将组装好的面板放入边框，并将边框添加到主面板中
                     border.Child = sectionPanel;
                     panel.Children.Add(border);
+
+                    // 更新背景颜色索引，使不同子分类区块交替颜色
                     colorIndex++;
                 }
             }
             catch (Exception ex)
             {
+                // 记录异常并重新抛出
                 LogManager.Instance.LogInfo("从数据库加载按钮时出错: " + ex.Message);
                 throw;
             }
@@ -1754,7 +1924,7 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 加载“条件图元”页签的按钮（工艺专用）
         /// </summary>
-        private async void LoadConditionButtons()
+        private async Task LoadConditionButtonsAsync()
         {
             try
             {
@@ -1773,6 +1943,14 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogInfo("加载条件图元按钮时出错: " + ex.Message);
                 MessageBox.Show("加载条件图元按钮时出错: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
             }
+        }
+
+        /// <summary>
+        /// 兼容旧代码调用条件图元按钮加载方法。
+        /// </summary>
+        private void LoadConditionButtons()
+        {
+            _ = LoadConditionButtonsAsync();
         }
 
         /// <summary>

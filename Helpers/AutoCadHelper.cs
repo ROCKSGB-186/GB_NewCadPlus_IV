@@ -27,74 +27,102 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 返回插入的 BlockReference 的 ObjectId，失败返回 ObjectId.Null。
         /// （保留原有实现，已做健壮性和注释增强）
         /// </summary>
+        /// <summary>
+        /// 从外部 DWG 文件中导入指定名称的块，并将其以 BlockReference 形式插入到当前文档的指定位置
+        /// </summary>
+        /// <param name="dwgPath">外部 DWG 文件的完整路径</param>
+        /// <param name="blockName">要导入的块名称</param>
+        /// <param name="insertPoint">插入点（WCS 坐标）</param>
+        /// <returns>成功返回新创建的 BlockReference 的 ObjectId，失败返回 ObjectId.Null</returns>
         public static ObjectId InsertBlockFromExternalDwg(string dwgPath, string blockName, Point3d insertPoint)
         {
+            // 获取当前活动的 AutoCAD 文档
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return ObjectId.Null;
 
-            // 保证在 AutoCAD 主线程并加文档锁
+            // 锁定当前文档，防止并发修改，确保在主线程中执行
             using (doc.LockDocument())
             {
                 try
                 {
-                    // 读取外部 DWG 到临时 Database
+                    // 创建一个临时数据库用于读取外部 DWG 文件
                     using (var sourceDb = new Database(false, true))
                     {
+                        // 以只读方式读取外部 DWG 文件到临时数据库
                         sourceDb.ReadDwgFile(dwgPath, System.IO.FileShare.Read, true, null);
 
+                        // 在临时数据库中开启事务
                         using (var sourceTr = sourceDb.TransactionManager.StartTransaction())
                         {
+                            // 获取源数据库的块表（只读）
                             var sourceBt = (BlockTable)sourceTr.GetObject(sourceDb.BlockTableId, OpenMode.ForRead);
+                            // 检查块表中是否存在指定名称的块定义
                             if (!sourceBt.Has(blockName))
                                 return ObjectId.Null;
 
+                            // 获取源块定义的 ObjectId
                             ObjectId sourceBtrId = sourceBt[blockName];
 
-                            // 克隆到当前文档数据库（一次性把块定义导入目标 DB）
+                            // 创建 IdMapping 用于记录克隆过程中的 ID 映射关系
                             IdMapping mapping = new IdMapping();
+                            // 将源块定义克隆到当前文档的块表中（即导入块定义）
+                            // DuplicateRecordCloning.Replace 表示若同名块已存在则替换
                             sourceDb.WblockCloneObjects(new ObjectIdCollection { sourceBtrId },
                                                         doc.Database.BlockTableId,
                                                         mapping,
                                                         DuplicateRecordCloning.Replace,
                                                         false);
 
+                            // 提交临时数据库的事务（完成克隆操作）
                             sourceTr.Commit();
 
+                            // 检查映射是否包含源块定义 ID，若没有则说明克隆失败
                             if (!mapping.Contains(sourceBtrId))
                                 return ObjectId.Null;
 
+                            // 获取克隆后的新块定义 ID（在当前文档的块表中）
                             ObjectId newBtrId = mapping[sourceBtrId].Value;
 
-                            // 在当前文档开启事务并插入 BlockReference（并正确处理属性）
+                            // 在当前文档中开启一个新事务，用于插入块引用
                             using (var tr = doc.Database.TransactionManager.StartTransaction())
                             {
-                                // 获取目标模型空间（写模式）
+                                // 获取当前图纸空间/模型空间的块表记录（写模式），通常为模型空间
                                 var ms = (BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId, OpenMode.ForWrite);
-                                // 创建 BlockReference 引用新块定义
+
+                                // 创建 BlockReference 对象，引用新导入的块定义，并设置插入点
                                 var blockRef = new BlockReference(insertPoint, newBtrId);
-                                // 把 BlockReference 加入模型空间并注册
+
+                                // 将块引用添加到模型空间中
                                 ms.AppendEntity(blockRef);
                                 tr.AddNewlyCreatedDBObject(blockRef, true);
-                                // 读取目标数据库中新克隆的块表记录（以只读方式）
+
+                                // 获取新导入的块定义（只读），以便遍历其中的属性定义
                                 var btr = (BlockTableRecord)tr.GetObject(newBtrId, OpenMode.ForRead);
-                                // 如果块定义包含属性定义，逐一创建 AttributeReference 并追加到 blockRef
+
+                                // 如果块定义包含属性定义（AttributeDefinition），则创建对应的属性引用（AttributeReference）
                                 if (btr.HasAttributeDefinitions)
                                 {
                                     foreach (ObjectId id in btr)
                                     {
                                         var dbObj = tr.GetObject(id, OpenMode.ForRead);
+                                        // 检查是否为非固定的属性定义（即用户可编辑的属性）
                                         if (dbObj is AttributeDefinition attDef && !attDef.Constant)
                                         {
-                                            // 创建属性引用，并从定义设置默认值（相对于块）
+                                            // 创建属性引用，并从属性定义中复制默认值，应用块变换矩阵
                                             var attRef = new AttributeReference();
                                             attRef.SetAttributeFromBlock(attDef, blockRef.BlockTransform);
-                                            // 必须在把属性附加到 BlockReference 后调用 AddNewlyCreatedDBObject
+
+                                            // 将属性引用附加到块引用的属性集合中
                                             blockRef.AttributeCollection.AppendAttribute(attRef);
+                                            // 将新创建的属性引用添加到事务，以便持久化到数据库
                                             tr.AddNewlyCreatedDBObject(attRef, true);
                                         }
                                     }
                                 }
+
+                                // 提交当前文档事务，保存所有更改
                                 tr.Commit();
+                                // 返回新插入的块引用的 ObjectId
                                 return blockRef.ObjectId;
                             }
                         }
@@ -102,11 +130,13 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex)
                 {
+                    // 捕获 AutoCAD 运行时异常，在命令行输出错误信息
                     Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"\n插入块失败: {ex.Message}");
                     return ObjectId.Null;
                 }
                 catch (Exception ex)
                 {
+                    // 捕获其他未知异常
                     Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"\n未知错误: {ex.Message}");
                     return ObjectId.Null;
                 }

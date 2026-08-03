@@ -3,6 +3,9 @@ using System.Windows.Input;
 
 namespace GB_NewCadPlus_IV.Models
 {
+    /// <summary>
+    /// 中继命令类
+    /// </summary>
     public class RelayCommand : ICommand
     {
         private readonly Action _execute;
