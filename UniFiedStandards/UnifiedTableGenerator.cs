@@ -2671,7 +2671,22 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                                         ed.WriteMessage($"  其中非端点交叉点数量: {validIntersections.Count}");
 
-                                        foreach (var pt in validIntersections)
+                                        // 同一对管道在 PL 顶点或相邻线段处可能返回重复交点。
+                                        // 这里只按当前新旧管道去重，不合并不同管道之间的同坐标交叉关系。
+                                        double intersectionTol = Math.Max(1e-6, wpfScale * 0.001);
+                                        var uniqueIntersections = new List<Point3d>();
+                                        foreach (var intersection in validIntersections)
+                                        {
+                                            if (!uniqueIntersections.Any(existing =>
+                                                    existing.DistanceTo(intersection) <= intersectionTol))
+                                            {
+                                                uniqueIntersections.Add(intersection);
+                                            }
+                                        }
+
+                                        ed.WriteMessage($"  去重后的交叉点数量: {uniqueIntersections.Count}");
+
+                                        foreach (var pt in uniqueIntersections)
                                         {
                                             string oldName = "未知";
                                             var attrs = GetEntityAttributeMap(tr, oldBr);
@@ -2714,16 +2729,19 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                                 }
 
                                                 ObjectId entityBelow, entityAbove;
+                                                bool newPipeIsAbove;
                                                 if (opt.SelectedAction == PipeCrossingMultiDialogWpf.CrossingAction.Cover)
                                                 {
                                                     entityBelow = opt.OldPipeId;
                                                     entityAbove = opt.NewPipeId;
+                                                    newPipeIsAbove = true;
                                                     ed.WriteMessage($"\n[调试] 处理方式: 覆盖, 旧管道在下, 新管道在上");
                                                 }
                                                 else
                                                 {
                                                     entityBelow = opt.NewPipeId;
                                                     entityAbove = opt.OldPipeId;
+                                                    newPipeIsAbove = false;
                                                     ed.WriteMessage($"\n[调试] 处理方式: 下方, 新管道在下, 旧管道在上");
                                                 }
 
@@ -2739,7 +2757,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                                                 ed.WriteMessage($"\n[调试] 遮罩创建完成，ObjectId: {maskId}");
 
-                                                SetDrawOrderBetween(tr, db, entityBelow, maskId, entityAbove);
+                                                SetNewPipeDrawOrderWithoutMovingExistingPipe(
+                                                    tr,
+                                                    db,
+                                                    opt.NewPipeId,
+                                                    opt.OldPipeId,
+                                                    maskId,
+                                                    newPipeIsAbove);
                                                 ed.WriteMessage($"\n[调试] 绘图次序调整完毕，顺序：{entityBelow} -> {maskId} -> {entityAbove}");
                                             }
                                             ed.WriteMessage("\n[完成] 所有交叉点处理完毕。");
@@ -3189,11 +3213,63 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             var dot = tr.GetObject(dotId, OpenMode.ForWrite) as DrawOrderTable;
             if (dot == null) return;
 
-            // 按顺序调整
-            dot.MoveToBottom(new ObjectIdCollection { entityBelow });
+            // 只调整当前交叉点涉及的三个对象，不再把整条下方管道移动到模型空间最底部。
+            // 这样处理 A、B、C 多条管道时，后一个交叉点不会直接破坏前一个交叉点的局部关系。
             dot.MoveAbove(new ObjectIdCollection { mask }, entityBelow);
             dot.MoveAbove(new ObjectIdCollection { entityAbove }, mask);
 
+            db.TransactionManager.QueueForGraphicsFlush();
+        }
+
+        /// <summary>
+        /// 设置新管道与既有管道之间的局部绘图次序，但不移动既有管道。
+        /// </summary>
+        /// <param name="tr">当前事务</param>
+        /// <param name="db">当前数据库</param>
+        /// <param name="newPipeId">新管道块参照 ID</param>
+        /// <param name="existingPipeId">既有管道块参照 ID，仅作为定位参照</param>
+        /// <param name="maskId">当前交叉点的 Wipeout ID</param>
+        /// <param name="newPipeIsAbove">新管道是否位于既有管道上方</param>
+        private void SetNewPipeDrawOrderWithoutMovingExistingPipe(
+            Transaction tr,
+            Database db,
+            ObjectId newPipeId,
+            ObjectId existingPipeId,
+            ObjectId maskId,
+            bool newPipeIsAbove)
+        {
+            // 任意一个对象无效时，不执行绘图次序调整。
+            if (newPipeId.IsNull || existingPipeId.IsNull || maskId.IsNull) return;
+
+            // 获取模型空间的绘图次序表。
+            var blockTable = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+            var modelSpaceId = blockTable[BlockTableRecord.ModelSpace];
+            var modelSpace = tr.GetObject(modelSpaceId, OpenMode.ForRead) as BlockTableRecord;
+            var drawOrderTableId = modelSpace.DrawOrderTableId;
+            if (drawOrderTableId.IsNull) return;
+
+            // 以写入方式打开绘图次序表。
+            var drawOrderTable = tr.GetObject(drawOrderTableId, OpenMode.ForWrite) as DrawOrderTable;
+            if (drawOrderTable == null) return;
+
+            if (newPipeIsAbove)
+            {
+                // 覆盖关系：既有管道 -> 遮罩 -> 新管道。
+                // 这里只移动遮罩和新管道，不移动既有管道。
+                drawOrderTable.MoveAbove(new ObjectIdCollection { maskId }, existingPipeId);
+                drawOrderTable.MoveBelow(new ObjectIdCollection { maskId }, newPipeId);
+                drawOrderTable.MoveAbove(new ObjectIdCollection { newPipeId }, maskId);
+            }
+            else
+            {
+                // 下方关系：新管道 -> 遮罩 -> 既有管道。
+                // 既有管道仍然只作为遮罩定位参照，不改变其与其他对象的既有关系。
+                drawOrderTable.MoveAbove(new ObjectIdCollection { maskId }, newPipeId);
+                drawOrderTable.MoveBelow(new ObjectIdCollection { maskId }, existingPipeId);
+                drawOrderTable.MoveBelow(new ObjectIdCollection { newPipeId }, maskId);
+            }
+
+            // 请求 AutoCAD 立即刷新图形显示。
             db.TransactionManager.QueueForGraphicsFlush();
         }
 

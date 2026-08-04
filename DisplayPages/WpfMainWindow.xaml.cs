@@ -7817,13 +7817,11 @@ namespace GB_NewCadPlus_IV
         {
             // 设置绘图比例到全局变量，供命令使用
             Env.Document.SendStringToExecute("DrawInletPipeByClicks ", false, false, false);
-            //Env.Document.SendStringToExecute("Draw_GD_PipeLine_DynamicBlock ", false, false, false);
         }
 
         private void 绘制出口管道_Click(object sender, RoutedEventArgs e)
         {
             Env.Document.SendStringToExecute("DrawOutletPipeByClicks ", false, false, false);
-            //Env.Document.SendStringToExecute("Draw_GD_PipeLine_DynamicBlock ", false, false, false);
         }
 
         #endregion

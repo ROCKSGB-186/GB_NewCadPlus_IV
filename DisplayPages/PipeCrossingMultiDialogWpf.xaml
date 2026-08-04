@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="管道交叉处理" Width="700" MinWidth="600" MinHeight="400">
+        Title="管道交叉处理" Width="700" Height="450" MinWidth="600" MinHeight="400">
     <Window.Resources>
         <Style x:Key="CenterCellStyle" TargetType="TextBlock">
             <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -24,7 +24,7 @@
         </Grid.RowDefinitions>
 
         <!-- 标题 -->
-        <TextBlock Grid.Row="0" Text="检测到以下交叉点，请为每个交叉点选择处理方式："
+        <TextBlock Grid.Row="0" Text="检测到以下交叉点，请分别选择每个交叉点的局部上下关系："
                    FontWeight="Bold" FontSize="15" Margin="0,0,0,10"/>
 
         <DataGrid Grid.Row="1" ItemsSource="{Binding Options}" 
@@ -49,9 +49,9 @@
                                 <TextBlock Text="操作：" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                 <RadioButton Content="相连" Margin="0,0,5,0"
                                      IsChecked="{Binding IsConnect, UpdateSourceTrigger=PropertyChanged}"/>
-                                <RadioButton Content="覆盖" Margin="0,0,5,0"
+                                <RadioButton Content="覆盖（新管道在上）" Margin="0,0,5,0"
                                      IsChecked="{Binding IsCover, UpdateSourceTrigger=PropertyChanged}"/>
-                                <RadioButton Content="下方" Margin="0,0,0,0"
+                                <RadioButton Content="下方（新管道在下）" Margin="0,0,0,0"
                                      IsChecked="{Binding IsUnder, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                         </DataTemplate>
