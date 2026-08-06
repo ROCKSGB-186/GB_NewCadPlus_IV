@@ -129,6 +129,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <Folder Include="GB_NewCadPlus_IV_Server\" />
 	  <Folder Include="Resources\暖通\02-设备\" />
 	  <Folder Include="Resources\暖通\01-风路\" />
 	</ItemGroup>

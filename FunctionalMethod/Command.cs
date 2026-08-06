@@ -4,6 +4,7 @@ using Autodesk.AutoCAD.PlottingServices;
 using Autodesk.AutoCAD.Windows;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
+using GB_NewCadPlus_IV.Models;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using IFoxCAD.Cad;
 using NPOI.SS.Formula.Functions;
@@ -126,6 +127,46 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"\nNotifyDirectionChanged 错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 验证规范库接口：查询 GB/T 9124.1-2019 表52 PN10 的 DN50 法兰数据。
+        /// </summary>
+        [CommandMethod("GB_STANDARD_DN50_TEST")]
+        public static async void QueryStandardDn50()
+        {
+            // 获取当前图纸文档，用于向命令行输出验证结果。
+            Document document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null)
+            {
+                return;
+            }
+
+            // 获取当前文档编辑器。
+            Editor editor = document.Editor;
+
+            try
+            {
+                // 创建客户端规范 API 服务。
+                var standardApiService = new StandardApiService();
+
+                // 调用此前未被使用的 DN50 验证入口。
+                FlangeStandardMatchResponse response = await standardApiService.QueryDn50Async();
+
+                // 输出服务器返回的业务结果。
+                editor.WriteMessage($"\n规范库 DN50 查询：成功={response.Success}，消息={response.Message}");
+
+                // 输出当前选定系列下的关键 AutoCAD 属性，便于现场确认接口链路。
+                foreach (KeyValuePair<string, string> attribute in response.Attributes)
+                {
+                    editor.WriteMessage($"\n{attribute.Key}={attribute.Value}");
+                }
+            }
+            catch (Exception exception)
+            {
+                // 网络或服务器异常只反馈命令行，不影响 AutoCAD 主进程。
+                editor.WriteMessage($"\n规范库 DN50 查询失败：{exception.Message}");
             }
         }
 

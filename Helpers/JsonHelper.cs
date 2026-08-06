@@ -3,6 +3,7 @@ using GB_NewCadPlus_IV.UniFiedStandards;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -85,6 +86,15 @@ namespace GB_NewCadPlus_IV.Helpers
         {
             // 准备结果集合
             var list = new List<OverlapCandidate>();
+            var totalTimer = Stopwatch.StartNew();
+            long openTicks = 0;
+            long extentsTicks = 0;
+            long overlapTicks = 0;
+            long scoreTicks = 0;
+            int enumeratedCount = 0;
+            int openedCount = 0;
+            int extentsRejectedCount = 0;
+            int overlapRejectedCount = 0;
 
             // 参数校验
             if (tr == null || insertingBr == null) return list;
@@ -93,22 +103,53 @@ namespace GB_NewCadPlus_IV.Helpers
             string insertLayer = string.Empty;
             try { insertLayer = (insertingBr.Layer ?? string.Empty).Trim(); } catch { insertLayer = string.Empty; }
 
+            // 插入实体包围盒在本次查找中保持不变，只读取一次
+            if (!InsertGraphicHelper.TryGetEntityExtents(insertingBr, out var insertExtents)) return list;
+
             // 遍历当前空间全部实体
             foreach (ObjectId id in tr.CurrentSpace)
             {
+                enumeratedCount++;
                 // 跳过自身
                 if (id == insertingBr.ObjectId) continue;
 
                 // 读取候选实体
+                var openTimer = Stopwatch.StartNew();
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                openTimer.Stop();
+                openTicks += openTimer.ElapsedTicks;
+                openedCount++;
                 // 无效实体跳过
                 if (ent == null || ent.IsErased) continue;
 
+                // 包围盒是保守的粗筛选，排除不可能重叠的实体
+                var extentsTimer = Stopwatch.StartNew();
+                bool hasExtents = InsertGraphicHelper.TryGetEntityExtents(ent, out var entityExtents);
+                bool extentsIntersect = hasExtents && InsertGraphicHelper.IsExtentsIntersect(insertExtents, entityExtents);
+                extentsTimer.Stop();
+                extentsTicks += extentsTimer.ElapsedTicks;
+                if (!extentsIntersect)
+                {
+                    extentsRejectedCount++;
+                    continue;
+                }
+
                 // 重叠判定，未重叠跳过
-                if (!InsertGraphicHelper.IsEntityOverlap(insertingBr, ent)) continue;
+                var overlapTimer = Stopwatch.StartNew();
+                bool isOverlap = InsertGraphicHelper.IsEntityOverlap(insertingBr, ent, insertExtents, entityExtents);
+                overlapTimer.Stop();
+                overlapTicks += overlapTimer.ElapsedTicks;
+                if (!isOverlap)
+                {
+                    overlapRejectedCount++;
+                    continue;
+                }
 
                 // 计算候选分数
-                double score = InsertGraphicHelper.ComputeOverlapCandidateScore(insertingBr, ent);
+                var scoreTimer = Stopwatch.StartNew();
+                double score = InsertGraphicHelper.ComputeOverlapCandidateScore(insertingBr, ent, insertExtents, entityExtents);
+                scoreTimer.Stop();
+                scoreTicks += scoreTimer.ElapsedTicks;
 
                 // 记录同层标识
                 bool sameLayer = false;
@@ -157,6 +198,7 @@ namespace GB_NewCadPlus_IV.Helpers
             try
             {
                 LogManager.Instance.LogInfo($"\n重叠候选数量: 原始={list.Count}, 参与合并={result.Count}");
+                LogManager.Instance.LogInfo($"\n重叠查找性能: 总耗时={totalTimer.Elapsed.TotalMilliseconds:F2}ms, 枚举={enumeratedCount}, 打开={openedCount}, 包围盒排除={extentsRejectedCount}, 几何排除={overlapRejectedCount}, 对象打开={openTicks * 1000.0 / Stopwatch.Frequency:F2}ms, 包围盒={extentsTicks * 1000.0 / Stopwatch.Frequency:F2}ms, 几何判定={overlapTicks * 1000.0 / Stopwatch.Frequency:F2}ms, 评分={scoreTicks * 1000.0 / Stopwatch.Frequency:F2}ms");
                 for (int i = 0; i < result.Count; i++)
                 {
                     var c = result[i];

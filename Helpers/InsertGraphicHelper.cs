@@ -1,4 +1,5 @@
 using GB_NewCadPlus_IV.FunctionalMethod;
+using GB_NewCadPlus_IV.Models;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using System;
 using System.Collections.Generic;
@@ -6,6 +7,7 @@ using System.Linq;
 using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
+using static GB_NewCadPlus_IV.Helpers.JsonHelper;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace GB_NewCadPlus_IV.Helpers
@@ -109,7 +111,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 尝试安全获取实体包围盒（防止部分实体抛异常）
         /// </summary>
-        private static bool TryGetEntityExtents(Entity entity, out Extents3d extents)
+        internal static bool TryGetEntityExtents(Entity entity, out Extents3d extents)
         {
             // 先给 out 参数一个默认值，避免未赋值异常
             extents = default;
@@ -134,7 +136,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 判断两个包围盒是否相交（含接触）
         /// </summary>
-        private static bool IsExtentsIntersect(Extents3d a, Extents3d b, double tol = 1e-6)
+        internal static bool IsExtentsIntersect(Extents3d a, Extents3d b, double tol = 1e-6)
         {
             // X 轴左侧分离
             if (a.MaxPoint.X < b.MinPoint.X - tol) return false;
@@ -161,8 +163,17 @@ namespace GB_NewCadPlus_IV.Helpers
             if (!TryGetEntityExtents(source, out var e1)) return false;
             // 目标实体包围盒获取失败，直接不重叠
             if (!TryGetEntityExtents(target, out var e2)) return false;
+
+            return IsEntityOverlap(source, target, e1, e2);
+        }
+
+        /// <summary>
+        /// 使用已缓存包围盒判断两个实体是否重叠，避免重复读取几何包围盒
+        /// </summary>
+        internal static bool IsEntityOverlap(Entity source, Entity target, Extents3d sourceExtents, Extents3d targetExtents)
+        {
             // 包围盒不相交直接返回
-            if (!IsExtentsIntersect(e1, e2)) return false;
+            if (!IsExtentsIntersect(sourceExtents, targetExtents)) return false;
 
             // 当两者都是曲线时，追加一次更精确的求交判定
             if (source is Curve c1 && target is Curve c2)
@@ -312,6 +323,17 @@ namespace GB_NewCadPlus_IV.Helpers
             // 包围盒读取失败直接最低分
             if (!TryGetEntityExtents(insertingBr, out var srcExt)) return double.MinValue;
             if (!TryGetEntityExtents(candidate, out var dstExt)) return double.MinValue;
+
+            return ComputeOverlapCandidateScore(insertingBr, candidate, srcExt, dstExt);
+        }
+
+        /// <summary>
+        /// 使用已缓存包围盒计算候选分数，避免重复读取几何包围盒
+        /// </summary>
+        internal static double ComputeOverlapCandidateScore(BlockReference insertingBr, Entity candidate, Extents3d srcExt, Extents3d dstExt)
+        {
+            // 空对象直接最低分
+            if (insertingBr == null || candidate == null) return double.MinValue;
 
             // 必须先满足相交
             if (!IsExtentsIntersect(srcExt, dstExt)) return double.MinValue;
@@ -527,10 +549,15 @@ namespace GB_NewCadPlus_IV.Helpers
                 if (ShouldSkipInheritedValue(newValue)) continue;
 
                 // 值没变化就不写，减少无效写事务
-                if (string.Equals(ar.TextString ?? string.Empty, newValue, StringComparison.Ordinal)) continue;
+                string oldValue = ar.TextString ?? string.Empty;
+                if (string.Equals(oldValue, newValue, StringComparison.Ordinal)) continue;
 
                 // 执行覆盖写入
                 ar.TextString = newValue;
+
+                // 只记录实际发生的属性赋值，便于核对插入图元的 Tag 和最终值。
+                LogManager.Instance.LogInfo(
+                    $"[属性继承赋值][AttributeReference] Tag={tag}, OldValue={oldValue}, NewValue={newValue}, TargetObjectId={targetBr.ObjectId}");
             }
         }
 
@@ -626,6 +653,10 @@ namespace GB_NewCadPlus_IV.Helpers
                 if (oldArray == null || oldArray.Length == 0)
                 {
                     xrec.Data = new ResultBuffer(new TypedValue((int)DxfCode.Text, val ?? string.Empty));
+
+                    // 记录首次创建 XRecord 数据时的实际赋值。
+                    LogManager.Instance.LogInfo(
+                        $"[属性继承赋值][XRecord] Tag={key}, OldValue=, NewValue={val ?? string.Empty}, TargetObjectId={targetEntity.ObjectId}");
                     continue;
                 }
 
@@ -646,6 +677,10 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 // 回写 XRecord 数据
                 xrec.Data = new ResultBuffer(newArray);
+
+                // 记录 XRecord 实际发生的标题和值变更。
+                LogManager.Instance.LogInfo(
+                    $"[属性继承赋值][XRecord] Tag={key}, OldValue={oldText}, NewValue={newText}, TargetObjectId={targetEntity.ObjectId}");
             }
         }
 
@@ -778,7 +813,7 @@ namespace GB_NewCadPlus_IV.Helpers
         public static readonly bool _propertySyncPreferSameLayer = true;
 
         // 最多参与合并的重叠候选数量（防止大图性能波动）
-        public static readonly int _propertySyncMaxCandidates = 8;
+        public static readonly int _propertySyncMaxCandidates = 3;
 
         // 最多合并字段数量（防止异常图元导致字段爆炸）
         public static readonly int _propertySyncMaxMergedFields = 200;
@@ -787,10 +822,10 @@ namespace GB_NewCadPlus_IV.Helpers
         public static readonly HashSet<string> _propertySyncBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {   "ID","GUID","UUID","OBJECTID","HANDLE", "CREATEDAT","UPDATEDAT","CREATETIME","UPDATETIME","TIMESTAMP",
             "CREATEDBY","UPDATEDBY","USER","USERNAME","OWNER", "VERSION","REVISION","REV", "FILENAME","FILEPATH",
-            "FILEHASH","PREVIEWIMAGEPATH","PREVIEWIMAGENAME", "BLOCKNAME","LAYERNAME", "NAME", "名称" 
+            "FILEHASH","PREVIEWIMAGEPATH","PREVIEWIMAGENAME", "BLOCKNAME","LAYERNAME", "NAME", "名称"
         };
 
-       
+
 
 
         #endregion
@@ -909,7 +944,7 @@ namespace GB_NewCadPlus_IV.Helpers
             // 获取 LogManager 的单例实例，用于记录日志
             var logger = LogManager.Instance;
             // 在日志文件中记录命令开始执行
-            logger.LogInfo(">>> [DEBUG] 开始执行 COPYDWGALLFAST 命令");
+            logger.LogInfo(">>> 开始执行 COPYDWGALLFAST 命令");
 
             // 获取当前活动的 AutoCAD 文档对象
             var doc = Application.DocumentManager.MdiActiveDocument;
@@ -1110,18 +1145,28 @@ namespace GB_NewCadPlus_IV.Helpers
                         }
 
                         // 记录日志，表示拖拽结束，开始核心逻辑
-                        logger.LogInfo("拖拽结束，开始执行重叠检测与属性继承逻辑...");
+                        logger.LogInfo($"拖拽结束：插入点=({targetPoint.X:F3},{targetPoint.Y:F3},{targetPoint.Z:F3}), ObjectId={fileEntity.ObjectId}, 图块名={fileEntity.Name}");
+                        logger.LogInfo($"开始重叠检测：候选上限={_propertySyncMaxCandidates}, 当前图层={fileEntity.Layer}");
 
                         // ================== 核心新功能：重叠检测与属性继承（带 LogManager 日志） ==================
 
                         // 初始化字典 overlapSourcePropertyMap，用于存储从重叠图元读取到的属性
                         var overlapSourcePropertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                        // 调用 FindOverlappedCandidates 查找当前插入点附近所有可能重叠的候选图元
-                        var overlapCandidates = JsonHelper.FindOverlappedCandidates(tr, fileEntity, _propertySyncMaxCandidates);
+                        List<OverlapCandidate> overlapCandidates = new List<OverlapCandidate>();
+
+                        if (!VariableDictionary.winForm_Status)//如果不是winform状态，则查找当前插入点附近所有可能重叠的候选图元
+
+                            // 调用 FindOverlappedCandidates 查找当前插入点附近所有可能重叠的候选图元
+                            overlapCandidates = JsonHelper.FindOverlappedCandidates(tr, fileEntity, _propertySyncMaxCandidates);
 
                         // 记录日志，输出找到的候选图元数量
-                        logger.LogInfo($"[DEBUG] 找到重叠候选图元数量: {overlapCandidates.Count}");
+                        logger.LogInfo($"重叠检测完成：候选数量={overlapCandidates.Count}");
+                        for (int candidateIndex = 0; candidateIndex < overlapCandidates.Count; candidateIndex++)
+                        {
+                            var candidate = overlapCandidates[candidateIndex];
+                            logger.LogInfo($"重叠候选[{candidateIndex + 1}]：ObjectId={candidate.Entity.ObjectId}, 类型={candidate.Entity.GetType().Name}, 图层={candidate.Entity.Layer}, 评分={candidate.Score:F6}, 同层={candidate.IsSameLayer}");
+                        }
 
                         // 如果找到了重叠候选图元
                         if (overlapCandidates.Count > 0)
@@ -1133,7 +1178,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             overlapSourcePropertyMap = BuildMergedPropertyMapFromCandidates(tr, overlapCandidates, activeWhitelist);
 
                             // 记录日志，输出过滤后待同步的属性数量
-                            logger.LogInfo($"[DEBUG] 过滤后待同步属性数量: {overlapSourcePropertyMap.Count}");
+                            logger.LogInfo($"入口管道属性合并完成：属性数量={overlapSourcePropertyMap.Count}");
 
                             // 如果有属性，打印前 5 个属性的键值对，方便排查
                             if (overlapSourcePropertyMap.Count > 0)
@@ -1142,7 +1187,7 @@ namespace GB_NewCadPlus_IV.Helpers
                                 foreach (var kv in overlapSourcePropertyMap) // 遍历属性字典
                                 {
                                     // 记录每个属性的名称和值
-                                    logger.LogInfo($"[DEBUG]   属性名: [{kv.Key}], 属性值: [{kv.Value}]");
+                                    logger.LogInfo($"入口管道属性[{debugCount + 1}]：{kv.Key}={kv.Value}");
                                     debugCount++; // 计数器加 1
                                     if (debugCount >= 5) break; // 只打印前 5 个，避免日志过多
                                 }
@@ -1150,13 +1195,13 @@ namespace GB_NewCadPlus_IV.Helpers
                             else
                             {
                                 // 如果数量为 0，记录警告日志，提示可能是白名单过滤掉了
-                                logger.LogWarning("[DEBUG] 警告：未找到可同步属性。请检查白名单配置或原图元是否有扩展数据/块属性。");
+                                logger.LogWarning("未找到可同步属性：请检查入口管道块属性、扩展字典或白名单配置。");
                             }
                         }
                         else
                         {
                             // 如果没有重叠，记录警告日志，提示用户检查插入位置
-                            logger.LogWarning("[DEBUG] 未检测到重叠图元。请确保新图元与旧图元有几何交集。");
+                            logger.LogWarning("未检测到重叠图元：无法从入口管道读取 DN/PN。");
                         }
 
                         // 如果成功读取到有效的重叠属性
@@ -1168,8 +1213,14 @@ namespace GB_NewCadPlus_IV.Helpers
                             SyncCommonPropertiesToEntityXRecord(tr, fileEntity, overlapSourcePropertyMap);
 
                             // 记录日志，说明已向块参照同步了多少个属性
-                            logger.LogInfo($"[DEBUG] 已向块参照同步 {overlapSourcePropertyMap.Count} 个属性。");
+                            logger.LogInfo($"已向新图块同步入口管道属性：属性数量={overlapSourcePropertyMap.Count}");
                         }
+
+                        logger.LogInfo($"准备执行规范匹配：块ObjectId={fileEntity.ObjectId}");
+
+                        // 法兰图元必须在炸开前完成规范查询，否则规范属性无法写入块参照的 AttributeReference。
+                        FlangeStandardMatchResponse? flangeStandardResponse =
+                            ApplyFlangeStandardAttributes(tr, fileEntity, overlapSourcePropertyMap, logger);
 
                         // ================== 结束核心新功能 ==================
 
@@ -1197,14 +1248,21 @@ namespace GB_NewCadPlus_IV.Helpers
                         if (overlapSourcePropertyMap.Count > 0)
                         {
                             // 记录日志，说明正在向多少个分解后的实体同步属性
-                            logger.LogInfo($"[DEBUG] 正在向 {insertedEntities.Count} 个分解后的实体同步属性...");
+                            logger.LogInfo($"图元炸开完成：新实体数量={insertedEntities.Count}，开始同步继承属性");
 
                             // 调用 SyncCommonPropertiesToInsertedEntities 遍历分解后的实体，将属性同步到它们的扩展数据或嵌套块中
                             SyncCommonPropertiesToInsertedEntities(tr, insertedEntities, overlapSourcePropertyMap);
 
                             // 记录日志，说明属性同步流程结束
-                            logger.LogInfo("[DEBUG] 属性同步流程结束。");
+                            logger.LogInfo("炸开后属性同步完成。");
                         }
+
+                        // 规范属性位于炸开后的嵌套块中，必须在入口管道属性同步完成后再写入，避免被继承值覆盖。
+                        ApplyStandardResponseToInsertedEntities(
+                            tr,
+                            insertedEntities,
+                            flangeStandardResponse,
+                            logger);
 
                         // 检查是否有待创建的标注文本 dimString
                         if (VariableDictionary.dimString != null)
@@ -1230,7 +1288,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         // 标记操作成功
                         insertSuccess = true;
                         // 记录日志，说明事务提交成功
-                        logger.LogInfo("事务提交成功，插入完成。");
+                        logger.LogInfo($"事务提交成功：插入完成，炸开实体数量={insertedEntities.Count}");
                     }
                 }
 
@@ -1277,8 +1335,282 @@ namespace GB_NewCadPlus_IV.Helpers
                 // 通知上层调用者最终结果
                 RaiseCopyDwgAllFastCompleted(insertSuccess, insertSuccess ? null : failReason);
                 // 记录命令执行结束日志
-                logger.LogInfo("<<< [DEBUG] 命令执行结束");
+                logger.LogInfo("<<< 命令执行结束");
             }
+        }
+
+        /// <summary>
+        /// 根据从管道继承的属性构建规范查询请求，调用 API 匹配法兰标准，并返回匹配结果。
+        /// </summary>
+        /// <param name="transaction">数据库事务，用于可能的数据读写。</param>
+        /// <param name="flangeBlock">当前处理的法兰块参照，用于获取块信息。</param>
+        /// <param name="inheritedProperties">从入口管道继承的属性字典（键为属性名，值为属性值）。</param>
+        /// <param name="logger">日志管理器，记录操作和诊断信息。</param>
+        /// <returns>规范匹配响应对象；若参数无效、缺少关键属性或 API 调用失败则返回 null。</returns>
+        private static FlangeStandardMatchResponse? ApplyFlangeStandardAttributes(
+            DBTrans transaction,
+            BlockReference flangeBlock,
+            IDictionary<string, string> inheritedProperties,
+            LogManager logger)
+        {
+            // 参数有效性检查
+            if (transaction == null || flangeBlock == null || inheritedProperties == null)
+            {
+                logger?.LogWarning("参数无效：transaction、flangeBlock 或 inheritedProperties 为空。");
+                return null;
+            }
+
+            // 记录开始处理信息
+            logger.LogInfo($"开始规范查询：块ObjectId={flangeBlock.ObjectId}, 图块名={flangeBlock.Name}, 继承属性数量={inheritedProperties.Count}");
+            logger.LogInfo($"可用属性键：{string.Join(",", inheritedProperties.Keys)}");
+
+            // 从继承属性中提取关键信息：DN、PN，使用多个可能的键名进行查找（不区分大小写）
+            string dn = FindProperty(inheritedProperties, "DN", "公称通径", "通径", "管径", "公称直径");
+            string pn = FindProperty(inheritedProperties, "PN", "公称压力", "压力等级");
+
+            // 必须同时具有 DN 和 PN 才能进行查询
+            if (string.IsNullOrWhiteSpace(dn) || string.IsNullOrWhiteSpace(pn))
+            {
+                logger.LogWarning($"缺少 DN/PN，跳过查询：DN={dn ?? string.Empty}, PN={pn ?? string.Empty}");
+                return null;
+            }
+
+            // 构建查询请求对象
+            var request = new FlangeStandardMatchRequest
+            {
+                // 标准化 DN、PN、系列
+                DN = NormalizeDn(dn),
+                PN = NormalizePn(pn),
+                Series = NormalizeSeries(FindProperty(inheritedProperties, "SERIES", "钢管系列", "管道系列")),
+                // 固定使用 GB/T 9124.1-2019 标准库，不采用入口管道的 FLG_STD 覆盖
+                StandardNumber = "GB/T 9124.1-2019",
+                // 法兰类型和密封面形式，若未提供则使用默认值 "PL" 和 "RF"
+                FlangeType = FindProperty(inheritedProperties, "FLG_TYPE", "法兰类型") ?? "PL",
+                FaceType = FindProperty(inheritedProperties, "FACE_TYPE", "密封面形式", "密封面型式") ?? "RF"
+            };
+
+            // 记录标准号来源信息，便于排查
+            string inheritedStandard = FindProperty(inheritedProperties, "FLG_STD", "DRAWINGNO.STANDARDNO", "法兰标准", "标准号") ?? string.Empty;
+            logger.LogInfo($"规范标准号来源：使用标准库配置值={request.StandardNumber}，入口管道属性中的候选值={inheritedStandard}");
+            logger.LogInfo($"请求参数：FamilyCode={request.FamilyCode}, SeriesCode={request.SeriesCode}, StandardNumber={request.StandardNumber}, TableNumber={request.TableNumber}, DN={request.DN}, PN={request.PN}, Series={request.Series}, FlangeType={request.FlangeType}, FaceType={request.FaceType}");
+
+            try
+            {
+                // 调用 API 服务进行匹配（同步等待异步结果）
+                FlangeStandardMatchResponse response = new StandardApiService()
+                    .MatchFlangeAsync(request)
+                    .GetAwaiter()
+                    .GetResult();
+
+                if (response == null)
+                {
+                    logger.LogError("API 返回 null。");
+                    return null;
+                }
+
+                // 记录 API 返回的详细信息
+                logger.LogInfo($"API 返回：Success={response.Success}, MatchCount={response.MatchCount}, IsUniqueMatch={response.IsUniqueMatch}, Message={response.Message}, 属性数量={response.Attributes?.Count ?? 0}");
+                if (response.Attributes != null)
+                {
+                    foreach (KeyValuePair<string, string> attribute in response.Attributes)
+                    {
+                        logger.LogInfo($"规范返回属性：{attribute.Key}={attribute.Value}");
+                    }
+                }
+
+                // 若匹配失败，记录警告但仍返回响应对象（调用方可根据 Success 判断）
+                if (!response.Success)
+                {
+                    logger.LogWarning($"查询未命中：DN={request.DN}, PN={request.PN}, 消息={response.Message}");
+                    return response;
+                }
+
+                // 匹配成功，记录成功信息并返回响应
+                logger.LogInfo($"查询成功，等待炸开后写入：DN={request.DN}, PN={request.PN}, 返回属性={response.Attributes.Count}");
+                return response;
+            }
+            catch (Exception ex)
+            {
+                // 规范库不可用时保留已完成的图元插入和管道属性继承，不让网络故障破坏 CAD 事务。
+                // 记录警告而非抛出异常，保证事务继续进行
+                logger.LogWarning($"查询或回写失败：DN={request.DN}, PN={request.PN}, 错误={ex.Message}");
+                return null;
+            }
+        }
+        /// <summary>
+        /// 将规范匹配结果应用到新插入的图块实体上，同步其属性值。
+        /// </summary>
+        /// <param name="transaction">数据库事务，用于读写实体。</param>
+        /// <param name="insertedEntities">新插入的实体列表（通常为炸开后的块参照）。</param>
+        /// <param name="response">规范匹配响应，包含要写入的属性键值对。</param>
+        /// <param name="logger">日志管理器，用于记录操作日志。</param>
+        private static void ApplyStandardResponseToInsertedEntities(
+            DBTrans transaction,
+            IList<Entity> insertedEntities,
+            FlangeStandardMatchResponse? response,
+            LogManager logger)
+        {
+            // 若响应无效或表示失败，则跳过属性写入并记录日志
+            if (response == null || !response.Success)
+            {
+                logger.LogInfo("没有成功的规范查询结果，跳过炸开后规范属性写入。");
+                return;
+            }
+
+            int blockCount = 0;          // 统计处理的块参照数量
+            int updatedCount = 0;        // 累计所有块参照写入的属性总数
+
+            // 遍历插入的每个实体
+            foreach (Entity entity in insertedEntities)
+            {
+                // 只处理块参照（BlockReference），其他类型跳过并记录
+                if (!(entity is BlockReference blockReference))
+                {
+                    logger.LogInfo($"炸开实体不包含属性：ObjectId={entity.ObjectId}, 类型={entity.GetType().Name}");
+                    continue;
+                }
+
+                blockCount++;
+
+                // 创建属性同步服务实例，并应用到当前块参照
+                int entityUpdatedCount = new StandardPropertySyncService()
+                    .ApplyToBlockReference(transaction, blockReference, response);
+                updatedCount += entityUpdatedCount;
+
+                // 记录本次同步结果
+                logger.LogInfo($"炸开后规范属性写入：ObjectId={blockReference.ObjectId}, 图块名={blockReference.Name}, 写入数量={entityUpdatedCount}");
+
+                // 额外检查并记录响应中未能在该块参照中找到对应Tag的属性（用于诊断）
+                LogUnmatchedStandardAttributes(transaction, blockReference, response, logger);
+            }
+
+            // 输出汇总信息
+            logger.LogInfo($"炸开后规范属性写入完成：BlockReference数量={blockCount}, 返回属性数量={response.Attributes.Count}, 总写入数量={updatedCount}");
+        }
+
+        /// <summary>
+        /// 检查规范匹配响应中的属性键是否在当前块参照的Attribute集合中存在对应的Tag，
+        /// 并记录未命中的项，用于诊断数据不一致问题。
+        /// </summary>
+        /// <param name="transaction">数据库事务。</param>
+        /// <param name="flangeBlock">当前处理的块参照。</param>
+        /// <param name="response">规范匹配响应。</param>
+        /// <param name="logger">日志管理器。</param>
+        private static void LogUnmatchedStandardAttributes(
+            DBTrans transaction,
+            BlockReference flangeBlock,
+            FlangeStandardMatchResponse response,
+            LogManager logger)
+        {
+            // 若响应或属性字典为空，则无需检查
+            if (response?.Attributes == null) return;
+
+            // 收集当前块参照中所有属性的Tag（经过标准化处理），存入哈希集合以便快速查找
+            var targetTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ObjectId attributeId in flangeBlock.AttributeCollection)
+            {
+                // 获取属性参照并读取其Tag
+                if (transaction.GetObject(attributeId, OpenMode.ForRead) is AttributeReference attribute &&
+                    !string.IsNullOrWhiteSpace(attribute.Tag))
+                {
+                    targetTags.Add(NormalizePropertyKey(attribute.Tag)); // 标准化Tag，如转大写或去除空格
+                }
+            }
+
+            // 遍历响应中的每个属性键，检查是否在块参照的Tag集合中存在
+            int unmatchedCount = 0;
+            foreach (string responseKey in response.Attributes.Keys)
+            {
+                // 若标准化后的键未在集合中找到，则记录警告
+                if (!targetTags.Contains(NormalizePropertyKey(responseKey)))
+                {
+                    unmatchedCount++;
+                    logger.LogWarning($"返回属性未命中法兰DWG Tag：{responseKey}");
+                }
+            }
+
+            // 输出统计信息
+            logger.LogInfo($"法兰DWG属性检查：目标Tag数量={targetTags.Count}, 未命中规范属性数量={unmatchedCount}");
+        }
+        /// <summary>
+        /// 在属性字典中按指定的键名列表查找第一个非空属性值。
+        /// 支持键名标准化匹配（忽略大小写、去除空格等），提高查找灵活性。
+        /// </summary>
+        /// <param name="properties">源属性字典，键为属性名称，值为属性值。</param>
+        /// <param name="keys">要查找的键名列表，按顺序匹配；返回第一个匹配成功的非空值。</param>
+        /// <returns>匹配到的属性值（已去除首尾空格）；若未找到任何匹配或值均为空，则返回 null。</returns>
+        private static string FindProperty(IDictionary<string, string> properties, params string[] keys)
+        {
+            // 遍历所有候选键名（按传入顺序）
+            foreach (string key in keys)
+            {
+                // 将当前候选键标准化（例如转大写、去除空格），以便进行不区分大小写的比较
+                string normalizedKey = NormalizePropertyKey(key);
+
+                // 遍历字典中的每个属性条目
+                foreach (KeyValuePair<string, string> property in properties)
+                {
+                    // 若字典键经标准化后与候选键相同，且对应的值不为空或空白
+                    if (string.Equals(NormalizePropertyKey(property.Key), normalizedKey, StringComparison.Ordinal) &&
+                        !string.IsNullOrWhiteSpace(property.Value))
+                    {
+                        // 返回去除首尾空格的属性值
+                        return property.Value.Trim();
+                    }
+                }
+            }
+
+            // 所有键均未匹配到有效值，返回 null
+            return null;
+        }
+        /// <summary>
+        /// 标准化公称通径（DN）字符串，统一格式为 "DN" 后接数字（如 "DN100"）。
+        /// </summary>
+        /// <param name="value">原始通径字符串，可能包含空格、大小写混合或纯数字。</param>
+        /// <returns>标准化后的 DN 字符串；若输入为纯数字则转为 "DN{数字}"，否则保留原始格式（去除空格并转大写）。</returns>
+        private static string NormalizeDn(string value)
+        {
+            // 去除首尾空格、转大写、移除所有空格
+            string normalized = (value ?? string.Empty).Trim().ToUpperInvariant().Replace(" ", string.Empty);
+
+            // 若已以 "DN" 开头，则直接返回（已标准化）
+            if (normalized.StartsWith("DN", StringComparison.Ordinal)) return normalized;
+
+            // 若输入为纯数字（如 "100"），则转换为 "DN100"
+            return int.TryParse(normalized, out int number) ? $"DN{number}" : normalized;
+        }
+        /// <summary>
+        /// 标准化公称压力（PN）字符串，统一格式为 "PN" 后接数字（如 "PN16"），保留小数形式（如 "PN2.5"）。
+        /// </summary>
+        /// <param name="value">原始压力字符串，可能包含空格、大小写混合或纯数字。</param>
+        /// <returns>标准化后的 PN 字符串；若输入为数字则转为 "PN{数字}"（使用不变文化保留小数点），否则保留原始格式（去除空格并转大写）。</returns>
+        private static string NormalizePn(string value)
+        {
+            // 去除首尾空格、转大写、移除所有空格
+            string normalized = (value ?? string.Empty).Trim().ToUpperInvariant().Replace(" ", string.Empty);
+
+            // 若已以 "PN" 开头，则直接返回
+            if (normalized.StartsWith("PN", StringComparison.Ordinal)) return normalized;
+
+            // 若输入为数字（支持小数），则转换为 "PN{数字}"，使用不变文化确保小数点符号统一
+            return decimal.TryParse(normalized, out decimal number)
+                ? $"PN{number.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                : normalized;
+        }
+        /// <summary>
+        /// 标准化钢管系列标识，统一为 "Ⅰ系列" 或 "Ⅱ系列"。
+        /// </summary>
+        /// <param name="value">原始系列字符串，可能包含 "II"、"Ⅱ"、"2" 等变体。</param>
+        /// <returns>标准化后的系列字符串："Ⅱ系列"（若输入为2系列）或 "Ⅰ系列"（默认）。</returns>
+        private static string NormalizeSeries(string value)
+        {
+            // 去除首尾空格
+            string normalized = (value ?? string.Empty).Trim();
+
+            // 若包含 "Ⅱ"、"II" 或等于 "2"，则视为Ⅱ系列，否则默认Ⅰ系列
+            return normalized.Contains("Ⅱ") || normalized.Contains("II") || normalized == "2"
+                ? "Ⅱ系列"
+                : "Ⅰ系列";
         }
 
         /// <summary>
