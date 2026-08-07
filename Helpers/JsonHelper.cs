@@ -72,6 +72,9 @@ namespace GB_NewCadPlus_IV.Helpers
             // 候选评分（越高越优先）
             public double Score { get; set; }
 
+            // 候选实体到插入基点的最近距离，距离越小越接近用户捕捉位置
+            public double ReferenceDistance { get; set; } = double.MaxValue;
+
             // 是否与插入对象同层
             public bool IsSameLayer { get; set; }
 
@@ -151,6 +154,22 @@ namespace GB_NewCadPlus_IV.Helpers
                 scoreTimer.Stop();
                 scoreTicks += scoreTimer.ElapsedTicks;
 
+                // 默认计算候选到块基点的距离，仅作为不支持精确几何时的回退值。
+                double referenceDistance = InsertGraphicHelper.GetDistanceToReferencePoint(ent, insertingBr.Position);
+
+                // 对管道曲线使用插入块实际几何距离，避免源 DWG 原点偏移造成错误排序。
+                if (ent is Curve candidateCurve &&
+                    InsertGraphicHelper.TryGetBlockCurveRelation(
+                        insertingBr,
+                        candidateCurve,
+                        out double geometryDistance,
+                        out bool hasCurveGeometry) &&
+                    hasCurveGeometry)
+                {
+                    // 真正相交的管道距离为 0，优先级高于仅靠近的管道。
+                    referenceDistance = geometryDistance;
+                }
+
                 // 记录同层标识
                 bool sameLayer = false;
                 try
@@ -170,12 +189,25 @@ namespace GB_NewCadPlus_IV.Helpers
                 {
                     Entity = ent,
                     Score = score,
+                    ReferenceDistance = referenceDistance,
                     IsSameLayer = sameLayer,
                     Identity = $"Id={ent.ObjectId},Type={ent.GetType().Name},Layer={ent.Layer}"
                 };
 
                 // 加入候选列表
                 list.Add(candidate);
+
+                // 输出每个候选的实际判定距离，便于核对用户点击点对应的 ObjectId。
+                try
+                {
+                    LogManager.Instance.LogInfo(
+                        $"候选几何判定：ObjectId={ent.ObjectId}, Type={ent.GetType().Name}, " +
+                        $"ReferenceDistance={referenceDistance:F6}, ExtentsIntersect={extentsIntersect}");
+                }
+                catch
+                {
+                    // 日志异常不能影响插入流程。
+                }
             }
 
             // 排序规则：优先同层（可配置）+ 再按评分降序
@@ -183,12 +215,17 @@ namespace GB_NewCadPlus_IV.Helpers
             if (InsertGraphicHelper._propertySyncPreferSameLayer)
             {
                 ordered = ordered
-                    .OrderByDescending(c => c.IsSameLayer)
-                    .ThenByDescending(c => c.Score);
+                    .OrderByDescending(c => c.Score)
+                    .ThenByDescending(c => c.IsSameLayer)
+                    .ThenBy(c => c.ReferenceDistance)
+                    .ThenBy(c => c.Identity, StringComparer.OrdinalIgnoreCase);
             }
             else
             {
-                ordered = ordered.OrderByDescending(c => c.Score);
+                ordered = ordered
+                    .OrderByDescending(c => c.Score)
+                    .ThenBy(c => c.ReferenceDistance)
+                    .ThenBy(c => c.Identity, StringComparer.OrdinalIgnoreCase);
             }
 
             // 截断候选数量，控制性能
@@ -202,7 +239,8 @@ namespace GB_NewCadPlus_IV.Helpers
                 for (int i = 0; i < result.Count; i++)
                 {
                     var c = result[i];
-                    LogManager.Instance.LogInfo($"\n候选[{i + 1}] Score={c.Score:F6}, SameLayer={c.IsSameLayer}, {c.Identity}");
+                    LogManager.Instance.LogInfo(
+                        $"\n候选[{i + 1}] Score={c.Score:F6}, ReferenceDistance={c.ReferenceDistance:F6}, SameLayer={c.IsSameLayer}, {c.Identity}");
                 }
             }
             catch

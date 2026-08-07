@@ -175,6 +175,17 @@ namespace GB_NewCadPlus_IV.Helpers
             // 包围盒不相交直接返回
             if (!IsExtentsIntersect(sourceExtents, targetExtents)) return false;
 
+            // 插入块与管道曲线不能只使用包围盒判断，否则旋转块的外接矩形会覆盖附近无关管道。
+            if (source is BlockReference sourceBlock && target is Curve targetCurve)
+            {
+                // 只有明确计算出插入块实际几何与管道的关系后，才认定二者重叠。
+                if (TryGetBlockCurveRelation(sourceBlock, targetCurve, out _, out bool hasCurveGeometry))
+                    return true;
+
+                // 炸解后存在曲线但没有相交时，必须排除该候选，不能退回包围盒结论。
+                if (hasCurveGeometry) return false;
+            }
+
             // 当两者都是曲线时，追加一次更精确的求交判定
             if (source is Curve c1 && target is Curve c2)
             {
@@ -195,6 +206,137 @@ namespace GB_NewCadPlus_IV.Helpers
 
             // 非曲线场景，包围盒相交即视为重叠
             return true;
+        }
+
+        /// <summary>
+        /// 计算插入块实际几何与候选管道曲线的关系。
+        /// </summary>
+        /// <param name="block">当前已经按最终位置、旋转和比例变换的块参照</param>
+        /// <param name="pipeCurve">当前候选管道曲线</param>
+        /// <param name="distance">实际几何到管道的最小近似距离</param>
+        /// <param name="hasCurveGeometry">块炸解结果中是否存在可计算曲线</param>
+        /// <returns>实际几何与管道相交或在允许精度内接近时返回 true</returns>
+        internal static bool TryGetBlockCurveRelation(
+            BlockReference block,
+            Curve pipeCurve,
+            out double distance,
+            out bool hasCurveGeometry)
+        {
+            // 初始化输出值，避免代理实体异常时返回未定义结果。
+            distance = double.MaxValue;
+            hasCurveGeometry = false;
+
+            // 参数无效时无法进行精确判断。
+            if (block == null || pipeCurve == null) return false;
+
+            DBObjectCollection exploded = new DBObjectCollection();
+            try
+            {
+                // Explode 使用块当前的 BlockTransform，得到最终落图位置的实际几何。
+                block.Explode(exploded);
+
+                // 逐个检查块内实体，避免使用包含旋转误差的整体外接包围盒。
+                foreach (DBObject dbObject in exploded)
+                {
+                    if (!(dbObject is Entity entity)) continue;
+
+                    // 嵌套块继续炸解一层，兼容管道附件中套块的情况。
+                    if (entity is BlockReference nestedBlock)
+                    {
+                        DBObjectCollection nestedExploded = new DBObjectCollection();
+                        try
+                        {
+                            nestedBlock.Explode(nestedExploded);
+                            foreach (DBObject nestedObject in nestedExploded)
+                            {
+                                if (nestedObject is Curve nestedCurve)
+                                {
+                                    hasCurveGeometry = true;
+                                    if (TryMeasureCurveRelation(nestedCurve, pipeCurve, ref distance))
+                                        return true;
+                                }
+                                else
+                                {
+                                    nestedObject.Dispose();
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            nestedBlock.Dispose();
+                        }
+
+                        continue;
+                    }
+
+                    // 管道附件通常由 Line/Polyline/Arc 等曲线组成。
+                    if (entity is Curve curve)
+                    {
+                        hasCurveGeometry = true;
+                        if (TryMeasureCurveRelation(curve, pipeCurve, ref distance))
+                            return true;
+                    }
+                    else
+                    {
+                        // 非曲线实体不参与精确曲线判定，但仍然释放临时对象。
+                        entity.Dispose();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 代理实体可能不支持炸解，记录原因并由调用方决定是否使用安全回退。
+                LogManager.Instance.LogWarning(
+                    $"插入块精确交叠判定失败：BlockObjectId={block.ObjectId}, PipeObjectId={pipeCurve.ObjectId}, 原因={ex.Message}");
+            }
+            finally
+            {
+                // 清理所有尚未提前返回的临时炸解对象。
+                foreach (DBObject dbObject in exploded)
+                {
+                    try { dbObject.Dispose(); } catch { }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 计算两条曲线是否相交，并用端点最近距离作为未相交时的安全近似值。
+        /// </summary>
+        private static bool TryMeasureCurveRelation(Curve sourceCurve, Curve targetCurve, ref double distance)
+        {
+            try
+            {
+                // 真实相交优先级最高，不受曲线方向和角度影响。
+                var points = new Point3dCollection();
+                sourceCurve.IntersectWith(targetCurve, Intersect.OnBothOperands, points, IntPtr.Zero, IntPtr.Zero);
+                if (points.Count > 0)
+                {
+                    distance = 0.0;
+                    return true;
+                }
+
+                // 未相交时从两条曲线端点互相求最近点，避免使用块基点代替实际图形位置。
+                double current = double.MaxValue;
+                foreach (Point3d point in new[] { sourceCurve.StartPoint, sourceCurve.EndPoint })
+                {
+                    current = Math.Min(current, targetCurve.GetClosestPointTo(point, false).DistanceTo(point));
+                }
+
+                foreach (Point3d point in new[] { targetCurve.StartPoint, targetCurve.EndPoint })
+                {
+                    current = Math.Min(current, sourceCurve.GetClosestPointTo(point, false).DistanceTo(point));
+                }
+
+                distance = Math.Min(distance, current);
+            }
+            catch
+            {
+                // 单个异常曲线不影响其他块内曲线继续判定。
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -352,6 +494,17 @@ namespace GB_NewCadPlus_IV.Helpers
             double distance = c1.DistanceTo(c2);
             double distanceScore = 1.0 / (1.0 + distance);
 
+            // 优先使用插入块实际几何到候选管道的距离，而不是使用块基点到管道的距离。
+            double referenceDistance = GetDistanceToReferencePoint(candidate, insertingBr.Position);
+            if (candidate is Curve candidateCurve &&
+                TryGetBlockCurveRelation(insertingBr, candidateCurve, out double geometryDistance, out bool hasCurveGeometry) &&
+                hasCurveGeometry)
+            {
+                // 精确相交时该距离为 0，保证真正被插入图元压住的管道优先级最高。
+                referenceDistance = geometryDistance;
+            }
+            double referencePointScore = 1.0 / (1.0 + referenceDistance);
+
             // 同层加权（工程里同层通常更可能是正确来源）
             double layerScore = 0.0;
             try
@@ -381,11 +534,46 @@ namespace GB_NewCadPlus_IV.Helpers
                     typeScore = 0.20;
             }
 
-            // 组合总分（可按项目实际继续调权重）
-            double score = overlapRatio * 0.55 + distanceScore * 0.25 + layerScore + typeScore;
+            // 组合总分：捕捉点接近度优先，包围盒和中心距离作为辅助，避免多条管道时误选。
+            double score = referencePointScore * 0.60 +
+                           overlapRatio * 0.15 +
+                           distanceScore * 0.10 +
+                           layerScore * 0.10 +
+                           typeScore * 0.05;
 
             // 返回最终评分
             return score;
+        }
+
+        /// <summary>
+        /// 计算候选实体到插入基点的距离。
+        /// </summary>
+        public static double GetDistanceToReferencePoint(Entity candidate, Point3d referencePoint)
+        {
+            // 无效候选返回最大距离，避免被误判为最佳候选。
+            if (candidate == null || candidate.IsErased) return double.MaxValue;
+
+            try
+            {
+                // 管道通常是 Line、Polyline 或其他 Curve，使用曲线最近点进行精确距离判断。
+                if (candidate is Curve curve)
+                {
+                    Point3d closestPoint = curve.GetClosestPointTo(referencePoint, false);
+                    return closestPoint.DistanceTo(referencePoint);
+                }
+
+                // 非曲线实体使用包围盒中心作为兜底距离。
+                if (TryGetEntityExtents(candidate, out Extents3d extents))
+                {
+                    return GetExtentsCenter(extents).DistanceTo(referencePoint);
+                }
+            }
+            catch
+            {
+                // 个别代理实体可能无法求最近点，继续使用最大距离兜底。
+            }
+
+            return double.MaxValue;
         }
 
         /// <summary>
@@ -812,8 +1000,8 @@ namespace GB_NewCadPlus_IV.Helpers
         // 是否优先同层来源（true 时同层会加权，且可额外筛选）
         public static readonly bool _propertySyncPreferSameLayer = true;
 
-        // 最多参与合并的重叠候选数量（防止大图性能波动）
-        public static readonly int _propertySyncMaxCandidates = 3;
+        // 属性继承只允许一个最高可信来源，避免相邻管道的字段被拼接到同一个新图元。
+        public static readonly int _propertySyncMaxCandidates = 1;
 
         // 最多合并字段数量（防止异常图元导致字段爆炸）
         public static readonly int _propertySyncMaxMergedFields = 200;
@@ -1055,6 +1243,8 @@ namespace GB_NewCadPlus_IV.Helpers
                         var entityObjectId = tr.CurrentSpace.AddEntity(br);
                         // 以写模式打开刚刚添加的块参照 fileEntity，以便后续修改属性或变换
                         var fileEntity = (BlockReference)tr.GetObject(entityObjectId, OpenMode.ForWrite);
+                        // 整图插入路径不会自动创建属性引用，这里先按块定义补齐属性引用
+                        EnsureBlockAttributeReferences(tr, fileEntity, logger);
                         // 记录当前的旋转角度 tempAngle，用于拖拽过程中的增量计算
                         double tempAngle = VariableDictionary.entityRotateAngle;
                         // 记录当前的缩放比例 tempScale，用于拖拽过程中的增量计算
@@ -1222,6 +1412,19 @@ namespace GB_NewCadPlus_IV.Helpers
                         FlangeStandardMatchResponse? flangeStandardResponse =
                             ApplyFlangeStandardAttributes(tr, fileEntity, overlapSourcePropertyMap, logger);
 
+                        // 在炸开原始蝶阀块之前先回写规范属性，确保入口块自身的 FLG_STD 等属性不会丢失
+                        if (flangeStandardResponse?.Success == true)
+                        {
+                            int blockUpdatedCount = new StandardPropertySyncService()
+                                .ApplyToBlockReference(
+                                    tr.Transaction,
+                                    fileEntity,
+                                    flangeStandardResponse,
+                                    createMissingAttributes: false);
+                            logger.LogInfo(
+                                $"插入块炸开前法兰标准回写完成：ObjectId={fileEntity.ObjectId}, 写入数量={blockUpdatedCount}");
+                        }
+
                         // ================== 结束核心新功能 ==================
 
                         // 创建集合 newIds 用于存储分解后产生的所有新实体
@@ -1340,6 +1543,62 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 根据块定义中的 AttributeDefinition 补齐块参照的 AttributeReference。
+        /// </summary>
+        private static void EnsureBlockAttributeReferences(DBTrans tr, BlockReference blockReference, LogManager logger)
+        {
+            // 参数无效时不处理
+            if (tr == null || blockReference == null) return;
+
+            // 先收集当前块参照已有的 Tag，避免重复创建属性引用
+            var existingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ObjectId attributeId in blockReference.AttributeCollection)
+            {
+                if (tr.GetObject(attributeId, OpenMode.ForRead) is AttributeReference attribute &&
+                    !string.IsNullOrWhiteSpace(attribute.Tag))
+                {
+                    existingTags.Add(NormalizePropertyKey(attribute.Tag));
+                }
+            }
+
+            // 读取块定义中的属性定义
+            var blockDefinition = tr.GetObject(blockReference.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+            if (blockDefinition == null || !blockDefinition.HasAttributeDefinitions) return;
+
+            int createdCount = 0;
+            foreach (ObjectId entityId in blockDefinition)
+            {
+                if (!(tr.GetObject(entityId, OpenMode.ForRead) is AttributeDefinition attributeDefinition) ||
+                    attributeDefinition.Constant ||
+                    string.IsNullOrWhiteSpace(attributeDefinition.Tag))
+                {
+                    continue;
+                }
+
+                // 同一 Tag 已经有引用时不重复添加
+                string normalizedTag = NormalizePropertyKey(attributeDefinition.Tag);
+                if (existingTags.Contains(normalizedTag)) continue;
+
+                // 按块变换创建属性引用并保留定义中的默认值
+                var attributeReference = new AttributeReference();
+                attributeReference.SetAttributeFromBlock(attributeDefinition, blockReference.BlockTransform);
+                blockReference.AttributeCollection.AppendAttribute(attributeReference);
+                tr.Transaction.AddNewlyCreatedDBObject(attributeReference, true);
+                existingTags.Add(normalizedTag);
+                createdCount++;
+
+                // 记录关键属性，便于确认蝶阀属性是否已经初始化
+                logger?.LogInfo(
+                    $"补齐插入块属性引用：Tag={attributeDefinition.Tag}, Prompt={attributeDefinition.Prompt}, DefaultValue={attributeDefinition.TextString}, TargetObjectId={blockReference.ObjectId}");
+            }
+
+            if (createdCount > 0)
+            {
+                logger?.LogInfo($"插入块属性引用初始化完成：ObjectId={blockReference.ObjectId}, 新增数量={createdCount}");
+            }
+        }
+
+        /// <summary>
         /// 根据从管道继承的属性构建规范查询请求，调用 API 匹配法兰标准，并返回匹配结果。
         /// </summary>
         /// <param name="transaction">数据库事务，用于可能的数据读写。</param>
@@ -1364,9 +1623,32 @@ namespace GB_NewCadPlus_IV.Helpers
             logger.LogInfo($"开始规范查询：块ObjectId={flangeBlock.ObjectId}, 图块名={flangeBlock.Name}, 继承属性数量={inheritedProperties.Count}");
             logger.LogInfo($"可用属性键：{string.Join(",", inheritedProperties.Keys)}");
 
+            // 合并入口图元属性和当前插入块已有属性，兼容连接方式位于不同属性来源的情况
+            var queryProperties = new Dictionary<string, string>(inheritedProperties, StringComparer.OrdinalIgnoreCase);
+            var insertedBlockProperties = ReadEntityPropertyMap(transaction, flangeBlock);
+            foreach (KeyValuePair<string, string> property in insertedBlockProperties)
+            {
+                if (!queryProperties.ContainsKey(property.Key))
+                {
+                    queryProperties[property.Key] = property.Value;
+                }
+            }
+
+            // 仅对“法兰，对夹”连接方式执行法兰标准查询，避免普通图元误触发规范查询
+            bool hasFlangeConnectionDefinition = HasFlangeConnectionDefinition(transaction, flangeBlock);
+            if (!ShouldQueryFlangeStandard(queryProperties) && !hasFlangeConnectionDefinition)
+            {
+                logger.LogInfo("当前图元不是“法兰，对夹”连接方式，跳过法兰标准查询。");
+                return null;
+            }
+            if (hasFlangeConnectionDefinition && !ShouldQueryFlangeStandard(queryProperties))
+            {
+                logger.LogInfo("根据块定义属性 Prompt/Tag 识别为“法兰、对夹”组件，继续执行法兰标准查询。");
+            }
+
             // 从继承属性中提取关键信息：DN、PN，使用多个可能的键名进行查找（不区分大小写）
-            string dn = FindProperty(inheritedProperties, "DN", "公称通径", "通径", "管径", "公称直径");
-            string pn = FindProperty(inheritedProperties, "PN", "公称压力", "压力等级");
+            string dn = FindProperty(queryProperties, "DN", "公称通径", "通径", "管径", "公称直径");
+            string pn = FindProperty(queryProperties, "PN", "公称压力", "压力等级");
 
             // 必须同时具有 DN 和 PN 才能进行查询
             if (string.IsNullOrWhiteSpace(dn) || string.IsNullOrWhiteSpace(pn))
@@ -1381,23 +1663,24 @@ namespace GB_NewCadPlus_IV.Helpers
                 // 标准化 DN、PN、系列
                 DN = NormalizeDn(dn),
                 PN = NormalizePn(pn),
-                Series = NormalizeSeries(FindProperty(inheritedProperties, "SERIES", "钢管系列", "管道系列")),
-                // 固定使用 GB/T 9124.1-2019 标准库，不采用入口管道的 FLG_STD 覆盖
-                StandardNumber = "GB/T 9124.1-2019",
+                Series = NormalizeSeries(FindProperty(queryProperties, "SERIES", "钢管系列", "管道系列")),
+                // 优先使用图元已有的 FLG_STD/法兰标准作为服务器筛选条件
+                StandardNumber = FindProperty(queryProperties, "FLG_STD", "法兰标准", "标准号") ?? "GB/T 9124.1-2019",
                 // 法兰类型和密封面形式，若未提供则使用默认值 "PL" 和 "RF"
-                FlangeType = FindProperty(inheritedProperties, "FLG_TYPE", "法兰类型") ?? "PL",
-                FaceType = FindProperty(inheritedProperties, "FACE_TYPE", "密封面形式", "密封面型式") ?? "RF"
+                FlangeType = FindProperty(queryProperties, "FLG_TYPE", "法兰类型") ?? "PL",
+                FaceType = FindProperty(queryProperties, "FACE_TYPE", "密封面形式", "密封面型式") ?? "RF"
             };
 
             // 记录标准号来源信息，便于排查
-            string inheritedStandard = FindProperty(inheritedProperties, "FLG_STD", "DRAWINGNO.STANDARDNO", "法兰标准", "标准号") ?? string.Empty;
+            string inheritedStandard = FindProperty(queryProperties, "FLG_STD", "DRAWINGNO.STANDARDNO", "法兰标准", "标准号") ?? string.Empty;
             logger.LogInfo($"规范标准号来源：使用标准库配置值={request.StandardNumber}，入口管道属性中的候选值={inheritedStandard}");
             logger.LogInfo($"请求参数：FamilyCode={request.FamilyCode}, SeriesCode={request.SeriesCode}, StandardNumber={request.StandardNumber}, TableNumber={request.TableNumber}, DN={request.DN}, PN={request.PN}, Series={request.Series}, FlangeType={request.FlangeType}, FaceType={request.FaceType}");
 
             try
             {
                 // 调用 API 服务进行匹配（同步等待异步结果）
-                FlangeStandardMatchResponse response = new StandardApiService()
+                var standardApiService = new StandardApiService();
+                FlangeStandardMatchResponse response = standardApiService
                     .MatchFlangeAsync(request)
                     .GetAwaiter()
                     .GetResult();
@@ -1421,8 +1704,42 @@ namespace GB_NewCadPlus_IV.Helpers
                 // 若匹配失败，记录警告但仍返回响应对象（调用方可根据 Success 判断）
                 if (!response.Success)
                 {
-                    logger.LogWarning($"查询未命中：DN={request.DN}, PN={request.PN}, 消息={response.Message}");
-                    return response;
+                    logger.LogWarning($"按指定标准号查询未命中：StandardNumber={request.StandardNumber}, DN={request.DN}, PN={request.PN}, 消息={response.Message}");
+
+                    // 入口管道的 FLG_STD 可能是管道/阀门标准（例如 HG/T 20592），不一定是服务器法兰系列标准。
+                    // 第一次按指定标准号未命中时，清空标准号重新按系列、DN、PN 等关键条件查询。
+                    if (!string.IsNullOrWhiteSpace(request.StandardNumber))
+                    {
+                        var fallbackRequest = new FlangeStandardMatchRequest
+                        {
+                            FamilyCode = request.FamilyCode,
+                            SeriesCode = request.SeriesCode,
+                            StandardNumber = string.Empty,
+                            TableNumber = request.TableNumber,
+                            PN = request.PN,
+                            DN = request.DN,
+                            Series = request.Series,
+                            FlangeType = request.FlangeType,
+                            FaceType = request.FaceType
+                        };
+
+                        logger.LogInfo(
+                            $"指定标准号未命中，开始按法兰系列回退查询：SeriesCode={fallbackRequest.SeriesCode}, DN={fallbackRequest.DN}, PN={fallbackRequest.PN}, Series={fallbackRequest.Series}");
+
+                        response = standardApiService
+                            .MatchFlangeAsync(fallbackRequest)
+                            .GetAwaiter()
+                            .GetResult();
+
+                        logger.LogInfo(
+                            $"法兰标准回退查询结果：Success={response?.Success}, MatchCount={response?.MatchCount}, Message={response?.Message}");
+                    }
+
+                    if (!response.Success)
+                    {
+                        logger.LogWarning($"法兰标准查询最终未命中：DN={request.DN}, PN={request.PN}, 消息={response.Message}");
+                        return response;
+                    }
                 }
 
                 // 匹配成功，记录成功信息并返回响应
@@ -1474,7 +1791,11 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 // 创建属性同步服务实例，并应用到当前块参照
                 int entityUpdatedCount = new StandardPropertySyncService()
-                    .ApplyToBlockReference(transaction, blockReference, response);
+                    .ApplyToBlockReference(
+                        transaction,
+                        blockReference,
+                        response,
+                        createMissingAttributes: true);
                 updatedCount += entityUpdatedCount;
 
                 // 记录本次同步结果
@@ -1532,6 +1853,102 @@ namespace GB_NewCadPlus_IV.Helpers
             // 输出统计信息
             logger.LogInfo($"法兰DWG属性检查：目标Tag数量={targetTags.Count}, 未命中规范属性数量={unmatchedCount}");
         }
+
+        /// <summary>
+        /// 判断属性是否表示“法兰，对夹”连接方式。
+        /// </summary>
+        private static bool ShouldQueryFlangeStandard(IDictionary<string, string> properties)
+        {
+            // 没有属性时不能确认图元类型
+            if (properties == null || properties.Count == 0) return false;
+
+            // 兼容中文标题、英文 Tag 和历史字段名称
+            string connectionMode = FindProperty(
+                properties,
+                "连接方式",
+                "CONN_TYPE",
+                "CONNECTION_MODE",
+                "CONNECTIONTYPE",
+                "连接形式",
+                "连接型式",
+                "连接类别");
+
+            // 去除常见分隔符后再判断，兼容“法兰连接”“法兰，对夹”等写法
+            string normalizedMode = NormalizeConnectionMode(connectionMode);
+
+            // 实际属性值只要表示法兰连接即可；“对夹”是 Prompt 中的可选项，不一定出现在最终值中
+            return normalizedMode.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// 检查块定义的 Tag 或 Prompt 是否声明了“法兰、对夹”连接方式。
+        /// </summary>
+        private static bool HasFlangeConnectionDefinition(DBTrans tr, BlockReference blockReference)
+        {
+            // 参数无效时无法判断
+            if (tr == null || blockReference == null) return false;
+
+            // 获取块定义
+            var blockDefinition = tr.GetObject(blockReference.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+            if (blockDefinition == null || !blockDefinition.HasAttributeDefinitions) return false;
+
+            // 遍历 AttributeDefinition，同时检查 Tag 和 Prompt
+            foreach (ObjectId entityId in blockDefinition)
+            {
+                if (!(tr.GetObject(entityId, OpenMode.ForRead) is AttributeDefinition attributeDefinition)) continue;
+
+                string tag = attributeDefinition.Tag ?? string.Empty;
+                string prompt = attributeDefinition.Prompt ?? string.Empty;
+
+                // CONN_TYPE 的 Prompt 通常直接保存为“法兰、对夹”
+                bool isConnectionField = string.Equals(
+                    NormalizePropertyKey(tag),
+                    NormalizePropertyKey("CONN_TYPE"),
+                    StringComparison.Ordinal);
+                bool hasFlangeStandardField = string.Equals(
+                    NormalizePropertyKey(tag),
+                    NormalizePropertyKey("FLG_STD"),
+                    StringComparison.Ordinal) ||
+                    string.Equals(
+                        NormalizePropertyKey(prompt),
+                        NormalizePropertyKey("法兰标准"),
+                        StringComparison.Ordinal);
+
+                string normalizedPrompt = NormalizeConnectionMode(prompt);
+                string normalizedDefaultValue = NormalizeConnectionMode(attributeDefinition.TextString);
+                bool isFlangeClampMode = (normalizedPrompt.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                           normalizedPrompt.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                          (normalizedDefaultValue.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                           normalizedDefaultValue.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0);
+
+                if ((isConnectionField || hasFlangeStandardField) && isFlangeClampMode)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 统一清理连接方式中的空白和常见分隔符。
+        /// </summary>
+        private static string NormalizeConnectionMode(string value)
+        {
+            return (value ?? string.Empty)
+                .Replace(" ", string.Empty)
+                .Replace("　", string.Empty)
+                .Replace(",", string.Empty)
+                .Replace("，", string.Empty)
+                .Replace("、", string.Empty)
+                .Replace("；", string.Empty)
+                .Replace(";", string.Empty)
+                .Replace(":", string.Empty)
+                .Replace("：", string.Empty)
+                .Replace("/", string.Empty)
+                .Replace("\\", string.Empty);
+        }
+
         /// <summary>
         /// 在属性字典中按指定的键名列表查找第一个非空属性值。
         /// 支持键名标准化匹配（忽略大小写、去除空格等），提高查找灵活性。
