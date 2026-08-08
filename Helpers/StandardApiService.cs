@@ -53,6 +53,34 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 通过服务器调整规范分类在同层级中的显示顺序。
+        /// </summary>
+        public async Task<StandardManagementOperationClientResponse> ReorderManagementCategoryAsync(
+            long categoryId,
+            int direction,
+            string operatorName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (categoryId <= 0) throw new ArgumentException("分类 ID 必须大于 0。", nameof(categoryId));
+            if (direction != -1 && direction != 1) throw new ArgumentException("排序方向必须是 -1 或 1。", nameof(direction));
+
+            string requestJson = JsonConvert.SerializeObject(new StandardCategoryReorderClientRequest
+            {
+                Direction = direction
+            });
+            using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using HttpRequestMessage message = new HttpRequestMessage(
+                HttpMethod.Post,
+                BuildServerUrl($"/api/standards/management/categories/{categoryId}/reorder"))
+            {
+                Content = content
+            };
+            AddOperatorHeader(message, operatorName);
+            return await SendManagementRequestAsync<StandardManagementOperationClientResponse>(
+                message, direction < 0 ? "上移规范分类" : "下移规范分类", cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// 创建规范主分类或子分类。
         /// </summary>
         public async Task<StandardManagementOperationClientResponse> CreateManagementCategoryAsync(

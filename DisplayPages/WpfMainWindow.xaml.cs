@@ -10478,7 +10478,7 @@ namespace GB_NewCadPlus_IV
                 string message = $"已获取 {departments.Count} 个部门。";
                 LogManager.Instance.LogInfo($"获取部门完成：{message}");
                 TxtStatus.Text = message;
-                MessageBox.Show(message, "获取完成", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show(message, "获取完成", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -14393,6 +14393,8 @@ namespace GB_NewCadPlus_IV
                 && !oldSeries.CategoryId.HasValue;
 
             SetContextMenuItemEnabled(menu, "添加子规范库", isCategory && IsMainCategorySelected());
+            SetContextMenuItemEnabled(menu, "上移规范库", isCategory && HasStandardCategorySibling(-1));
+            SetContextMenuItemEnabled(menu, "下移规范库", isCategory && HasStandardCategorySibling(1));
             SetContextMenuItemEnabled(menu, "修改规范库", isCategory);
             SetContextMenuItemEnabled(menu, "移动规范位置", isCategory || isUncategorizedSeries);
             SetContextMenuItemEnabled(menu, "删除规范库", isCategory || isSeries);
@@ -14403,6 +14405,39 @@ namespace GB_NewCadPlus_IV
             return SpecificationTreeView.SelectedItem is CategoryTreeNode node
                 && node.Data is StandardManagementCategoryClient category
                 && !category.ParentId.HasValue;
+        }
+
+        /// <summary>
+        /// 判断当前规范分类在同一父级下是否存在上一个或下一个分类。
+        /// </summary>
+        private bool HasStandardCategorySibling(int direction)
+        {
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode node)
+                || !(node.Data is StandardManagementCategoryClient category))
+                return false;
+
+            List<CategoryTreeNode> siblings = category.ParentId.HasValue
+                ? _standardTreeNodes.SelectMany(root => FindStandardCategoryNode(root, category.ParentId.Value)?.Children ?? Enumerable.Empty<CategoryTreeNode>()).ToList()
+                : _standardTreeNodes;
+            int index = siblings.FindIndex(item => item.Data is StandardManagementCategoryClient current && current.Id == category.Id);
+            return index >= 0 && index + direction >= 0 && index + direction < siblings.Count;
+        }
+
+        /// <summary>
+        /// 递归查找指定 ID 的规范分类节点。
+        /// </summary>
+        private static CategoryTreeNode? FindStandardCategoryNode(CategoryTreeNode node, long categoryId)
+        {
+            if (node.Data is StandardManagementCategoryClient category && category.Id == categoryId)
+                return node;
+
+            foreach (CategoryTreeNode child in node.Children)
+            {
+                CategoryTreeNode? result = FindStandardCategoryNode(child, categoryId);
+                if (result != null) return result;
+            }
+
+            return null;
         }
 
         private static void SetContextMenuItemEnabled(ContextMenu menu, string header, bool isEnabled)
@@ -14430,6 +14465,16 @@ namespace GB_NewCadPlus_IV
         private async void 右键移动规范位置_Click(object sender, RoutedEventArgs e)
         {
             await MoveSelectedStandardCategoryAsync().ConfigureAwait(true);
+        }
+
+        private async void 右键上移规范库_Click(object sender, RoutedEventArgs e)
+        {
+            await ReorderSelectedStandardCategoryAsync(-1).ConfigureAwait(true);
+        }
+
+        private async void 右键下移规范库_Click(object sender, RoutedEventArgs e)
+        {
+            await ReorderSelectedStandardCategoryAsync(1).ConfigureAwait(true);
         }
 
         private async void 右键删除规范库_Click(object sender, RoutedEventArgs e)
@@ -14522,6 +14567,52 @@ namespace GB_NewCadPlus_IV
             {
                 LogManager.Instance.LogError($"移动规范分类失败：{ex.Message}");
                 MessageBox.Show($"移动规范分类失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 保存当前规范分类的上移或下移结果。
+        /// </summary>
+        private async Task ReorderSelectedStandardCategoryAsync(int direction)
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以调整规范库顺序。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
+                || !(selectedNode.Data is StandardManagementCategoryClient category))
+            {
+                MessageBox.Show("请先选择要调整顺序的主规范库或子规范库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                StandardManagementOperationClientResponse response = await _standardManagementApiService
+                    .ReorderManagementCategoryAsync(
+                        category.Id,
+                        direction,
+                        VariableDictionary._userName ?? string.Empty)
+                    .ConfigureAwait(true);
+                if (!response.Success)
+                {
+                    MessageBox.Show(response.Message, "排序失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                LogManager.Instance.LogInfo($"规范库顺序调整成功：CategoryId={category.Id}，名称={category.Name}，方向={(direction < 0 ? "上移" : "下移")}");
+                await RefreshStandardTreeAsync().ConfigureAwait(true);
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "排序提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"调整规范库顺序失败：CategoryId={category.Id}，错误={ex.Message}");
+                MessageBox.Show($"调整规范库顺序失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

@@ -29,3 +29,4 @@
 - 首选将功能按文件拆分：线型相关放在 LineTypeStyleHelper.cs，通用系统变量读取放在 AutoCadHelper.cs，命令入口保留在 FunctionalMethod\Command.cs；今后按此约定拆分方法。
 - 在管道端点继承逻辑中，命中图元的“名称”必须写入管道“起点/终点”属性，不允许覆盖管道“名称”属性。
 - 用户偏好将 MySqlAuthService.cs 视为特定于 MySQL 的文件，NOW()/LAST_INSERT_ID() 可以保留为预期的残留物，而 DatabaseManager.cs 应完全统一到共享数据库写入助手。
+- 用户明确要求 HorizontalTabStyle 仅用于修改 TabItem 的鼠标悬停、选中和禁用触发器效果，不修改 Padding、Margin、字体、内容对齐、模板布局等其他部分；TabControl 内容自动填充应通过 TabControl 和内容根布局属性单独解决。

@@ -57,6 +57,9 @@
         <Setter Property="FontSize" Value="14" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="Margin" Value="0" />
+        <!-- 让 TabControl 的选项卡内容区域随父容器横向、纵向拉伸 -->
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
     </Style>
 
     <!-- ============================================ -->
@@ -103,7 +106,71 @@
     </Style>
 
     <!-- ============================================ -->
-    <!--  5. 水印 TextBox 样式                        -->
+    <!--  5. 横向 TabItem 样式                        -->
+    <!-- ============================================ -->
+    <Style x:Key="HorizontalTabStyle" TargetType="{x:Type TabItem}">
+        <!-- 增加内边距，让文字不贴边 -->
+        <Setter Property="Padding" Value="4,5" />
+        <!-- 标签间距，避免挤在一起 -->
+        <Setter Property="Margin" Value="5,2" />
+        <!-- 字体与颜色 -->
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="#333333" />
+        <!-- 布局优化 -->
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TabItem}">
+                    <!-- 直接用 Border 作为根元素，无需额外 Grid -->
+                    <Border x:Name="Border"
+                    Background="LightBlue"
+                    BorderBrush="#AAAAAA"
+                    BorderThickness="1,1,1,1"
+                    CornerRadius="5,5,5,5"         
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+                        <!-- 显示 Header 内容 -->
+                        <ContentPresenter x:Name="ContentSite"
+                                  ContentSource="Header"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  SnapsToDevicePixels="True" />
+                    </Border>
+
+                    <!-- 触发器 -->
+                    <ControlTemplate.Triggers>
+                        <!-- 鼠标悬停效果 -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="#B0D4F1" />
+                            <Setter TargetName="Border" Property="BorderBrush" Value="#888888" />
+                        </Trigger>
+
+                        <!-- 选中状态 -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="LightGoldenrodYellow" />
+                            <Setter TargetName="Border" Property="BorderBrush" Value="#888888" />
+                            <!-- 选中时去掉下边框，与内容区融为一体（需配合 TabControl 的 Border） -->
+                            <Setter TargetName="Border" Property="BorderThickness" Value="1,1,1,0" />
+                            <!-- 可选：选中时加粗或改变文字颜色 -->
+                            <Setter Property="Foreground" Value="#000000" />
+                        </Trigger>
+
+                        <!-- 禁用状态（可选） -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Border" Property="Background" Value="#E0E0E0" />
+                            <Setter Property="Foreground" Value="#999999" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <!-- ============================================ -->
+    <!--  6. 水印 TextBox 样式                        -->
     <!-- ============================================ -->
     <Style x:Key="WatermarkTextBoxStyle" TargetType="{x:Type TextBox}">
         <Setter Property="Padding" Value="3,0,0,0" />
@@ -164,7 +231,7 @@
     </Style>
 
     <!-- ============================================ -->
-    <!--  6. 滚动条样式（Thumb）                      -->
+    <!--  7. 滚动条样式（Thumb）                      -->
     <!-- ============================================ -->
     <Style x:Key="ScrollBarTrackThumb" TargetType="{x:Type Thumb}">
         <Setter Property="Template">
@@ -194,7 +261,7 @@
     </Style>
 
     <!-- ============================================ -->
-    <!--  7. 滚动条样式                               -->
+    <!--  8. 滚动条样式                               -->
     <!-- ============================================ -->
     <Style TargetType="{x:Type ScrollBar}">
         <Setter Property="Stylus.IsFlicksEnabled" Value="false" />
@@ -261,7 +328,7 @@
     </Style>
 
     <!-- ============================================ -->
-    <!--  8. Expander 样式（折叠时向下，展开时向右）      -->
+    <!--  9. Expander 样式（折叠时向下，展开时向右）  -->
     <!-- ============================================ -->
     <Style TargetType="Expander">
         <Setter Property="Template">
