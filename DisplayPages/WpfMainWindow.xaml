@@ -4184,6 +4184,7 @@ Background="FloralWhite">
                                 <TreeView
     x:Name="SpecificationTreeView"
      Margin="2,2,2,2"
+      SelectedItemChanged="SpecificationTreeView_SelectedItemChanged"
      PreviewMouseRightButtonDown="规范树右键按下">
                                     <TreeView.ContextMenu>
                                         <ContextMenu Opened="规范树右键菜单_Opened">
@@ -4201,9 +4202,6 @@ Background="FloralWhite">
                                             <MenuItem Header="刷新架构" Click="右键刷新架构_Click" />
                                         </ContextMenu>
                                     </TreeView.ContextMenu>
-                                    <TreeView.ItemContainerStyle>
-                                        <Style TargetType="{x:Type TreeViewItem}" />
-                                    </TreeView.ItemContainerStyle>
                                     <TreeView.ItemTemplate>
                                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                             <HierarchicalDataTemplate.Resources>
@@ -4242,10 +4240,11 @@ Background="FloralWhite">
                                     <DataGrid
         x:Name="SpecificationPropertiesDataGrid"
         Grid.Row="0"
+         IsReadOnly="True"
         Margin="0"
         AutoGenerateColumns="False"
-        CanUserAddRows="True"
-        CanUserDeleteRows="True"
+         CanUserAddRows="False"
+         CanUserDeleteRows="False"
         FontSize="11"
         GridLinesVisibility="All"
         HeadersVisibility="Column">

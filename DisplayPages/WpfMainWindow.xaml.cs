@@ -317,6 +317,108 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
+        /// 选择规范系列后，将服务器返回的实际规范记录显示到属性表格。
+        /// </summary>
+        private void SpecificationTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            _ = LoadSelectedStandardContentAsync(sender, e);
+        }
+
+        /// <summary>
+        /// 异步加载当前选中规范系列的实际内容。
+        /// </summary>
+        private async Task LoadSelectedStandardContentAsync(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            SpecificationPropertiesDataGrid.ItemsSource = null;
+
+            if (!(e.NewValue is CategoryTreeNode selectedNode)
+                || !(selectedNode.Data is StandardManagementSeriesClient series))
+                return;
+
+            try
+            {
+                List<FlangeStandardRecordClient> records = await _standardManagementApiService
+                    .GetFlangeRecordsAsync(series.Id)
+                    .ConfigureAwait(true);
+
+                if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode currentNode)
+                    || !ReferenceEquals(currentNode.Data, series))
+                    return;
+
+                List<CategoryPropertyEditModel> rows = records.SelectMany(record => new[]
+                {
+                    new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "DN",
+                        PropertyValue1 = record.DN,
+                        PropertyName2 = "PN",
+                        PropertyValue2 = record.PN
+                    },
+                    new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "钢管外径Ⅰ",
+                        PropertyValue1 = FormatStandardValue(record.PipeOuterDiameterSeriesI),
+                        PropertyName2 = "钢管外径Ⅱ",
+                        PropertyValue2 = FormatStandardValue(record.PipeOuterDiameterSeriesII)
+                    },
+                    new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "法兰外径D",
+                        PropertyValue1 = FormatStandardValue(record.FlangeOuterDiameter),
+                        PropertyName2 = "螺栓中心圆K",
+                        PropertyValue2 = FormatStandardValue(record.BoltCircleDiameter)
+                    },
+                    new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "螺栓孔径L",
+                        PropertyValue1 = FormatStandardValue(record.BoltHoleDiameter),
+                        PropertyName2 = "螺栓数量n",
+                        PropertyValue2 = record.BoltCount?.ToString() ?? string.Empty
+                    },
+                    new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "螺栓规格",
+                        PropertyValue1 = record.BoltSpecification,
+                        PropertyName2 = "法兰厚度C",
+                        PropertyValue2 = FormatStandardValue(record.FlangeThickness)
+                    },
+                    new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "突面高度f1",
+                        PropertyValue1 = FormatStandardValue(record.RaisedFaceHeight),
+                        PropertyName2 = "法兰内径BⅠ",
+                        PropertyValue2 = FormatStandardValue(record.FlangeInnerDiameterSeriesI)
+                    },
+                    new CategoryPropertyEditModel
+                    {
+                        PropertyName1 = "法兰内径BⅡ",
+                        PropertyValue1 = FormatStandardValue(record.FlangeInnerDiameterSeriesII),
+                        PropertyName2 = "原始行号",
+                        PropertyValue2 = record.SourceRowNumber.ToString()
+                    }
+                }).ToList();
+
+                SpecificationPropertiesDataGrid.ItemsSource = rows;
+                LogManager.Instance.LogInfo($"已加载规范实际内容：SeriesId={series.Id}，记录数={rows.Count}");
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"加载规范实际内容失败：SeriesId={series.Id}，错误={ex.Message}");
+                MessageBox.Show($"加载规范内容失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// 将规范尺寸值转换为适合 DataGrid 显示的文本。
+        /// </summary>
+        private static string FormatStandardValue(decimal? value)
+        {
+            return value.HasValue
+                ? value.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
+                : string.Empty;
+        }
+
+        /// <summary>
         /// 异步初始化 LayerDictionary_DataGrid 的数据源与事件订阅（使用时调用）
         /// </summary>
         /// <returns></returns>

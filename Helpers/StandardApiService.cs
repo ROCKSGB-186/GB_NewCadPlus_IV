@@ -416,6 +416,28 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 查询规范系列下的全部实际法兰规范记录。
+        /// </summary>
+        public async Task<List<FlangeStandardRecordClient>> GetFlangeRecordsAsync(
+            long seriesId,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (seriesId <= 0)
+                throw new ArgumentException("规范系列 ID 必须大于 0。", nameof(seriesId));
+
+            string requestUrl = BuildServerUrl($"/api/standards/flanges/series/{seriesId}/records");
+            using (HttpResponseMessage response = await HttpClient.GetAsync(requestUrl, cancellationToken).ConfigureAwait(false))
+            {
+                string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"规范内容查询失败，HTTP {(int)response.StatusCode}，响应：{responseBody}");
+
+                return JsonConvert.DeserializeObject<List<FlangeStandardRecordClient>>(responseBody)
+                    ?? new List<FlangeStandardRecordClient>();
+            }
+        }
+
+        /// <summary>
         /// 查询法兰规范。
         /// </summary>
         /// <param name="request">法兰标准、DN、PN 和系列等条件。</param>
