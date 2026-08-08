@@ -10,6 +10,7 @@ using Dm;
 using GB_NewCadPlus_IV.DisplayPages;
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Helpers;
+using GB_NewCadPlus_IV.Models;
 using GB_NewCadPlus_IV.UniFiedStandards;
 using GB_NewCadPlus_IV.ViewModels;
 using GB_NewCadPlus_IV.Views;
@@ -144,6 +145,14 @@ namespace GB_NewCadPlus_IV
         private readonly GraphicApiService _graphicApiService = new GraphicApiService();
         private readonly AuthUserDepartmentApiService _apiService = new AuthUserDepartmentApiService();
         private readonly DepartmentApiService _departmentApiService = new DepartmentApiService();
+        /// <summary>
+        /// 规范管理 API 服务，负责目录查询和文件预览请求。
+        /// </summary>
+        private readonly StandardApiService _standardManagementApiService = new StandardApiService();
+        /// <summary>
+        /// 规范管理树数据源，避免与图元分类树缓存混用。
+        /// </summary>
+        private readonly List<CategoryTreeNode> _standardTreeNodes = new List<CategoryTreeNode>();
         /// <summary>
         /// 当前选中的分类节点
         /// </summary>
@@ -4408,6 +4417,10 @@ namespace GB_NewCadPlus_IV
             public object Data { get; set; } // 存储原始数据对象
             public List<CategoryTreeNode> Children { get; set; } = new List<CategoryTreeNode>();
             public string DisplayText { get; set; }
+            /// <summary>
+            /// 控制规范树节点是否展开。
+            /// </summary>
+            public bool IsExpanded { get; set; }
             //public string DisplayText => string.IsNullOrEmpty(DisplayName) ? Name : DisplayName;
 
 
@@ -9569,13 +9582,13 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 判断是否为管理员用户（sa/root/admin）
+        /// 判断是否为管理员用户（sa/SYSDBA/admin）
         /// </summary>
         private static bool IsAdminUser(string username)
         {
             if (string.IsNullOrWhiteSpace(username)) return false; // 空用户名不是管理员
             var low = username.Trim().ToLowerInvariant(); // 规范为小写比较
-            return low == "sa" || low == "root" || low == "admin" || low == "sysdba"; // 三个默认管理员用户名
+            return low == "sa" || low == "sysdba" || low == "admin"; // 当前阶段的三个默认管理员用户名
         }
 
         /// <summary>
@@ -13954,7 +13967,933 @@ namespace GB_NewCadPlus_IV
                 pipeCalcViewModel.LoadData(); // 加载数据
         }
 
-       
+        private async void 添加主规范库_Click(object sender, RoutedEventArgs e)
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以添加规范库。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            await CreateStandardCategoryAsync(null);
+        }
+
+        private async void 添加子规范库_Click(object sender, RoutedEventArgs e)
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以添加规范库。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
+                || !(selectedNode.Data is StandardManagementCategoryClient selectedCategory)
+                || selectedCategory.ParentId.HasValue)
+            {
+                MessageBox.Show("请先在左侧选择一个主规范库，再添加子规范库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            await CreateStandardCategoryAsync(selectedCategory.Id);
+        }
+
+        /// <summary>
+        /// 创建主分类或子分类。
+        /// </summary>
+        private async Task CreateStandardCategoryAsync(long? parentId)
+        {
+            StandardCategoryInputResult? input = ShowStandardCategoryInputDialog(parentId.HasValue);
+            if (input == null) return;
+
+            try
+            {
+                StandardCategoryCommandClientRequest request = new StandardCategoryCommandClientRequest
+                {
+                    ParentId = parentId,
+                    Code = input.Code,
+                    Name = input.Name,
+                    Description = input.Description,
+                    SortOrder = 0
+                };
+                StandardManagementOperationClientResponse response;
+                try
+                {
+                    response = await _standardManagementApiService
+                        .CreateManagementCategoryAsync(request, VariableDictionary._userName ?? string.Empty)
+                        .ConfigureAwait(true);
+                }
+                catch (StandardCategoryConflictException conflict)
+                {
+                    string duplicateText = string.Join("\n", conflict.Duplicates.Select(item =>
+                        $"ID={item.Id}，名称={item.Name}，CODE={item.Code}，原因={item.DuplicateReason}"));
+                    MessageBoxResult updateResult = MessageBox.Show(
+                        $"发现同层级重复规范库：\n{duplicateText}\n\n是否使用当前填写的信息更新第一条重复规范库？",
+                        "规范库重复提示",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    if (updateResult != MessageBoxResult.Yes || conflict.Duplicates.Count == 0)
+                        return;
+
+                    long duplicateId = conflict.Duplicates[0].Id;
+                    response = await _standardManagementApiService
+                        .UpdateManagementCategoryAsync(duplicateId, request, VariableDictionary._userName ?? string.Empty)
+                        .ConfigureAwait(true);
+                }
+
+                MessageBox.Show(response.Message,
+                    response.Success ? "规范库保存成功" : "规范库保存失败",
+                    MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+
+                if (response.Success)
+                    await RefreshStandardTreeAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"创建规范分类失败：{ex.Message}");
+                MessageBox.Show($"创建规范分类失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 在一个窗口中集中填写规范库名称、编码和说明。
+        /// </summary>
+        private StandardCategoryInputResult? ShowStandardCategoryInputDialog(
+            bool isChildCategory,
+            StandardManagementCategoryClient? existingCategory = null)
+        {
+            var dialog = new Window
+            {
+                Title = existingCategory == null
+                    ? (isChildCategory ? "添加子规范库" : "添加主规范库")
+                    : (isChildCategory ? "修改子规范库" : "修改主规范库"),
+                Width = 430,
+                Height = 300,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false
+            };
+
+            var root = new Grid { Margin = new Thickness(18) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var nameLabel = new TextBlock { Text = "规范库名称：", Margin = new Thickness(0, 0, 0, 4) };
+            Grid.SetRow(nameLabel, 0);
+            root.Children.Add(nameLabel);
+
+            var nameBox = new System.Windows.Controls.TextBox
+            {
+                Text = existingCategory?.Name ?? string.Empty,
+                Margin = new Thickness(0, 0, 0, 10),
+                MinHeight = 26
+            };
+            Grid.SetRow(nameBox, 1);
+            root.Children.Add(nameBox);
+
+            var codeLabel = new TextBlock { Text = "规范库编码：", Margin = new Thickness(0, 0, 0, 4) };
+            Grid.SetRow(codeLabel, 2);
+            root.Children.Add(codeLabel);
+
+            var codeBox = new System.Windows.Controls.TextBox
+            {
+                Text = existingCategory?.Code ?? string.Empty,
+                Margin = new Thickness(0, 0, 0, 10),
+                MinHeight = 26
+            };
+            Grid.SetRow(codeBox, 3);
+            root.Children.Add(codeBox);
+
+            var descriptionPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
+            var descriptionLabel = new TextBlock { Text = "规范库说明（可选）：", Margin = new Thickness(0, 0, 0, 4) };
+            var descriptionBox = new System.Windows.Controls.TextBox
+            {
+                Text = existingCategory?.Description ?? string.Empty,
+                MinHeight = 26
+            };
+            descriptionPanel.Children.Add(descriptionLabel);
+            descriptionPanel.Children.Add(descriptionBox);
+            Grid.SetRow(descriptionPanel, 4);
+            root.Children.Add(descriptionPanel);
+
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            var cancelButton = new Button { Content = "取消", Width = 75, Margin = new Thickness(0, 0, 8, 0) };
+            var confirmButton = new Button { Content = "确定", Width = 75 };
+            cancelButton.Click += (_, _) => dialog.DialogResult = false;
+            confirmButton.Click += (_, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(nameBox.Text))
+                {
+                    MessageBox.Show(dialog, "请输入规范库名称。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    nameBox.Focus();
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(codeBox.Text))
+                {
+                    MessageBox.Show(dialog, "请输入规范库编码。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    codeBox.Focus();
+                    return;
+                }
+
+                dialog.DialogResult = true;
+            };
+            buttonPanel.Children.Add(cancelButton);
+            buttonPanel.Children.Add(confirmButton);
+            Grid.SetRow(buttonPanel, 5);
+            root.Children.Add(buttonPanel);
+
+            dialog.Content = root;
+            dialog.Loaded += (_, _) => nameBox.Focus();
+            bool? result = dialog.ShowDialog();
+            if (result != true) return null;
+
+            return new StandardCategoryInputResult
+            {
+                Name = nameBox.Text.Trim(),
+                Code = codeBox.Text.Trim().ToUpperInvariant(),
+                Description = descriptionBox.Text.Trim()
+            };
+        }
+
+        private sealed class StandardCategoryInputResult
+        {
+            public string Name { get; set; } = string.Empty;
+            public string Code { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+        }
+
+        private async void 修改规范库_Click(object sender, RoutedEventArgs e)
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以修改规范库。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
+                || !(selectedNode.Data is StandardManagementCategoryClient selectedCategory))
+            {
+                MessageBox.Show("请先在左侧选择要修改的主规范库或子规范库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            StandardCategoryInputResult? input = ShowStandardCategoryInputDialog(
+                selectedCategory.ParentId.HasValue,
+                selectedCategory);
+            if (input == null) return;
+
+            try
+            {
+                StandardManagementOperationClientResponse response = await _standardManagementApiService
+                    .UpdateManagementCategoryAsync(selectedCategory.Id, new StandardCategoryCommandClientRequest
+                    {
+                        ParentId = selectedCategory.ParentId,
+                        Code = input.Code,
+                        Name = input.Name,
+                        Description = input.Description,
+                        SortOrder = selectedCategory.SortOrder
+                    }, VariableDictionary._userName ?? string.Empty)
+                    .ConfigureAwait(true);
+
+                MessageBox.Show(response.Message,
+                    response.Success ? "规范库修改成功" : "规范库修改失败",
+                    MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                if (response.Success)
+                    await RefreshStandardTreeAsync().ConfigureAwait(true);
+            }
+            catch (StandardCategoryConflictException conflict)
+            {
+                string duplicateText = string.Join("\n", conflict.Duplicates.Select(item =>
+                    $"ID={item.Id}，名称={item.Name}，CODE={item.Code}，原因={item.DuplicateReason}"));
+                MessageBox.Show($"修改后的名称或 CODE 与以下规范库重复：\n{duplicateText}",
+                    "规范库重复提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"修改规范分类失败：{ex.Message}");
+                MessageBox.Show($"修改规范分类失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task CreateAndUploadStandardVersionAsync()
+        {
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
+                || !(selectedNode.Data is StandardManagementSeriesClient series))
+            {
+                MessageBox.Show("请先在左侧选择一个规范系列。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string versionNo = Microsoft.VisualBasic.Interaction.InputBox("请输入规范版本号：", "新建规范版本", DateTime.Now.ToString("yyyyMMdd"));
+            if (string.IsNullOrWhiteSpace(versionNo)) return;
+
+            string changeSummary = Microsoft.VisualBasic.Interaction.InputBox("请输入本次变更说明（可选）：", "新建规范版本", string.Empty);
+            using var dialog = new OpenFileDialog
+            {
+                Filter = "规范附件 (*.pdf;*.doc;*.docx;*.xls;*.xlsx;*.json)|*.pdf;*.doc;*.docx;*.xls;*.xlsx;*.json|所有文件 (*.*)|*.*",
+                Title = "选择规范版本附件",
+                Multiselect = false
+            };
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            try
+            {
+                string operatorName = VariableDictionary._userName ?? string.Empty;
+                StandardManagementOperationClientResponse created = await _standardManagementApiService
+                    .CreateManagementVersionAsync(new StandardVersionCreateClientRequest
+                    {
+                        SeriesId = series.Id,
+                        VersionNo = versionNo.Trim(),
+                        VersionLabel = versionNo.Trim(),
+                        ChangeSummary = changeSummary?.Trim() ?? string.Empty,
+                        SourceType = "DOCUMENT"
+                    }, operatorName)
+                    .ConfigureAwait(true);
+
+                if (!created.Success)
+                {
+                    MessageBox.Show(created.Message, "创建规范版本失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                StandardFileUploadClientResponse uploaded = await _standardManagementApiService
+                    .UploadManagementFileAsync(created.Id, dialog.FileName, operatorName)
+                    .ConfigureAwait(true);
+                MessageBox.Show(uploaded.Message, uploaded.Success ? "规范版本创建成功" : "附件上传失败", MessageBoxButton.OK,
+                    uploaded.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+
+                if (uploaded.Success)
+                    await RefreshStandardTreeAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"创建规范版本失败：{ex.Message}");
+                MessageBox.Show($"创建规范版本失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task RefreshStandardTreeAsync()
+        {
+            StandardManagementTreeClientResponse response = await _standardManagementApiService
+                .GetManagementTreeAsync()
+                .ConfigureAwait(true);
+            if (response.Success)
+                BuildStandardTree(response);
+        }
+
+        private async void 删除规范库_Click(object sender, RoutedEventArgs e)
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以删除规范库。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode))
+            {
+                MessageBox.Show("请先选择要删除的规范库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                if (selectedNode.Data is StandardManagementCategoryClient category)
+                {
+                    MessageBoxResult categoryConfirm = MessageBox.Show(
+                        $"确定删除规范库“{category.Name}（{category.Code}）”吗？\n删除后该分类及其下级内容将不再显示。",
+                        "确认删除规范库", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (categoryConfirm != MessageBoxResult.Yes) return;
+
+                    StandardManagementOperationClientResponse categoryResponse = await _standardManagementApiService
+                        .DeleteManagementCategoryAsync(category.Id, VariableDictionary._userName ?? string.Empty)
+                        .ConfigureAwait(true);
+                    MessageBox.Show(categoryResponse.Message,
+                        categoryResponse.Success ? "删除完成" : "删除失败",
+                        MessageBoxButton.OK,
+                        categoryResponse.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                    if (categoryResponse.Success)
+                        await RefreshStandardTreeAsync().ConfigureAwait(true);
+                    return;
+                }
+
+                if (!(selectedNode.Data is StandardManagementSeriesClient series))
+                {
+                    MessageBox.Show("当前节点不支持删除。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                List<StandardDocumentVersionClient> versions = await _standardManagementApiService
+                    .GetManagementVersionsAsync(series.Id)
+                    .ConfigureAwait(true);
+                StandardDocumentVersionClient? current = versions.FirstOrDefault(item => item.IsCurrent);
+                if (current == null)
+                {
+                    MessageBox.Show("当前规范系列没有可删除的有效版本。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                MessageBoxResult confirm = MessageBox.Show(
+                    $"确定软删除当前版本“{current.VersionNo}”吗？历史数据仍会保留。",
+                    "确认删除规范版本", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes) return;
+
+                StandardManagementOperationClientResponse response = await _standardManagementApiService
+                    .DeleteManagementVersionAsync(current.Id, VariableDictionary._userName ?? string.Empty)
+                    .ConfigureAwait(true);
+                MessageBox.Show(response.Message, response.Success ? "删除完成" : "删除失败", MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                if (response.Success) await RefreshStandardTreeAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"删除规范版本失败：{ex.Message}");
+                MessageBox.Show($"删除规范版本失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 右键点击树节点时，先把该节点设为当前选中节点，避免菜单操作作用于旧节点。
+        /// </summary>
+        private void 规范树右键按下(object sender, MouseButtonEventArgs e)
+        {
+            DependencyObject? source = e.OriginalSource as DependencyObject;
+            while (source != null && !(source is TreeViewItem))
+                source = VisualTreeHelper.GetParent(source);
+
+            if (source is TreeViewItem item)
+            {
+                item.IsSelected = true;
+                item.Focus();
+                LogManager.Instance.LogInfo("已通过右键选中规范树节点。");
+            }
+        }
+
+        /// <summary>
+        /// 打开右键菜单时，根据当前节点类型设置菜单可用状态。
+        /// </summary>
+        private void 规范树右键菜单_Opened(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is ContextMenu menu)) return;
+            bool isCategory = SpecificationTreeView.SelectedItem is CategoryTreeNode node
+                && node.Data is StandardManagementCategoryClient;
+            bool isSeries = SpecificationTreeView.SelectedItem is CategoryTreeNode seriesNode
+                && seriesNode.Data is StandardManagementSeriesClient;
+            bool isUncategorizedSeries = SpecificationTreeView.SelectedItem is CategoryTreeNode oldSeriesNode
+                && oldSeriesNode.Data is StandardManagementSeriesClient oldSeries
+                && !oldSeries.CategoryId.HasValue;
+
+            SetContextMenuItemEnabled(menu, "添加子规范库", isCategory && IsMainCategorySelected());
+            SetContextMenuItemEnabled(menu, "修改规范库", isCategory);
+            SetContextMenuItemEnabled(menu, "移动规范位置", isCategory || isUncategorizedSeries);
+            SetContextMenuItemEnabled(menu, "删除规范库", isCategory || isSeries);
+        }
+
+        private bool IsMainCategorySelected()
+        {
+            return SpecificationTreeView.SelectedItem is CategoryTreeNode node
+                && node.Data is StandardManagementCategoryClient category
+                && !category.ParentId.HasValue;
+        }
+
+        private static void SetContextMenuItemEnabled(ContextMenu menu, string header, bool isEnabled)
+        {
+            MenuItem? item = menu.Items.OfType<MenuItem>().FirstOrDefault(menuItem =>
+                string.Equals(menuItem.Header?.ToString(), header, StringComparison.Ordinal));
+            if (item != null) item.IsEnabled = isEnabled;
+        }
+
+        private void 右键添加主规范库_Click(object sender, RoutedEventArgs e)
+        {
+            添加主规范库_Click(sender, e);
+        }
+
+        private void 右键添加子规范库_Click(object sender, RoutedEventArgs e)
+        {
+            添加子规范库_Click(sender, e);
+        }
+
+        private void 右键修改规范库_Click(object sender, RoutedEventArgs e)
+        {
+            修改规范库_Click(sender, e);
+        }
+
+        private async void 右键移动规范位置_Click(object sender, RoutedEventArgs e)
+        {
+            await MoveSelectedStandardCategoryAsync().ConfigureAwait(true);
+        }
+
+        private async void 右键删除规范库_Click(object sender, RoutedEventArgs e)
+        {
+            删除规范库_Click(sender, e);
+        }
+
+        private void 右键展开折叠规范_Click(object sender, RoutedEventArgs e)
+        {
+            展开_折叠规范_Click(sender, e);
+        }
+
+        private void 右键刷新架构_Click(object sender, RoutedEventArgs e)
+        {
+            刷新规范_Click(sender, e);
+        }
+
+        /// <summary>
+        /// 选择新的父分类并通过服务器移动当前规范分类。
+        /// </summary>
+        private async Task MoveSelectedStandardCategoryAsync()
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以移动规范库。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode))
+            {
+                MessageBox.Show("请先选择要移动的主规范库或子规范库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (selectedNode.Data is StandardManagementSeriesClient oldSeries && !oldSeries.CategoryId.HasValue)
+            {
+                await MoveUncategorizedSeriesAsync(oldSeries).ConfigureAwait(true);
+                return;
+            }
+
+            if (!(selectedNode.Data is StandardManagementCategoryClient selectedCategory))
+            {
+                MessageBox.Show("当前规范系列已经归类，不能通过此菜单再次移动。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            List<CategoryTreeNode> excludedNodes = new List<CategoryTreeNode>();
+            CollectStandardTreeNodes(selectedNode, excludedNodes);
+            List<CategoryTreeNode> targets = new List<CategoryTreeNode>();
+            foreach (CategoryTreeNode root in _standardTreeNodes)
+                CollectStandardCategoryTargets(root, excludedNodes, targets);
+
+            var targetItems = new List<StandardMoveTargetItem>
+            {
+                new StandardMoveTargetItem { ParentId = null, DisplayText = "（根级分类）" }
+            };
+            targetItems.AddRange(targets
+                .Where(node => node.Data is StandardManagementCategoryClient)
+                .Select(node => new StandardMoveTargetItem
+                {
+                    ParentId = ((StandardManagementCategoryClient)node.Data).Id,
+                    DisplayText = new string('　', Math.Max(0, node.Level - 1)) + node.DisplayText
+                }));
+
+            StandardMoveTargetItem? target = ShowStandardMoveTargetDialog(selectedCategory, targetItems);
+            if (target == null) return;
+
+            try
+            {
+                StandardManagementOperationClientResponse response = await _standardManagementApiService
+                    .MoveManagementCategoryAsync(
+                        selectedCategory.Id,
+                        target.ParentId,
+                        VariableDictionary._userName ?? string.Empty)
+                    .ConfigureAwait(true);
+                MessageBox.Show(response.Message,
+                    response.Success ? "移动成功" : "移动失败",
+                    MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                if (response.Success)
+                    await RefreshStandardTreeAsync().ConfigureAwait(true);
+            }
+            catch (StandardCategoryConflictException conflict)
+            {
+                string duplicateText = string.Join("\n", conflict.Duplicates.Select(item =>
+                    $"ID={item.Id}，名称={item.Name}，CODE={item.Code}，原因={item.DuplicateReason}"));
+                MessageBox.Show($"目标位置存在重复规范库：\n{duplicateText}", "移动失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"移动规范分类失败：{ex.Message}");
+                MessageBox.Show($"移动规范分类失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task MoveUncategorizedSeriesAsync(StandardManagementSeriesClient series)
+        {
+            List<StandardMoveTargetItem> targetItems = GetStandardCategoryTargetItems();
+            StandardMoveTargetItem? target = ShowStandardMoveTargetDialogForSeries(series, targetItems);
+            if (target?.ParentId == null) return;
+
+            try
+            {
+                StandardManagementOperationClientResponse response = await _standardManagementApiService
+                    .MoveManagementSeriesAsync(series.Id, target.ParentId.Value, VariableDictionary._userName ?? string.Empty)
+                    .ConfigureAwait(true);
+                MessageBox.Show(response.Message,
+                    response.Success ? "移动成功" : "移动失败",
+                    MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                if (response.Success) await RefreshStandardTreeAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"移动旧规范失败：{ex.Message}");
+                MessageBox.Show($"移动旧规范失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private List<StandardMoveTargetItem> GetStandardCategoryTargetItems()
+        {
+            List<StandardMoveTargetItem> targetItems = new List<StandardMoveTargetItem>();
+            foreach (CategoryTreeNode root in _standardTreeNodes)
+                CollectStandardCategoryTargetItems(root, targetItems);
+            return targetItems;
+        }
+
+        private static void CollectStandardCategoryTargetItems(CategoryTreeNode node, List<StandardMoveTargetItem> result)
+        {
+            if (node.Data is StandardManagementCategoryClient category)
+            {
+                result.Add(new StandardMoveTargetItem
+                {
+                    ParentId = category.Id,
+                    DisplayText = new string('　', Math.Max(0, node.Level)) + node.DisplayText
+                });
+            }
+            foreach (CategoryTreeNode child in node.Children)
+                CollectStandardCategoryTargetItems(child, result);
+        }
+
+        private static void CollectStandardTreeNodes(CategoryTreeNode node, List<CategoryTreeNode> result)
+        {
+            result.Add(node);
+            foreach (CategoryTreeNode child in node.Children)
+                CollectStandardTreeNodes(child, result);
+        }
+
+        private static void CollectStandardCategoryTargets(
+            CategoryTreeNode node,
+            List<CategoryTreeNode> excludedNodes,
+            List<CategoryTreeNode> result)
+        {
+            if (excludedNodes.Contains(node)) return;
+            if (node.Data is StandardManagementCategoryClient)
+                result.Add(node);
+            foreach (CategoryTreeNode child in node.Children)
+                CollectStandardCategoryTargets(child, excludedNodes, result);
+        }
+
+        private StandardMoveTargetItem? ShowStandardMoveTargetDialog(
+            StandardManagementCategoryClient selectedCategory,
+            List<StandardMoveTargetItem> targetItems)
+        {
+            var dialog = new Window
+            {
+                Title = "移动规范位置",
+                Width = 460,
+                Height = 190,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false
+            };
+            var root = new Grid { Margin = new Thickness(18) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var hint = new TextBlock
+            {
+                Text = $"当前规范库：{selectedCategory.Name}（{selectedCategory.Code}）\n请选择新的上级位置：",
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid.SetRow(hint, 0);
+            root.Children.Add(hint);
+
+            var targetBox = new ComboBox
+            {
+                ItemsSource = targetItems,
+                DisplayMemberPath = nameof(StandardMoveTargetItem.DisplayText),
+                SelectedIndex = 0,
+                MinHeight = 28,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            Grid.SetRow(targetBox, 1);
+            root.Children.Add(targetBox);
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            var cancel = new Button { Content = "取消", Width = 75, Margin = new Thickness(0, 0, 8, 0) };
+            var confirm = new Button { Content = "确定", Width = 75 };
+            cancel.Click += (_, _) => dialog.DialogResult = false;
+            confirm.Click += (_, _) => dialog.DialogResult = true;
+            buttons.Children.Add(cancel);
+            buttons.Children.Add(confirm);
+            Grid.SetRow(buttons, 2);
+            root.Children.Add(buttons);
+
+            dialog.Content = root;
+            bool? result = dialog.ShowDialog();
+            return result == true ? targetBox.SelectedItem as StandardMoveTargetItem : null;
+        }
+
+        private StandardMoveTargetItem? ShowStandardMoveTargetDialogForSeries(
+            StandardManagementSeriesClient series,
+            List<StandardMoveTargetItem> targetItems)
+        {
+            var dialog = new Window
+            {
+                Title = "移动旧规范位置",
+                Width = 460,
+                Height = 190,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false
+            };
+            var root = new Grid { Margin = new Thickness(18) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var hint = new TextBlock
+            {
+                Text = $"旧规范：{series.SeriesName}（{series.SeriesCode}）\n请选择归属规范库：",
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid.SetRow(hint, 0);
+            root.Children.Add(hint);
+            var targetBox = new ComboBox
+            {
+                ItemsSource = targetItems,
+                DisplayMemberPath = nameof(StandardMoveTargetItem.DisplayText),
+                SelectedIndex = targetItems.Count > 0 ? 0 : -1,
+                MinHeight = 28,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            Grid.SetRow(targetBox, 1);
+            root.Children.Add(targetBox);
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var cancel = new Button { Content = "取消", Width = 75, Margin = new Thickness(0, 0, 8, 0) };
+            var confirm = new Button { Content = "确定", Width = 75, IsEnabled = targetItems.Count > 0 };
+            cancel.Click += (_, _) => dialog.DialogResult = false;
+            confirm.Click += (_, _) => dialog.DialogResult = true;
+            buttons.Children.Add(cancel);
+            buttons.Children.Add(confirm);
+            Grid.SetRow(buttons, 2);
+            root.Children.Add(buttons);
+            dialog.Content = root;
+            return dialog.ShowDialog() == true ? targetBox.SelectedItem as StandardMoveTargetItem : null;
+        }
+
+        private sealed class StandardMoveTargetItem
+        {
+            public long? ParentId { get; set; }
+            public string DisplayText { get; set; } = string.Empty;
+        }
+
+        private void 展开_折叠规范_Click(object sender, RoutedEventArgs e)
+        {
+            bool shouldExpand = _standardTreeNodes.Any(node => !node.IsExpanded || node.Children.Any(child => !child.IsExpanded));
+            foreach (CategoryTreeNode node in _standardTreeNodes)
+                SetStandardTreeExpanded(node, shouldExpand);
+
+            SpecificationTreeView.Items.Refresh();
+            LogManager.Instance.LogInfo($"规范架构树已{(shouldExpand ? "展开" : "折叠")}。");
+        }
+
+        private async void 刷新规范_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                StandardManagementTreeClientResponse response = await _standardManagementApiService
+                    .GetManagementTreeAsync()
+                    .ConfigureAwait(true);
+
+                if (!response.Success)
+                {
+                    MessageBox.Show(response.Message, "规范目录查询失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                BuildStandardTree(response);
+                MessageBox.Show($"规范架构树刷新完成：专业/类别 {response.Categories.Count} 个，规范系列 {response.Series.Count} 个。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"刷新规范架构树失败：{ex.Message}");
+                MessageBox.Show($"刷新规范架构树失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void 导入规范_Btn_Click(object sender, RoutedEventArgs e)
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以导入规范。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            using var dialog = new OpenFileDialog
+            {
+                Filter = "规范文件 (*.xlsx;*.json)|*.xlsx;*.json|Excel 文件 (*.xlsx)|*.xlsx|JSON 文件 (*.json)|*.json",
+                Title = "选择要预览的规范文件",
+                Multiselect = false
+            };
+
+            if (dialog.ShowDialog() != DialogResult.OK)
+                return;
+
+            try
+            {
+                StandardImportPreviewClientResponse response = await _standardManagementApiService
+                    .PreviewImportAsync(dialog.FileName, VariableDictionary._userName ?? string.Empty)
+                    .ConfigureAwait(true);
+                string batchText = string.IsNullOrWhiteSpace(response.BatchId) ? "未生成" : response.BatchId;
+                MessageBoxResult confirm = MessageBox.Show(
+                    $"文件预览完成。\n{response.Message}\n错误：{response.ErrorCount}\n警告：{response.WarningCount}\n批次：{batchText}\n\n是否确认导入？",
+                    response.Success ? "规范预览成功" : "规范预览存在问题",
+                    response.Success ? MessageBoxButton.YesNo : MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Question : MessageBoxImage.Warning);
+                if (response.Success && confirm == MessageBoxResult.Yes)
+                {
+                    StandardImportCommitClientResponse commit = await _standardManagementApiService
+                        .CommitImportAsync(response.BatchId, response.WarningCount > 0, VariableDictionary._userName ?? string.Empty)
+                        .ConfigureAwait(true);
+                    MessageBox.Show(
+                        $"{commit.Message}\n导入数量：{commit.ImportedCount}\n警告：{commit.WarningCount}",
+                        commit.Success ? "规范导入成功" : "规范导入失败",
+                        MessageBoxButton.OK,
+                        commit.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                    if (commit.Success)
+                        await RefreshStandardTreeAsync().ConfigureAwait(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"规范文件预览失败：{ex.Message}");
+                MessageBox.Show($"规范文件预览失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void 导出规范_Btn_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
+                || !(selectedNode.Data is StandardManagementSeriesClient series))
+            {
+                MessageBox.Show("请先选择一个规范系列。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                List<StandardDocumentVersionClient> versions = await _standardManagementApiService
+                    .GetManagementVersionsAsync(series.Id)
+                    .ConfigureAwait(true);
+                StandardDocumentVersionClient? current = versions.FirstOrDefault(item => item.IsCurrent);
+                if (current == null)
+                {
+                    MessageBox.Show("当前规范系列没有可导出的有效版本。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                List<StandardDocumentFileClient> files = await _standardManagementApiService
+                    .GetManagementFilesAsync(current.Id)
+                    .ConfigureAwait(true);
+                StandardDocumentFileClient? file = files.FirstOrDefault();
+                if (file == null)
+                {
+                    MessageBox.Show("当前规范版本没有可导出的附件。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                using var saveDialog = new System.Windows.Forms.SaveFileDialog
+                {
+                    FileName = file.OriginalFileName,
+                    Filter = "所有文件 (*.*)|*.*",
+                    Title = "导出规范附件"
+                };
+                if (saveDialog.ShowDialog() != DialogResult.OK) return;
+
+                await _standardManagementApiService
+                    .DownloadManagementFileAsync(file.Id, saveDialog.FileName)
+                    .ConfigureAwait(true);
+                MessageBox.Show("规范附件导出成功。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"查询规范导出版本失败：{ex.Message}");
+                MessageBox.Show($"查询规范导出版本失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 根据服务器返回的专业/类别和规范系列构造规范树。
+        /// </summary>
+        private void BuildStandardTree(StandardManagementTreeClientResponse response)
+        {
+            _standardTreeNodes.Clear();
+            var nodeMap = new Dictionary<long, CategoryTreeNode>();
+
+            foreach (StandardManagementCategoryClient category in response.Categories.OrderBy(item => item.SortOrder).ThenBy(item => item.Id))
+            {
+                nodeMap[category.Id] = new CategoryTreeNode(
+                    unchecked((int)category.Id),
+                    category.Code,
+                    string.IsNullOrWhiteSpace(category.Name) ? category.Code : category.Name,
+                    category.ParentId.HasValue ? 1 : 0,
+                    category.ParentId.HasValue ? unchecked((int)category.ParentId.Value) : 0,
+                    category)
+                {
+                    IsExpanded = false
+                };
+            }
+
+            foreach (CategoryTreeNode node in nodeMap.Values)
+            {
+                StandardManagementCategoryClient category = (StandardManagementCategoryClient)node.Data;
+                if (category.ParentId.HasValue && nodeMap.TryGetValue(category.ParentId.Value, out CategoryTreeNode? parent))
+                    parent.Children.Add(node);
+                else
+                    _standardTreeNodes.Add(node);
+            }
+
+            foreach (StandardManagementSeriesClient series in response.Series.OrderBy(item => item.SeriesName).ThenBy(item => item.Id))
+            {
+                var seriesNode = new CategoryTreeNode(
+                    unchecked((int)series.Id),
+                    series.SeriesCode,
+                    $"{series.SeriesName} [{series.StandardNumber}]",
+                    2,
+                    series.CategoryId.HasValue ? unchecked((int)series.CategoryId.Value) : 0,
+                    series);
+
+                if (series.CategoryId.HasValue && nodeMap.TryGetValue(series.CategoryId.Value, out CategoryTreeNode? parent))
+                    parent.Children.Add(seriesNode);
+                else
+                    _standardTreeNodes.Add(seriesNode);
+            }
+
+            SpecificationTreeView.ItemsSource = null;
+            SpecificationTreeView.ItemsSource = _standardTreeNodes;
+        }
+
+        /// <summary>
+        /// 递归设置规范树所有节点的展开状态。
+        /// </summary>
+        private static void SetStandardTreeExpanded(CategoryTreeNode node, bool isExpanded)
+        {
+            node.IsExpanded = isExpanded;
+            foreach (CategoryTreeNode child in node.Children)
+                SetStandardTreeExpanded(child, isExpanded);
+        }
     }
     /// <summary>
     /// DataGrid 绑定使用的行模型（用于 LayerDictionary_DataGrid）
