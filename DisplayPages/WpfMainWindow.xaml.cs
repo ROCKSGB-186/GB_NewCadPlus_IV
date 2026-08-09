@@ -15000,17 +15000,29 @@ namespace GB_NewCadPlus_IV
                 List<StandardDocumentFileClient> files = await _standardManagementApiService
                     .GetManagementFilesAsync(current.Id)
                     .ConfigureAwait(true);
-                StandardDocumentFileClient? file = files.FirstOrDefault();
+                StandardDocumentFileClient? file = files.FirstOrDefault(item =>
+                    string.Equals(item.Extension, ".xlsx", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(item.Extension, ".xls", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(Path.GetExtension(item.OriginalFileName), ".xlsx", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(Path.GetExtension(item.OriginalFileName), ".xls", StringComparison.OrdinalIgnoreCase));
                 if (file == null)
                 {
-                    MessageBox.Show("当前规范版本没有可导出的附件。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("当前规范版本没有 Excel 附件（.xlsx 或 .xls），无法按 Excel 文件导出。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
 
+                string sourceExtension = Path.GetExtension(file.OriginalFileName);
+                string exportFileName = string.Equals(sourceExtension, ".xlsx", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(sourceExtension, ".xls", StringComparison.OrdinalIgnoreCase)
+                    ? file.OriginalFileName
+                    : Path.GetFileNameWithoutExtension(file.OriginalFileName) + ".xlsx";
+
                 using var saveDialog = new System.Windows.Forms.SaveFileDialog
                 {
-                    FileName = file.OriginalFileName,
-                    Filter = "所有文件 (*.*)|*.*",
+                    FileName = exportFileName,
+                    DefaultExt = "xlsx",
+                    AddExtension = true,
+                    Filter = "Excel 文件 (*.xlsx;*.xls)|*.xlsx;*.xls",
                     Title = "导出规范附件"
                 };
                 if (saveDialog.ShowDialog() != DialogResult.OK) return;
@@ -15018,6 +15030,7 @@ namespace GB_NewCadPlus_IV
                 await _standardManagementApiService
                     .DownloadManagementFileAsync(file.Id, saveDialog.FileName)
                     .ConfigureAwait(true);
+                LogManager.Instance.LogInfo($"规范 Excel 导出成功：SeriesId={series.Id}，FileId={file.Id}，保存路径={saveDialog.FileName}");
                 MessageBox.Show("规范附件导出成功。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
