@@ -36,6 +36,13 @@ namespace GB_NewCadPlus_IV.Helpers
     /// </summary>
     public static class PipelineCadObjectService
     {
+        private sealed class PipelineSegment
+        {
+            public int Index { get; set; }
+            public Point3d Start { get; set; }
+            public Point3d End { get; set; }
+        }
+
         /// <summary>
         /// 将一条管道草稿作为正式 CAD 对象写入当前空间。
         /// </summary>
@@ -79,7 +86,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     throw new InvalidOperationException("当前图纸空间不可写。\n");
                 }
 
-                Polyline pipeline = CreatePipelinePolyline(points);
+                Polyline pipeline = CreatePipelinePolyline(points, normalizedRole);
                 currentSpace.AppendEntity(pipeline);
                 transaction.AddNewlyCreatedDBObject(pipeline, true);
                 LogManager.Instance.LogInfo(
@@ -101,34 +108,63 @@ namespace GB_NewCadPlus_IV.Helpers
                 LogManager.Instance.LogInfo(
                     $"[管道落图][属性载体完成] ObjectId={attributeCarrierId}, Handle={attributes["ATTRIBUTE_CARRIER_HANDLE"]}");
 
-                DBText title = CreateTitleText(points, attributes["PIPELINETITLE"], normalizedRole);
-                currentSpace.AppendEntity(title);
-                transaction.AddNewlyCreatedDBObject(title, true);
-                WriteLinkRecord(transaction, title, pipeId, "TITLE");
-                LogManager.Instance.LogInfo(
-                    $"[管道落图][标题完成] ObjectId={title.ObjectId}, Text={title.TextString}, Position={title.Position}, Height={title.Height}, Layer={title.Layer}, ColorIndex={title.ColorIndex}, IsErased={title.IsErased}");
+                List<PipelineSegment> displaySegments = GetDisplaySegments(points);
+                List<ObjectId> titleIds = new List<ObjectId>();
+                List<ObjectId> flowIds = new List<ObjectId>();
+                if (displaySegments.Count == 0)
+                {
+                    LogManager.Instance.LogInfo(
+                        $"[管道落图][标注跳过] PipeId={pipeId}, Reason=没有长度大于50×比例的有效线段。");
+                }
+                foreach (PipelineSegment segment in displaySegments)
+                {
+                    DBText title = CreateTitleText(
+                        transaction,
+                        database,
+                        segment.Start,
+                        segment.End,
+                        attributes["PIPELINETITLE"],
+                        normalizedRole);
+                    currentSpace.AppendEntity(title);
+                    transaction.AddNewlyCreatedDBObject(title, true);
+                    WriteLinkRecord(transaction, title, pipeId, "TITLE");
+                    titleIds.Add(title.ObjectId);
+                    LogManager.Instance.LogInfo(
+                        $"[管道落图][标题完成] SegmentIndex={segment.Index}, ObjectId={title.ObjectId}, Text={title.TextString}, Position={title.Position}, Height={title.Height}, Layer={title.Layer}, ColorIndex={title.ColorIndex}");
 
-                Polyline flowDirection = CreateFlowDirectionSymbol(points, normalizedRole);
-                currentSpace.AppendEntity(flowDirection);
-                transaction.AddNewlyCreatedDBObject(flowDirection, true);
-                WriteLinkRecord(transaction, flowDirection, pipeId, "FLOW_DIRECTION");
+                    Solid flowFill;
+                    Polyline flowDirection = CreateFlowDirectionSymbol(segment.Start, segment.End, normalizedRole, out flowFill);
+                    currentSpace.AppendEntity(flowDirection);
+                    transaction.AddNewlyCreatedDBObject(flowDirection, true);
+                    WriteLinkRecord(transaction, flowDirection, pipeId, "FLOW_DIRECTION");
+                    flowIds.Add(flowDirection.ObjectId);
+                    if (flowFill != null)
+                    {
+                        currentSpace.AppendEntity(flowFill);
+                        transaction.AddNewlyCreatedDBObject(flowFill, true);
+                        WriteLinkRecord(transaction, flowFill, pipeId, "FLOW_DIRECTION_FILL");
+                    }
+                    LogManager.Instance.LogInfo(
+                        $"[管道落图][流向完成] SegmentIndex={segment.Index}, ObjectId={flowDirection.ObjectId}, VertexCount={flowDirection.NumberOfVertices}, Layer={flowDirection.Layer}, ColorIndex={flowDirection.ColorIndex}");
+                }
+
                 LogManager.Instance.LogInfo(
-                    $"[管道落图][流向完成] ObjectId={flowDirection.ObjectId}, VertexCount={flowDirection.NumberOfVertices}, Layer={flowDirection.Layer}, ColorIndex={flowDirection.ColorIndex}, IsErased={flowDirection.IsErased}");
+                    $"[管道落图][标注完成] SegmentCount={displaySegments.Count}, TitleCount={titleIds.Count}, FlowCount={flowIds.Count}");
 
                 LogManager.Instance.LogInfo("[管道落图][事务提交开始]");
                 transaction.Commit();
                 stopwatch.Stop();
 
                 LogManager.Instance.LogInfo(
-                    $"[管道落图][事务提交成功] PipeId={pipeId}, Role={normalizedRole}, PipelineObjectId={pipeline.ObjectId}, AttributeCarrierObjectId={attributeCarrierId}, TitleObjectId={title.ObjectId}, FlowObjectId={flowDirection.ObjectId}, ElapsedMs={stopwatch.ElapsedMilliseconds}");
+                    $"[管道落图][事务提交成功] PipeId={pipeId}, Role={normalizedRole}, PipelineObjectId={pipeline.ObjectId}, AttributeCarrierObjectId={attributeCarrierId}, TitleCount={titleIds.Count}, FirstTitleObjectId={(titleIds.Count == 0 ? ObjectId.Null : titleIds[0])}, FlowCount={flowIds.Count}, FirstFlowObjectId={(flowIds.Count == 0 ? ObjectId.Null : flowIds[0])}, ElapsedMs={stopwatch.ElapsedMilliseconds}");
 
                 return new PipelineCadPlacementResult
                 {
                     PipeId = pipeId,
                     PipelineObjectId = pipeline.ObjectId,
                     AttributeCarrierObjectId = attributeCarrierId,
-                    TitleObjectId = title.ObjectId,
-                    FlowDirectionObjectId = flowDirection.ObjectId
+                    TitleObjectId = titleIds.Count == 0 ? ObjectId.Null : titleIds[0],
+                    FlowDirectionObjectId = flowIds.Count == 0 ? ObjectId.Null : flowIds[0]
                 };
             }
         }
@@ -136,15 +172,19 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 创建支持夹点编辑的二维多段线主体。
         /// </summary>
-        private static Polyline CreatePipelinePolyline(IList<Point3d> points)
+        private static Polyline CreatePipelinePolyline(IList<Point3d> points, string pipeRole)
         {
             Polyline pipeline = new Polyline();
             pipeline.SetDatabaseDefaults();
+            double scale = GetDisplayScale();
             for (int index = 0; index < points.Count; index++)
             {
                 Point3d point = points[index];
-                pipeline.AddVertexAt(index, new Point2d(point.X, point.Y), 0, 0, 0);
+                pipeline.AddVertexAt(index, new Point2d(point.X, point.Y), 0, 0.3 * scale, 0.3 * scale);
             }
+
+            pipeline.ConstantWidth = 0.3 * scale;
+            pipeline.Color = Color.FromColorIndex(ColorMethod.ByAci, GetPipeColor(pipeRole));
 
             return pipeline;
         }
@@ -224,18 +264,65 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 创建图面标题文字。
         /// </summary>
         private static DBText CreateTitleText(
-            IList<Point3d> points,
+            Transaction transaction,
+            Database database,
+            Point3d start,
+            Point3d end,
             string title,
             string pipeRole)
         {
-            Point3d position = points[points.Count / 2];
+            Vector3d direction = end - start;
+            if (direction.Length <= 1e-8)
+            {
+                direction = Vector3d.XAxis;
+            }
+
+            direction = direction.GetNormal();
+            Vector3d perpendicular = new Vector3d(-direction.Y, direction.X, 0).GetNormal();
+            if (perpendicular.DotProduct(Vector3d.YAxis) < 0)
+            {
+                perpendicular = -perpendicular;
+            }
+
             double scale = GetDisplayScale();
+            double titleHeight = 3.5 * scale;
+            Point3d segmentMiddle = new Point3d(
+                (start.X + end.X) / 2.0,
+                (start.Y + end.Y) / 2.0,
+                (start.Z + end.Z) / 2.0);
+            double titleOffset = 4.0 * scale + titleHeight * 0.75;
+            Point3d position = segmentMiddle + perpendicular * titleOffset;
+
+            double textRotation = Math.Atan2(direction.Y, direction.X);
+            if (Math.Cos(textRotation) < 0)
+            {
+                textRotation += Math.PI;
+            }
+
             DBText text = new DBText();
             text.SetDatabaseDefaults();
             text.Position = position;
             text.TextString = title ?? string.Empty;
-            text.Height = 3.5 * scale;
-            text.Color = Color.FromColorIndex(ColorMethod.ByAci, GetRoleColor(pipeRole));
+            text.Height = titleHeight;
+            text.Rotation = textRotation;
+            text.Justify = AttachmentPoint.MiddleCenter;
+            text.AlignmentPoint = position;
+            text.HorizontalMode = TextHorizontalMode.TextCenter;
+            text.VerticalMode = TextVerticalMode.TextVerticalMid;
+            text.Color = Color.FromColorIndex(ColorMethod.ByAci, GetTitleColor(pipeRole));
+            try
+            {
+                using (DBTrans styleTransaction = new DBTrans())
+                {
+                    TextFontsStyleHelper.ApplyTitleToDBText(styleTransaction, text, scale);
+                    text.AdjustAlignment(database);
+                    styleTransaction.Commit();
+                }
+            }
+            catch
+            {
+                // 保留基础文字属性，避免字体样式异常影响管道落图。
+            }
             LogManager.Instance.LogInfo(
                 $"[管道落图][标题尺寸] Scale={scale}, BaseHeight=3.5, ActualHeight={text.Height}");
             return text;
@@ -245,11 +332,12 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 创建简单三角形流向符号，方向与管道首尾方向一致。
         /// </summary>
         private static Polyline CreateFlowDirectionSymbol(
-            IList<Point3d> points,
-            string pipeRole)
+            Point3d start,
+            Point3d end,
+            string pipeRole,
+            out Solid fill)
         {
-            Point3d start = points[0];
-            Point3d end = points[points.Count - 1];
+            fill = null;
             Vector3d direction = end - start;
             if (direction.Length <= 1e-8)
             {
@@ -258,12 +346,16 @@ namespace GB_NewCadPlus_IV.Helpers
 
             direction = direction.GetNormal();
             Vector3d perpendicular = new Vector3d(-direction.Y, direction.X, 0).GetNormal();
-            Point3d center = points[points.Count / 2];
+            Point3d center = new Point3d(
+                (start.X + end.X) / 2.0,
+                (start.Y + end.Y) / 2.0,
+                (start.Z + end.Z) / 2.0);
             double scale = GetDisplayScale();
-            double size = 5.0 * scale;
-            Point3d tip = center + direction * size;
-            Point3d left = center - direction * size * 0.6 + perpendicular * size * 0.6;
-            Point3d right = center - direction * size * 0.6 - perpendicular * size * 0.6;
+            double length = 10.0 * scale;
+            double height = 2.0 * scale;
+            Point3d tip = center + direction * (length / 2.0);
+            Point3d left = center - direction * (length / 2.0) - perpendicular * (height / 2.0);
+            Point3d right = center - direction * (length / 2.0) + perpendicular * (height / 2.0);
 
             Polyline arrow = new Polyline();
             arrow.SetDatabaseDefaults();
@@ -271,10 +363,41 @@ namespace GB_NewCadPlus_IV.Helpers
             arrow.AddVertexAt(1, new Point2d(left.X, left.Y), 0, 0, 0);
             arrow.AddVertexAt(2, new Point2d(right.X, right.Y), 0, 0, 0);
             arrow.Closed = true;
-            arrow.Color = Color.FromColorIndex(ColorMethod.ByAci, GetRoleColor(pipeRole));
+            arrow.Color = Color.FromColorIndex(ColorMethod.ByAci, GetPipeColor(pipeRole));
+            arrow.LineWeight = LineWeight.LineWeight025;
+
+            fill = new Solid(
+                tip,
+                left,
+                right,
+                right)
+            {
+                Color = Color.FromColorIndex(ColorMethod.ByAci, GetArrowColor(pipeRole)),
+                LineWeight = LineWeight.LineWeight025
+            };
             LogManager.Instance.LogInfo(
-                $"[管道落图][流向尺寸] Scale={scale}, BaseSize=5, ActualSize={size}");
+                $"[管道落图][流向尺寸] Scale={scale}, BaseLength=10, BaseHeight=2, ActualLength={length}, ActualHeight={height}");
             return arrow;
+        }
+
+        private static List<PipelineSegment> GetDisplaySegments(IList<Point3d> points)
+        {
+            double minimumSegmentLength = 50.0 * GetDisplayScale();
+            List<PipelineSegment> segments = new List<PipelineSegment>();
+            for (int index = 0; index < points.Count - 1; index++)
+            {
+                if (points[index].DistanceTo(points[index + 1]) > minimumSegmentLength)
+                {
+                    segments.Add(new PipelineSegment
+                    {
+                        Index = index,
+                        Start = points[index],
+                        End = points[index + 1]
+                    });
+                }
+            }
+
+            return segments;
         }
 
         /// <summary>
@@ -380,11 +503,26 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 根据角色返回标题和流向符号颜色。
-        /// </summary>
-        private static short GetRoleColor(string pipeRole)
+        /// 根据管道返回标题和流向符号颜色。
+        /// </summary>      
+
+        private static short GetPipeColor(string pipeRole)
         {
-            return NormalizeRole(pipeRole) == "EXPORT" ? (short)2 : (short)3;
+            return 3;
+        }
+        /// <summary>
+        /// 获取标题文字颜色，EXPORT 为红色，IMPORT 为蓝色。
+        /// </summary>
+        /// <param name="pipeRole"> 管道角色 </param>
+        /// <returns> 标题文字颜色 </returns>
+        private static short GetTitleColor(string pipeRole)
+        {
+            return NormalizeRole(pipeRole) == "EXPORT" ? (short)2 : (short)1;
+        }
+
+        private static short GetArrowColor(string pipeRole)
+        {
+            return 6;
         }
 
         /// <summary>

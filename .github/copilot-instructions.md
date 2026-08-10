@@ -21,6 +21,8 @@
 - 当前规范库阶段暂不深度实现 Token/Session 认证；服务器端和客户端先将用户名 sa、SYSDBA、admin 作为默认管理员识别，后续再完善正式登录认证机制。
 - 用户明确区分“规范信息”和“规范内容”：点击规范系列后，SpecificationPropertiesDataGrid 必须显示服务器中的实际规范数据记录（如法兰规格表记录），而不是系列编码、名称、标准号等元数据。
 - 管道功能统一使用一套“管道通用参数表”，进口/出口不是两套参数接口；两者仅通过 PipeRole 区分管道标题文字颜色和流向符号颜色。完整流程中，在读取端点图元属性后先请求服务器获取管道的 GB 设计规范并更新管道属性，再打开管道参数页面；服务器中的管道线作为普通图元上传，不提供进口/出口专用参数接口。
+- 用户要求在保留现有管道绘制、属性同步、比例缩放、长度重算和日志方法的基础上，新管道落图的 Polyline 线宽/颜色、标题文字样式与位置、标题颜色、流向符号样式必须借鉴现有 DrawPipeByClicks(bool isOutlet) 的实现。
+- 新管道图面样式应优先借鉴 UnifiedTableGenerator.DrawPipeByClicks 中 CreateDirectionalArrowsAndTitles 的实现，尤其是标题按管段中点和法向偏移定位、沿管段方向保持正向，以及流向箭头按管段方向创建。
 
 ## Code Style
 - Use specific formatting rules
