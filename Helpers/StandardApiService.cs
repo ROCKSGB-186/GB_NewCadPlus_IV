@@ -438,6 +438,147 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 查询管道通用字段目录和进口/出口图面样式。
+        /// </summary>
+        public async Task<PipelineFieldCatalogResponseClient> GetPipelineFieldCatalogAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            string requestUrl = BuildServerUrl("/api/pipelines/fields");
+            try
+            {
+                using (HttpResponseMessage response = await HttpClient
+                    .GetAsync(requestUrl, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    string responseBody = await response.Content
+                        .ReadAsStringAsync()
+                        .ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestException(
+                            $"管道字段目录查询失败，HTTP {(int)response.StatusCode}，地址：{requestUrl}，响应：{responseBody}");
+                    }
+
+                    PipelineFieldCatalogResponseClient? result = JsonConvert
+                        .DeserializeObject<PipelineFieldCatalogResponseClient>(responseBody);
+                    if (result == null)
+                    {
+                        throw new InvalidOperationException("管道字段目录查询返回为空。");
+                    }
+
+                    result.Fields ??= new List<PipelineFieldDefinitionClient>();
+                    result.RoleStyles ??= new List<PipelineRoleStyleClient>();
+                    LogManager.Instance.LogInfo(
+                        $"管道字段目录查询完成：地址={requestUrl}，字段数={result.Fields.Count}，角色样式数={result.RoleStyles.Count}");
+                    return result;
+                }
+            }
+            catch (Exception exception)
+            {
+                LogManager.Instance.LogInfo(
+                    $"管道字段目录查询异常：地址={requestUrl}，错误={exception.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 查询管道通用参数默认值。
+        /// </summary>
+        public async Task<PipelineDefaultsResponseClient> GetPipelineDefaultsAsync(
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            string requestUrl = BuildServerUrl("/api/pipelines/defaults");
+            try
+            {
+                using (HttpResponseMessage response = await HttpClient
+                    .GetAsync(requestUrl, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    string responseBody = await response.Content
+                        .ReadAsStringAsync()
+                        .ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestException(
+                            $"管道默认值查询失败，HTTP {(int)response.StatusCode}，地址：{requestUrl}，响应：{responseBody}");
+                    }
+
+                    PipelineDefaultsResponseClient? result = JsonConvert
+                        .DeserializeObject<PipelineDefaultsResponseClient>(responseBody);
+                    if (result == null)
+                    {
+                        throw new InvalidOperationException("管道默认值查询返回为空。");
+                    }
+
+                    result.Attributes ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    LogManager.Instance.LogInfo(
+                        $"管道默认值查询完成：地址={requestUrl}，属性数={result.Attributes.Count}");
+                    return result;
+                }
+            }
+            catch (Exception exception)
+            {
+                LogManager.Instance.LogInfo(
+                    $"管道默认值查询异常：地址={requestUrl}，错误={exception.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 请求服务器匹配管道 GB 设计规范。
+        /// </summary>
+        public async Task<PipelineDesignStandardMatchResponseClient> MatchPipelineDesignStandardAsync(
+            PipelineDesignStandardMatchRequestClient request,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (request == null)
+            {
+                throw new ArgumentNullException(nameof(request));
+            }
+
+            string requestUrl = BuildServerUrl("/api/pipelines/design-standard/match");
+            string requestJson = JsonConvert.SerializeObject(request);
+            try
+            {
+                using (StringContent content = new StringContent(requestJson, Encoding.UTF8, "application/json"))
+                using (HttpResponseMessage response = await HttpClient
+                    .PostAsync(requestUrl, content, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    string responseBody = await response.Content
+                        .ReadAsStringAsync()
+                        .ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestException(
+                            $"管道 GB 设计规范查询失败，HTTP {(int)response.StatusCode}，地址：{requestUrl}，响应：{responseBody}");
+                    }
+
+                    PipelineDesignStandardMatchResponseClient? result = JsonConvert
+                        .DeserializeObject<PipelineDesignStandardMatchResponseClient>(responseBody);
+                    if (result == null)
+                    {
+                        throw new InvalidOperationException("管道 GB 设计规范查询返回为空。");
+                    }
+
+                    result.Attributes ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    LogManager.Instance.LogInfo(
+                        $"管道 GB 设计规范查询完成：地址={requestUrl}，标准={request.DrawingStandardNo}，DN={request.DN}，PN={request.PN}，成功={result.Success}，匹配数={result.MatchCount}，消息={result.Message}");
+                    return result;
+                }
+            }
+            catch (Exception exception)
+            {
+                LogManager.Instance.LogInfo(
+                    $"管道 GB 设计规范查询异常：地址={requestUrl}，标准={request.DrawingStandardNo}，DN={request.DN}，PN={request.PN}，错误={exception.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// 查询法兰规范。
         /// </summary>
         /// <param name="request">法兰标准、DN、PN 和系列等条件。</param>

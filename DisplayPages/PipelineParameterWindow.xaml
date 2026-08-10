@@ -1,0 +1,100 @@
+<Window x:Class="GB_NewCadPlus_IV.DisplayPages.PipelineParameterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        Width="980"
+        Height="720"
+        MinWidth="800"
+        MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        Title="管道通用参数">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" Margin="0,0,0,8">
+            <TextBlock x:Name="PipeRoleTextBlock"
+                       DockPanel.Dock="Left"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Foreground="#0078D4"
+                       Text="管道通用参数" />
+            <TextBlock Margin="24,4,0,0"
+                       Foreground="#666666"
+                       Text="先完成规范匹配，再确认和修改参数" />
+        </DockPanel>
+
+        <Border Grid.Row="1"
+                Margin="0,0,0,8"
+                Padding="8"
+                Background="#FFF3F6FA"
+                BorderBrush="#FFB8C7D9"
+                BorderThickness="1">
+            <StackPanel>
+                <TextBlock FontWeight="Bold" Text="PIPELINETITLE 预览" />
+                <TextBlock x:Name="PipelineTitleTextBlock"
+                           Margin="0,4,0,0"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           Foreground="#C00000"
+                           Text="-" />
+                <TextBlock x:Name="ConflictTextBlock"
+                           Margin="0,6,0,0"
+                           Foreground="#C00000"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <DataGrid x:Name="ParameterDataGrid"
+                  Grid.Row="2"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  GridLinesVisibility="All"
+                  HeadersVisibility="Column"
+                  IsReadOnly="False"
+                  ItemsSource="{Binding Parameters}"
+                  SelectionMode="Single">
+            <DataGrid.Columns>
+                <DataGridTextColumn Width="190"
+                                    Binding="{Binding Tag}"
+                                    Header="Tag（标记）"
+                                    IsReadOnly="True" />
+                <DataGridTextColumn Width="260"
+                                    Binding="{Binding Prompt}"
+                                    Header="Prompt（提示）"
+                                    IsReadOnly="True" />
+                <DataGridTextColumn Width="260"
+                                    Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                    Header="Value（值）" />
+                <DataGridTextColumn Width="160"
+                                    Binding="{Binding Group}"
+                                    Header="分组"
+                                    IsReadOnly="True" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <DockPanel Grid.Row="3" Margin="0,8,0,0">
+            <TextBlock x:Name="StatusTextBlock"
+                       VerticalAlignment="Center"
+                       Foreground="#666666"
+                       Text="就绪" />
+            <StackPanel DockPanel.Dock="Right"
+                        Orientation="Horizontal">
+                <Button Width="110"
+                        Margin="8,0,0,0"
+                        Click="CancelButton_Click"
+                        Content="取消" />
+                <Button Width="150"
+                        Margin="8,0,0,0"
+                        Click="CompleteButton_Click"
+                        Content="完成管道绘制" />
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>
