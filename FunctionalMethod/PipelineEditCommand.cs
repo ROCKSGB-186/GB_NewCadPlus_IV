@@ -21,7 +21,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         /// <summary>
         /// 选择带 PIPEID 的 Polyline 管道并打开通用参数页面。
         /// </summary>
-        [CommandMethod("PIPELINE_EDIT")]
+        [CommandMethod("PIPELINE_EDIT", CommandFlags.UsePickSet)]
         public static async void EditPipeline()
         {
             Document document = AutoCADApplication.DocumentManager.MdiActiveDocument;
@@ -31,26 +31,31 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             }
 
             Editor editor = document.Editor;
-            PromptEntityOptions options = new PromptEntityOptions("\n选择要编辑的管道：");
-            options.SetRejectMessage("\n请选择管道 Polyline。\n");
-            options.AddAllowedClass(typeof(Polyline), true);
-
-            PromptEntityResult selection = editor.GetEntity(options);
-            if (selection.Status != PromptStatus.OK)
+            ObjectId pipelineObjectId = GetPreselectedPipeline(editor);
+            if (pipelineObjectId == ObjectId.Null)
             {
-                return;
+                PromptEntityOptions options = new PromptEntityOptions("\n选择要编辑的管道：");
+                options.SetRejectMessage("\n请选择管道 Polyline。\n");
+                options.AddAllowedClass(typeof(Polyline), true);
+
+                PromptEntityResult selection = editor.GetEntity(options);
+                if (selection.Status != PromptStatus.OK)
+                {
+                    return;
+                }
+
+                pipelineObjectId = selection.ObjectId;
             }
 
             Dictionary<string, string> attributes;
             using (Transaction transaction = document.Database.TransactionManager.StartTransaction())
             {
-                Entity entity = transaction.GetObject(selection.ObjectId, OpenMode.ForRead) as Entity;
+                Entity entity = transaction.GetObject(pipelineObjectId, OpenMode.ForRead) as Entity;
                 if (!(entity is Polyline))
                 {
                     editor.WriteMessage("\n选择的对象不是管道 Polyline。\n");
                     return;
                 }
-
                 attributes = PipelineEndpointPropertyHelper.ReadEntityProperties(transaction, entity);
                 if (entity is Polyline selectedPipeline)
                 {
@@ -59,13 +64,13 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                         "0.###",
                         CultureInfo.InvariantCulture);
                     LogManager.Instance.LogInfo(
-                        $"[PIPELINE_EDIT][当前长度读取] ObjectId={selection.ObjectId}, CurrentLength={attributes["PIPE_LENGTH"]}, VertexCount={selectedPipeline.NumberOfVertices}");
+                        $"[PIPELINE_EDIT][当前长度读取] ObjectId={pipelineObjectId}, CurrentLength={attributes["PIPE_LENGTH"]}, VertexCount={selectedPipeline.NumberOfVertices}");
                 }
                 transaction.Commit();
             }
 
             LogManager.Instance.LogInfo(
-                $"[PIPELINE_EDIT][属性读取完成] ObjectId={selection.ObjectId}, AttributeCount={attributes.Count}, HasPipeId={attributes.ContainsKey("PIPEID")}");
+                $"[PIPELINE_EDIT][属性读取完成] ObjectId={pipelineObjectId}, AttributeCount={attributes.Count}, HasPipeId={attributes.ContainsKey("PIPEID")}");
 
             if (!attributes.TryGetValue("PIPEID", out string pipeId) || string.IsNullOrWhiteSpace(pipeId))
             {
@@ -107,7 +112,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     LogManager.Instance.LogInfo("[PIPELINE_EDIT][文档锁成功] 已获取当前文档写锁。");
                     PipelineCadEditService.UpdatePipeline(
                         document.Database,
-                        selection.ObjectId,
+                        pipelineObjectId,
                         window.ConfirmedAttributes);
                     editor.Regen();
                 }
@@ -120,6 +125,36 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 LogManager.Instance.LogInfo($"管道编辑命令异常：PipeId={pipeId}，错误={exception.Message}");
                 editor.WriteMessage($"\n管道编辑失败：{exception.Message}\n");
             }
+        }
+
+        private static ObjectId GetPreselectedPipeline(Editor editor)
+        {
+            PromptSelectionResult impliedSelection = editor.SelectImplied();
+            if (impliedSelection.Status != PromptStatus.OK || impliedSelection.Value.Count == 0)
+            {
+                return ObjectId.Null;
+            }
+
+            foreach (SelectedObject selectedObject in impliedSelection.Value)
+            {
+                if (selectedObject == null)
+                {
+                    continue;
+                }
+
+                using (Transaction transaction = editor.Document.Database.TransactionManager.StartTransaction())
+                {
+                    Entity entity = transaction.GetObject(selectedObject.ObjectId, OpenMode.ForRead) as Entity;
+                    if (entity is Polyline)
+                    {
+                        transaction.Commit();
+                        return selectedObject.ObjectId;
+                    }
+                }
+            }
+
+            editor.WriteMessage("\n预选对象不是管道 Polyline，请重新选择。\n");
+            return ObjectId.Null;
         }
     }
 }

@@ -44,13 +44,14 @@ public class AutodeskRun : IExtensionApplication
     public void Initialize()
     {
         AddMenus.AddMenu();
+        PipelineContextMenuService.Register();
     }
     /// <summary>
     /// 卸载
     /// </summary>
     public void Terminate()
     {
-
+        PipelineContextMenuService.Unregister();
     }
 }
 /// <summary>

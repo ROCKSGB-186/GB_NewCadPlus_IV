@@ -7930,13 +7930,17 @@ namespace GB_NewCadPlus_IV
 
         private void 绘制进口管道_Click(object sender, RoutedEventArgs e)
         {
-            // 设置绘图比例到全局变量，供命令使用
-            Env.Document.SendStringToExecute("DrawInletPipeByClicks ", false, false, false);
+            Env.Document.SendStringToExecute("PIPELINE_DRAFT_IMPORT ", false, false, false);
         }
 
         private void 绘制出口管道_Click(object sender, RoutedEventArgs e)
         {
-            Env.Document.SendStringToExecute("DrawOutletPipeByClicks ", false, false, false);
+            Env.Document.SendStringToExecute("PIPELINE_DRAFT_EXPORT ", false, false, false);
+        }
+
+        private void 管道修改_Click(object sender, RoutedEventArgs e)
+        {
+            Env.Document.SendStringToExecute("PIPELINE_EDIT ", false, false, false);
         }
 
         #endregion
@@ -15100,6 +15104,7 @@ namespace GB_NewCadPlus_IV
             foreach (CategoryTreeNode child in node.Children)
                 SetStandardTreeExpanded(child, isExpanded);
         }
+
     }
     /// <summary>
     /// DataGrid 绑定使用的行模型（用于 LayerDictionary_DataGrid）

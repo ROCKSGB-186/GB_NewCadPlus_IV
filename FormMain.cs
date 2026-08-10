@@ -3882,8 +3882,7 @@ namespace GB_NewCadPlus_IV
         public void buttonTEST_Click(object sender, EventArgs e)
         {
             VariableDictionary.winForm_Status = true;
-            //DrawInletPipeByClicks
-            Env.Document.SendStringToExecute("DrawInletPipeByClicks ", false, false, false);
+            Env.Document.SendStringToExecute("PIPELINE_DRAFT_IMPORT ", false, false, false);
             //Env.Document.SendStringToExecute("CopyAtSamePosition ", false, false, false);
         }
         #endregion

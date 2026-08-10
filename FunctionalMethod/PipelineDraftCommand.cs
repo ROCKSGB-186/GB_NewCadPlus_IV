@@ -25,6 +25,29 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         [CommandMethod("PIPELINE_DRAFT")]
         public static async void DrawPipelineDraft()
         {
+            await DrawPipelineDraftCore(string.Empty);
+        }
+
+        /// <summary>
+        /// 绘制进口管道按钮使用的固定角色命令。
+        /// </summary>
+        [CommandMethod("PIPELINE_DRAFT_IMPORT")]
+        public static async void DrawImportPipelineDraft()
+        {
+            await DrawPipelineDraftCore(PipelineRoles.Import);
+        }
+
+        /// <summary>
+        /// 绘制出口管道按钮使用的固定角色命令。
+        /// </summary>
+        [CommandMethod("PIPELINE_DRAFT_EXPORT")]
+        public static async void DrawExportPipelineDraft()
+        {
+            await DrawPipelineDraftCore(PipelineRoles.Export);
+        }
+
+        private static async Task DrawPipelineDraftCore(string fixedPipeRole)
+        {
             Document document = AutoCADApplication.DocumentManager.MdiActiveDocument;
             if (document == null)
             {
@@ -36,7 +59,9 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 $"[PIPELINE_DRAFT][开始] Document={document.Name}, Database={document.Database.Filename}");
             try
             {
-                string pipeRole = CollectPipeRole(editor);
+                string pipeRole = string.IsNullOrWhiteSpace(fixedPipeRole)
+                    ? CollectPipeRole(editor)
+                    : fixedPipeRole;
                 if (string.IsNullOrWhiteSpace(pipeRole))
                 {
                     LogManager.Instance.LogInfo("[PIPELINE_DRAFT][取消] 未选择有效的管道角色。");

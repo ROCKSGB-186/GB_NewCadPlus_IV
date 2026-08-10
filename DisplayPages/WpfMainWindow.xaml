@@ -587,7 +587,7 @@
                                                                         FontSize="12"
                                                                         Foreground="White" VerticalContentAlignment="Center" />
                                                                     <Button
-                                                                        x:Name="属性同步"
+                                                                        x:Name="管道修改"
                                                                         Width="88"
                                                                         Height="25"
                                                                         Margin="1,1,1,1"
@@ -595,8 +595,8 @@
                                                                         VerticalAlignment="Center"
                                                                         Background="#FF0050A0"
                                                                         BorderBrush="#FFC2C6CE"
-                                                                        Click="属性同步_Click"
-                                                                        Content="属性同步"
+                                                                        Click="管道修改_Click"
+                                                                        Content="管道修改"
                                                                         FontSize="12"
                                                                         Foreground="White" VerticalContentAlignment="Center" />
                                                                 </WrapPanel>
