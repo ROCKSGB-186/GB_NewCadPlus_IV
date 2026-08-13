@@ -4194,6 +4194,7 @@ Background="FloralWhite">
                                             <MenuItem Header="上移规范库" Click="右键上移规范库_Click" />
                                             <MenuItem Header="下移规范库" Click="右键下移规范库_Click" />
                                             <Separator />
+                                            <MenuItem Header="重命名" Click="右键重命名规范_Click" />
                                             <MenuItem Header="修改规范库" Click="右键修改规范库_Click" />
                                             <MenuItem Header="移动规范位置" Click="右键移动规范位置_Click" />
                                             <MenuItem Header="删除规范库" Click="右键删除规范库_Click" />

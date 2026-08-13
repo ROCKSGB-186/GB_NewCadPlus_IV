@@ -4582,10 +4582,18 @@ namespace GB_NewCadPlus_IV
                 RefreshItem.Click += 刷新文件列表按钮_Click;
                 contextMenu.Items.Add(RefreshItem);
 
+                var addStandardItem = new System.Windows.Controls.MenuItem { Header = "添加规范" };
+                addStandardItem.Click += 添加规范到分类库_MenuItem_Click;
+                contextMenu.Items.Add(addStandardItem);
+
+                var exportStandardItem = new System.Windows.Controls.MenuItem { Header = "导出规范" };
+                exportStandardItem.Click += 导出分类库规范_MenuItem_Click;
+                contextMenu.Items.Add(exportStandardItem);
+
                 treeView.ContextMenu = contextMenu;
 
                 LogManager.Instance.LogInfo("右键菜单添加成功");
-            }
+            }   
             catch (Exception ex)
             {
                 LogManager.Instance.LogInfo($"添加右键菜单时出错: {ex.Message}");
@@ -4593,6 +4601,92 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+        private async void 添加规范到分类库_MenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode node)
+                || !(node.Data is StandardManagementCategoryClient category))
+            {
+                MessageBox.Show("请先选择要添加规范的分类库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            await 导入规范到分类库Async(category.Id).ConfigureAwait(true);
+        }
+
+        private async Task 导入规范到分类库Async(long categoryId)
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以导入规范。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            using var dialog = new OpenFileDialog
+            {
+                Filter = "规范文件 (*.xlsx;*.json)|*.xlsx;*.json|Excel 文件 (*.xlsx)|*.xlsx|JSON 文件 (*.json)|*.json",
+                Title = "选择要预览的规范文件",
+                Multiselect = false
+            };
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            try
+            {
+                StandardImportPreviewClientResponse response = await _standardManagementApiService
+                    .PreviewImportAsync(dialog.FileName, VariableDictionary._userName ?? string.Empty, categoryId)
+                    .ConfigureAwait(true);
+                string detailText = BuildImportPreviewDetailText(response);
+                MessageBoxResult confirm = MessageBox.Show(
+                    $"文件预览完成。\n{response.Message}\n错误：{response.ErrorCount}\n警告：{response.WarningCount}{detailText}\n\n是否确认导入？",
+                    response.Success ? "规范预览成功" : "规范预览存在问题",
+                    response.Success ? MessageBoxButton.YesNo : MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Question : MessageBoxImage.Warning);
+                if (response.Success && confirm == MessageBoxResult.Yes)
+                {
+                    StandardImportCommitClientResponse commit = await _standardManagementApiService
+                        .CommitImportAsync(response.BatchId, response.WarningCount > 0, VariableDictionary._userName ?? string.Empty)
+                        .ConfigureAwait(true);
+                    MessageBox.Show($"{commit.Message}\n导入数量：{commit.ImportedCount}\n警告：{commit.WarningCount}",
+                        commit.Success ? "规范导入成功" : "规范导入失败", MessageBoxButton.OK,
+                        commit.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                    if (commit.Success) await RefreshStandardTreeAsync().ConfigureAwait(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"规范文件预览失败：{ex}");
+                MessageBox.Show($"规范文件预览失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void 导出分类库规范_MenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode node)
+                || !(node.Data is StandardManagementCategoryClient category))
+            {
+                MessageBox.Show("请先选择要导出的分类库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            CategoryTreeNode? categoryTreeNode = _standardTreeNodes
+                .Select(root => FindStandardCategoryNode(root, category.Id))
+                .FirstOrDefault(item => item != null);
+            List<StandardManagementSeriesClient> series = categoryTreeNode?.Children
+                .Select(item => item.Data)
+                .OfType<StandardManagementSeriesClient>()
+                .ToList() ?? new List<StandardManagementSeriesClient>();
+            if (series.Count == 0)
+            {
+                MessageBox.Show("当前分类库下没有可导出的规范。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            foreach (StandardManagementSeriesClient item in series)
+            {
+                List<FlangeStandardRecordClient> records = await _standardManagementApiService.GetFlangeRecordsAsync(item.Id).ConfigureAwait(true);
+                if (records.Count > 0)
+                    await ExportFlangeRecordsToExcelAsync(item, records).ConfigureAwait(true);
+            }
+        }
         /// <summary>
         /// 解析更新的分类属性
         /// </summary>
@@ -14501,6 +14595,7 @@ namespace GB_NewCadPlus_IV
             SetContextMenuItemEnabled(menu, "添加子规范库", isCategory && IsMainCategorySelected());
             SetContextMenuItemEnabled(menu, "上移规范库", isCategory && HasStandardCategorySibling(-1));
             SetContextMenuItemEnabled(menu, "下移规范库", isCategory && HasStandardCategorySibling(1));
+            SetContextMenuItemEnabled(menu, "重命名", isCategory || isSeries);
             SetContextMenuItemEnabled(menu, "修改规范库", isCategory);
             SetContextMenuItemEnabled(menu, "移动规范位置", isCategory || isUncategorizedSeries);
             SetContextMenuItemEnabled(menu, "删除规范库", isCategory || isSeries);
@@ -14581,6 +14676,11 @@ namespace GB_NewCadPlus_IV
         private async void 右键下移规范库_Click(object sender, RoutedEventArgs e)
         {
             await ReorderSelectedStandardCategoryAsync(1).ConfigureAwait(true);
+        }
+
+        private async void 右键重命名规范_Click(object sender, RoutedEventArgs e)
+        {
+            await RenameSelectedStandardAsync().ConfigureAwait(true);
         }
 
         private async void 右键删除规范库_Click(object sender, RoutedEventArgs e)
@@ -14720,6 +14820,137 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogError($"调整规范库顺序失败：CategoryId={category.Id}，错误={ex.Message}");
                 MessageBox.Show($"调整规范库顺序失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// 重命名当前选中的规范库分类或具体规范系列。
+        /// </summary>
+        private async Task RenameSelectedStandardAsync()
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以重命名规范。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode))
+            {
+                MessageBox.Show("请先选择要重命名的规范。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string? newName = ShowStandardRenameDialog(selectedNode.DisplayText ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(newName)) return;
+            string renameName = newName.Trim();
+
+            try
+            {
+                StandardManagementOperationClientResponse response;
+                if (selectedNode.Data is StandardManagementCategoryClient category)
+                {
+                    // 分类重命名时保留原有父级、编码、说明和排序号，只更新名称字段。
+                    response = await _standardManagementApiService.UpdateManagementCategoryAsync(
+                        category.Id,
+                        new StandardCategoryCommandClientRequest
+                        {
+                            ParentId = category.ParentId,
+                            Code = category.Code,
+                            Name = renameName,
+                            Description = category.Description,
+                            SortOrder = category.SortOrder
+                        },
+                        VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
+                }
+                else if (selectedNode.Data is StandardManagementSeriesClient series)
+                {
+                    // 具体规范系列只更新 SERIES_NAME，不修改规范编码和实际内容记录。
+                    response = await _standardManagementApiService.RenameManagementSeriesAsync(
+                        series.Id,
+                        renameName,
+                        VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
+                }
+                else
+                {
+                    MessageBox.Show("当前节点不支持重命名。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                MessageBox.Show(response.Message,
+                    response.Success ? "重命名成功" : "重命名失败",
+                    MessageBoxButton.OK,
+                    response.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                if (response.Success)
+                {
+                    LogManager.Instance.LogInfo($"规范重命名成功：NodeId={selectedNode.Id}，新名称={renameName}");
+                    await RefreshStandardTreeAsync().ConfigureAwait(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"规范重命名失败：NodeId={selectedNode.Id}，错误={ex.Message}");
+                MessageBox.Show($"规范重命名失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 显示规范名称输入对话框。
+        /// </summary>
+        private string? ShowStandardRenameDialog(string currentName)
+        {
+            Window dialog = new Window
+            {
+                Title = "重命名规范",
+                Width = 420,
+                Height = 160,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false
+            };
+
+            Grid grid = new Grid { Margin = new Thickness(18) };
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            TextBlock label = new TextBlock { Text = "请输入新的规范名称：", Margin = new Thickness(0, 0, 0, 6) };
+            Grid.SetRow(label, 0);
+            grid.Children.Add(label);
+
+            System.Windows.Controls.TextBox nameBox = new System.Windows.Controls.TextBox
+            {
+                Text = currentName,
+                MinHeight = 26,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            nameBox.SelectAll();
+            Grid.SetRow(nameBox, 1);
+            grid.Children.Add(nameBox);
+
+            StackPanel buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            Button cancel = new Button { Content = "取消", Width = 75, Margin = new Thickness(0, 0, 8, 0) };
+            Button confirm = new Button { Content = "确定", Width = 75 };
+            cancel.Click += (_, _) => dialog.DialogResult = false;
+            confirm.Click += (_, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(nameBox.Text))
+                {
+                    MessageBox.Show("规范名称不能为空。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                dialog.DialogResult = true;
+            };
+            buttons.Children.Add(cancel);
+            buttons.Children.Add(confirm);
+            Grid.SetRow(buttons, 2);
+            grid.Children.Add(buttons);
+
+            dialog.Content = grid;
+            return dialog.ShowDialog() == true ? nameBox.Text.Trim() : null;
         }
 
         private async Task MoveUncategorizedSeriesAsync(StandardManagementSeriesClient series)
@@ -14916,12 +15147,14 @@ namespace GB_NewCadPlus_IV
 
                 if (!response.Success)
                 {
+                    LogManager.Instance.LogInfo($"规范架构树刷新失败：{response.Message}");
                     MessageBox.Show(response.Message, "规范目录查询失败", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
                 BuildStandardTree(response);
-                MessageBox.Show($"规范架构树刷新完成：专业/类别 {response.Categories.Count} 个，规范系列 {response.Series.Count} 个。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+                LogManager.Instance.LogInfo($"规范架构树刷新完成：专业/类别 {response.Categories.Count} 个，规范系列 {response.Series.Count} 个。");
+                //MessageBox.Show($"规范架构树刷新完成：专业/类别 {response.Categories.Count} 个，规范系列 {response.Series.Count} 个。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -14934,6 +15167,7 @@ namespace GB_NewCadPlus_IV
         {
             if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
             {
+                LogManager.Instance.LogInfo("非管理员用户尝试导入规范，操作被拒绝。");
                 MessageBox.Show("只有管理员可以导入规范。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -14954,8 +15188,10 @@ namespace GB_NewCadPlus_IV
                     .PreviewImportAsync(dialog.FileName, VariableDictionary._userName ?? string.Empty)
                     .ConfigureAwait(true);
                 string batchText = string.IsNullOrWhiteSpace(response.BatchId) ? "未生成" : response.BatchId;
+                LogManager.Instance.LogInfo($"文件预览完成：{response.Message}，错误：{response.ErrorCount}，警告：{response.WarningCount}，批次：{batchText}");
+                string detailText = BuildImportPreviewDetailText(response);
                 MessageBoxResult confirm = MessageBox.Show(
-                    $"文件预览完成。\n{response.Message}\n错误：{response.ErrorCount}\n警告：{response.WarningCount}\n批次：{batchText}\n\n是否确认导入？",
+                    $"文件预览完成。\n{response.Message}\n错误：{response.ErrorCount}\n警告：{response.WarningCount}\n批次：{batchText}{detailText}\n\n是否确认导入？",
                     response.Success ? "规范预览成功" : "规范预览存在问题",
                     response.Success ? MessageBoxButton.YesNo : MessageBoxButton.OK,
                     response.Success ? MessageBoxImage.Question : MessageBoxImage.Warning);
@@ -14964,6 +15200,7 @@ namespace GB_NewCadPlus_IV
                     StandardImportCommitClientResponse commit = await _standardManagementApiService
                         .CommitImportAsync(response.BatchId, response.WarningCount > 0, VariableDictionary._userName ?? string.Empty)
                         .ConfigureAwait(true);
+                    LogManager.Instance.LogInfo($"规范导入完成：{commit.Message}，导入数量：{commit.ImportedCount}，警告：{commit.WarningCount}");
                     MessageBox.Show(
                         $"{commit.Message}\n导入数量：{commit.ImportedCount}\n警告：{commit.WarningCount}",
                         commit.Success ? "规范导入成功" : "规范导入失败",
@@ -14980,6 +15217,29 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+        /// <summary>
+        /// 组织导入预览的 Excel 行号、错误原因和警告原因。
+        /// </summary>
+        private static string BuildImportPreviewDetailText(StandardImportPreviewClientResponse response)
+        {
+            List<StandardImportPreviewRowClient> problemRows = response.Rows
+                .Where(row => row.Errors.Count > 0 || row.Warnings.Count > 0)
+                .ToList();
+            if (problemRows.Count == 0) return string.Empty;
+
+            StringBuilder details = new StringBuilder("\n\n问题明细：");
+            foreach (StandardImportPreviewRowClient row in problemRows)
+            {
+                string errors = row.Errors.Count == 0 ? string.Empty : $"错误：{string.Join("；", row.Errors)}";
+                string warnings = row.Warnings.Count == 0 ? string.Empty : $"警告：{string.Join("；", row.Warnings)}";
+                string rowDetail = string.Join("，", new[] { errors, warnings }.Where(text => !string.IsNullOrWhiteSpace(text)));
+                details.Append($"\n第 {row.RowNumber} 行：{rowDetail}");
+                LogManager.Instance.LogWarning($"规范导入预览问题：Excel第{row.RowNumber}行，{rowDetail}");
+            }
+
+            return details.ToString();
+        }
+
         private async void 导出规范_Btn_Click(object sender, RoutedEventArgs e)
         {
             if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
@@ -14991,6 +15251,19 @@ namespace GB_NewCadPlus_IV
 
             try
             {
+                LogManager.Instance.LogInfo($"开始导出规范：SeriesId={series.Id}，SeriesName={series.SeriesName}");
+                List<FlangeStandardRecordClient> records = await _standardManagementApiService
+                    .GetFlangeRecordsAsync(series.Id)
+                    .ConfigureAwait(true);
+                LogManager.Instance.LogInfo($"导出规范实际内容查询完成：SeriesId={series.Id}，记录数={records.Count}");
+
+                if (records.Count > 0)
+                {
+                    await ExportFlangeRecordsToExcelAsync(series, records).ConfigureAwait(true);
+                    return;
+                }
+
+                LogManager.Instance.LogInfo($"规范实际内容为空，继续查询版本附件：SeriesId={series.Id}");
                 List<StandardDocumentVersionClient> versions = await _standardManagementApiService
                     .GetManagementVersionsAsync(series.Id)
                     .ConfigureAwait(true);
@@ -14998,6 +15271,7 @@ namespace GB_NewCadPlus_IV
                 if (current == null)
                 {
                     MessageBox.Show("当前规范系列没有可导出的有效版本。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    LogManager.Instance.LogInfo($"当前规范系列没有可导出的有效版本：SeriesId={series.Id}，SeriesName={series.SeriesName}");   
                     return;
                 }
 
@@ -15039,9 +15313,99 @@ namespace GB_NewCadPlus_IV
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogError($"查询规范导出版本失败：{ex.Message}");
-                MessageBox.Show($"查询规范导出版本失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogManager.Instance.LogError($"导出规范失败：{ex}");
+                MessageBox.Show($"导出规范失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// 将规范系列下的实际法兰记录导出为 Excel 文件。
+        /// </summary>
+        private async Task ExportFlangeRecordsToExcelAsync(
+            StandardManagementSeriesClient series,
+            List<FlangeStandardRecordClient> records)
+        {
+            string safeName = new string(series.SeriesName
+                .Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character)
+                .ToArray());
+            if (string.IsNullOrWhiteSpace(safeName)) safeName = "规范内容";
+
+            using var saveDialog = new System.Windows.Forms.SaveFileDialog
+            {
+                FileName = safeName + ".xlsx",
+                DefaultExt = "xlsx",
+                AddExtension = true,
+                Filter = "Excel 文件 (*.xlsx)|*.xlsx",
+                Title = "导出规范实际内容"
+            };
+            if (saveDialog.ShowDialog() != DialogResult.OK)
+            {
+                LogManager.Instance.LogInfo($"用户取消导出规范实际内容：SeriesId={series.Id}");
+                return;
+            }
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            await Task.Run(() =>
+            {
+                IWorkbook workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("规范内容");
+                string[] headers =
+                {
+                    "DN", "PN", "钢管外径Ⅰ", "钢管外径Ⅱ", "法兰外径D", "螺栓中心圆K",
+                    "螺栓孔径L", "螺栓数量n", "螺栓规格", "法兰厚度C", "突面高度f1",
+                    "法兰内径BⅠ", "法兰内径BⅡ", "原始行号"
+                };
+
+                IRow headerRow = sheet.CreateRow(0);
+                for (int index = 0; index < headers.Length; index++)
+                    headerRow.CreateCell(index).SetCellValue(headers[index]);
+
+                for (int rowIndex = 0; rowIndex < records.Count; rowIndex++)
+                {
+                    FlangeStandardRecordClient record = records[rowIndex];
+                    IRow row = sheet.CreateRow(rowIndex + 1);
+                    SetExcelCell(row, 0, record.DN);
+                    SetExcelCell(row, 1, record.PN);
+                    SetExcelCell(row, 2, record.PipeOuterDiameterSeriesI);
+                    SetExcelCell(row, 3, record.PipeOuterDiameterSeriesII);
+                    SetExcelCell(row, 4, record.FlangeOuterDiameter);
+                    SetExcelCell(row, 5, record.BoltCircleDiameter);
+                    SetExcelCell(row, 6, record.BoltHoleDiameter);
+                    SetExcelCell(row, 7, record.BoltCount);
+                    SetExcelCell(row, 8, record.BoltSpecification);
+                    SetExcelCell(row, 9, record.FlangeThickness);
+                    SetExcelCell(row, 10, record.RaisedFaceHeight);
+                    SetExcelCell(row, 11, record.FlangeInnerDiameterSeriesI);
+                    SetExcelCell(row, 12, record.FlangeInnerDiameterSeriesII);
+                    SetExcelCell(row, 13, record.SourceRowNumber);
+                }
+
+                for (int index = 0; index < headers.Length; index++)
+                    sheet.AutoSizeColumn(index);
+
+                using FileStream stream = File.Create(saveDialog.FileName);
+                workbook.Write(stream);
+                workbook.Close();
+            }).ConfigureAwait(true);
+            stopwatch.Stop();
+
+            LogManager.Instance.LogInfo($"规范实际内容 Excel 导出成功：SeriesId={series.Id}，记录数={records.Count}，保存路径={saveDialog.FileName}，耗时Ms={stopwatch.ElapsedMilliseconds}");
+            MessageBox.Show("规范实际内容导出成功。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// 将字符串、数值或整数统一写入 Excel 单元格。
+        /// </summary>
+        private static void SetExcelCell(IRow row, int columnIndex, object? value)
+        {
+            ICell cell = row.CreateCell(columnIndex);
+            if (value == null) return;
+            if (value is decimal decimalValue)
+                cell.SetCellValue((double)decimalValue);
+            else if (value is int intValue)
+                cell.SetCellValue(intValue);
+            else
+                cell.SetCellValue(value.ToString() ?? string.Empty);
         }
 
         /// <summary>
@@ -15049,6 +15413,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private void BuildStandardTree(StandardManagementTreeClientResponse response)
         {
+            LogManager.Instance.LogInfo($"开始生成规范树：分类数量={response.Categories.Count}，规范系列数量={response.Series.Count}");
             _standardTreeNodes.Clear();
             var nodeMap = new Dictionary<long, CategoryTreeNode>();
 
@@ -15077,10 +15442,12 @@ namespace GB_NewCadPlus_IV
 
             foreach (StandardManagementSeriesClient series in response.Series.OrderBy(item => item.SeriesName).ThenBy(item => item.Id))
             {
+                string displayText = BuildStandardSeriesDisplayText(series);
+                LogManager.Instance.LogInfo($"生成规范节点：SeriesId={series.Id}，原始名称={series.SeriesName}，标准号={series.StandardNumber}，最终显示名称={displayText}");
                 var seriesNode = new CategoryTreeNode(
                     unchecked((int)series.Id),
                     series.SeriesCode,
-                    $"{series.SeriesName} [{series.StandardNumber}]",
+                    displayText,
                     2,
                     series.CategoryId.HasValue ? unchecked((int)series.CategoryId.Value) : 0,
                     series);
@@ -15093,6 +15460,26 @@ namespace GB_NewCadPlus_IV
 
             SpecificationTreeView.ItemsSource = null;
             SpecificationTreeView.ItemsSource = _standardTreeNodes;
+            LogManager.Instance.LogInfo($"规范树生成完成：根节点数量={_standardTreeNodes.Count}");
+        }
+
+        /// <summary>
+        /// 生成规范系列的显示名称。
+        /// 如果重命名后的名称已经包含标准号，则不再重复追加标准号。
+        /// </summary>
+        private static string BuildStandardSeriesDisplayText(StandardManagementSeriesClient series)
+        {
+            string seriesName = (series.SeriesName ?? string.Empty).Trim();
+            string standardNumber = (series.StandardNumber ?? string.Empty).Trim();
+
+            if (string.IsNullOrWhiteSpace(seriesName))
+                return standardNumber;
+
+            if (string.IsNullOrWhiteSpace(standardNumber)
+                || seriesName.IndexOf(standardNumber, StringComparison.OrdinalIgnoreCase) >= 0)
+                return seriesName;
+
+            return $"{seriesName} [{standardNumber}]";
         }
 
         /// <summary>

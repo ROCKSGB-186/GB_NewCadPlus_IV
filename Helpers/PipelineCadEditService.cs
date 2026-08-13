@@ -99,7 +99,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             title.Height = 3.5 * GetDisplayScale();
                             title.Color = Color.FromColorIndex(
                                 ColorMethod.ByAci,
-                                GetRoleColor(pipeRole));
+                                GetTitleColor(pipeRole));
                             LogManager.Instance.LogInfo(
                                 $"[管道标题同步] PipeId={pipeId}, NewTitle={title.TextString}, Height={title.Height}, TargetObjectId={title.ObjectId}");
                         }
@@ -253,6 +253,16 @@ namespace GB_NewCadPlus_IV.Helpers
             return string.Equals(pipeRole, "EXPORT", StringComparison.OrdinalIgnoreCase)
                 ? (short)2
                 : (short)3;
+        }
+
+        /// <summary>
+        /// 获取管道标题颜色，必须与管道初次落图时保持一致。
+        /// </summary>
+        private static short GetTitleColor(string pipeRole)
+        {
+            return string.Equals(pipeRole, "EXPORT", StringComparison.OrdinalIgnoreCase)
+                ? (short)2
+                : (short)1;
         }
     }
 }

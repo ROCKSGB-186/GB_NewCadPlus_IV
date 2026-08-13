@@ -587,6 +587,9 @@ namespace GB_NewCadPlus_IV.Helpers
             // 黑名单先拦截（绝对禁止）
             if (JsonHelper.IsBlacklistedPropertyKey(rawKey)) return false;
 
+            // 法兰匹配所需的关键字段必须跨专业白名单保留，否则部分蝶阀只能继承到普通属性而无法查询规范。
+            if (IsFlangeQueryPropertyKey(rawKey)) return true;
+
             // 未启用白名单时，黑名单外都允许
             if (!JsonHelper._propertySyncUseWhitelistTemplate) return true;
 
@@ -599,6 +602,26 @@ namespace GB_NewCadPlus_IV.Helpers
 
             // 命中白名单才允许
             return activeWhitelist.Contains(nKey);
+        }
+
+        /// <summary>
+        /// 判断属性是否是法兰规范查询必须继承的关键字段。
+        /// </summary>
+        private static bool IsFlangeQueryPropertyKey(string rawKey)
+        {
+            string normalizedKey = NormalizePropertyKey(rawKey);
+            return normalizedKey == NormalizePropertyKey("DN") ||
+                   normalizedKey == NormalizePropertyKey("PN") ||
+                   normalizedKey == NormalizePropertyKey("DNCONN_TYPE") ||
+                   normalizedKey == NormalizePropertyKey("CONN_TYPE") ||
+                   normalizedKey == NormalizePropertyKey("CONNECTION_MODE") ||
+                   normalizedKey == NormalizePropertyKey("连接方式") ||
+                   normalizedKey == NormalizePropertyKey("连接形式") ||
+                   normalizedKey == NormalizePropertyKey("FLG_STD") ||
+                   normalizedKey == NormalizePropertyKey("DRAWINGNO.STANDARDNO") ||
+                   normalizedKey == NormalizePropertyKey("SERIES") ||
+                   normalizedKey == NormalizePropertyKey("FLG_TYPE") ||
+                   normalizedKey == NormalizePropertyKey("FACE_TYPE");
         }
 
         /// <summary>
@@ -623,8 +646,8 @@ namespace GB_NewCadPlus_IV.Helpers
                     // 无效属性跳过
                     if (ar == null) continue;
 
-                    // 读取标签名并清洗
-                    string tag = (ar.Tag ?? string.Empty).Trim();
+                    // 读取标签名并清洗；新管道属性载体使用编码后的 CAD Tag，需要还原业务字段名
+                    string tag = PipelineCadPropertyKeyHelper.Decode((ar.Tag ?? string.Empty).Trim());
                     // 空标签跳过
                     if (string.IsNullOrWhiteSpace(tag)) continue;
 
@@ -666,24 +689,25 @@ namespace GB_NewCadPlus_IV.Helpers
                         // 空数组跳过
                         if (values == null || values.Length == 0) continue;
 
-                        // 读取键名
-                        string key = (entry.Key ?? string.Empty).Trim();
-                        // 空键跳过
-                        if (string.IsNullOrWhiteSpace(key)) continue;
-
-                        // 优先取首值作为当前同步值
-                        string val = values[0].Value?.ToString() ?? string.Empty;
-                        // 值为 0 或空时不加入映射（核心修复）
-                        if (ShouldSkipInheritedValue(val)) continue;
-
-                        // 保存原键
-                        map[key] = val;
-
-                        // 保存归一化键
-                        string nKey = NormalizePropertyKey(key);
-                        if (!string.IsNullOrWhiteSpace(nKey) && !map.ContainsKey(nKey))
+                        // 新管道将所有属性按“键、值”交替写入 GBPIPE_DATA，不能把首项当作整条记录的值。
+                        if (string.Equals(
+                            entry.Key,
+                            PipelineCadPropertyKeyHelper.StorageKey,
+                            StringComparison.OrdinalIgnoreCase))
                         {
-                            map[nKey] = val;
+                            for (int index = 0; index + 1 < values.Length; index += 2)
+                            {
+                                string key = values[index].Value?.ToString()?.Trim() ?? string.Empty;
+                                string val = values[index + 1].Value?.ToString() ?? string.Empty;
+                                AddPropertyToMap(map, key, val);
+                            }
+                        }
+                        else
+                        {
+                            // 历史/普通 XRecord 仍使用“字典键作为属性名、首项作为属性值”。
+                            string key = PipelineCadPropertyKeyHelper.Decode((entry.Key ?? string.Empty).Trim());
+                            string val = values[0].Value?.ToString() ?? string.Empty;
+                            AddPropertyToMap(map, key, val);
                         }
                     }
                 }
@@ -691,6 +715,25 @@ namespace GB_NewCadPlus_IV.Helpers
 
             // 返回属性映射结果
             return map;
+        }
+
+        /// <summary>
+        /// 将属性加入映射，同时保留原始键和归一化键，统一处理空值过滤。
+        /// </summary>
+        private static void AddPropertyToMap(
+            Dictionary<string, string> map,
+            string key,
+            string value)
+        {
+            if (map == null || string.IsNullOrWhiteSpace(key)) return;
+            if (ShouldSkipInheritedValue(value)) return;
+
+            map[key] = value ?? string.Empty;
+            string normalizedKey = NormalizePropertyKey(key);
+            if (!string.IsNullOrWhiteSpace(normalizedKey) && !map.ContainsKey(normalizedKey))
+            {
+                map[normalizedKey] = value ?? string.Empty;
+            }
         }
 
         /// <summary>
@@ -1665,10 +1708,11 @@ namespace GB_NewCadPlus_IV.Helpers
                 PN = NormalizePn(pn),
                 Series = NormalizeSeries(FindProperty(queryProperties, "SERIES", "钢管系列", "管道系列")),
                 // 优先使用图元已有的 FLG_STD/法兰标准作为服务器筛选条件
-                StandardNumber = FindProperty(queryProperties, "FLG_STD", "法兰标准", "标准号") ?? "GB/T 9124.1-2019",
-                // 法兰类型和密封面形式，若未提供则使用默认值 "PL" 和 "RF"
-                FlangeType = FindProperty(queryProperties, "FLG_TYPE", "法兰类型") ?? "PL",
-                FaceType = FindProperty(queryProperties, "FACE_TYPE", "密封面形式", "密封面型式") ?? "RF"
+                StandardNumber = FindProperty(queryProperties, "FLG_STD", "法兰标准", "标准号") ?? string.Empty,
+                TableNumber = FindProperty(queryProperties, "TABLE_NUMBER", "标准表号", "表号") ?? string.Empty,
+                // 未明确提供时不额外限制系列，避免不同图元的法兰类型/密封面默认值阻断命中。
+                FlangeType = FindProperty(queryProperties, "FLG_TYPE", "法兰类型") ?? string.Empty,
+                FaceType = FindProperty(queryProperties, "FACE_TYPE", "密封面形式", "密封面型式") ?? string.Empty
             };
 
             // 记录标准号来源信息，便于排查
@@ -1715,12 +1759,12 @@ namespace GB_NewCadPlus_IV.Helpers
                             FamilyCode = request.FamilyCode,
                             SeriesCode = request.SeriesCode,
                             StandardNumber = string.Empty,
-                            TableNumber = request.TableNumber,
+                            TableNumber = string.Empty,
                             PN = request.PN,
                             DN = request.DN,
                             Series = request.Series,
-                            FlangeType = request.FlangeType,
-                            FaceType = request.FaceType
+                            FlangeType = string.Empty,
+                            FaceType = string.Empty
                         };
 
                         logger.LogInfo(
@@ -1867,6 +1911,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 properties,
                 "连接方式",
                 "CONN_TYPE",
+                "DNCONN_TYPE",
                 "CONNECTION_MODE",
                 "CONNECTIONTYPE",
                 "连接形式",
@@ -1876,8 +1921,9 @@ namespace GB_NewCadPlus_IV.Helpers
             // 去除常见分隔符后再判断，兼容“法兰连接”“法兰，对夹”等写法
             string normalizedMode = NormalizeConnectionMode(connectionMode);
 
-            // 实际属性值只要表示法兰连接即可；“对夹”是 Prompt 中的可选项，不一定出现在最终值中
-            return normalizedMode.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0;
+            // “法兰”“法兰连接”和“对夹”都是有效连接方式；对夹可能作为独立下拉值返回。
+            return normalizedMode.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   normalizedMode.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>
@@ -1900,11 +1946,19 @@ namespace GB_NewCadPlus_IV.Helpers
                 string tag = attributeDefinition.Tag ?? string.Empty;
                 string prompt = attributeDefinition.Prompt ?? string.Empty;
 
-                // CONN_TYPE 的 Prompt 通常直接保存为“法兰、对夹”
+                // 连接方式字段可能使用 CONN_TYPE、DNCONN_TYPE 或中文 Tag。
                 bool isConnectionField = string.Equals(
                     NormalizePropertyKey(tag),
                     NormalizePropertyKey("CONN_TYPE"),
-                    StringComparison.Ordinal);
+                    StringComparison.Ordinal) ||
+                    string.Equals(
+                        NormalizePropertyKey(tag),
+                        NormalizePropertyKey("DNCONN_TYPE"),
+                        StringComparison.Ordinal) ||
+                    string.Equals(
+                        NormalizePropertyKey(tag),
+                        NormalizePropertyKey("连接方式"),
+                        StringComparison.Ordinal);
                 bool hasFlangeStandardField = string.Equals(
                     NormalizePropertyKey(tag),
                     NormalizePropertyKey("FLG_STD"),
@@ -1916,10 +1970,10 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 string normalizedPrompt = NormalizeConnectionMode(prompt);
                 string normalizedDefaultValue = NormalizeConnectionMode(attributeDefinition.TextString);
-                bool isFlangeClampMode = (normalizedPrompt.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                                           normalizedPrompt.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0) ||
-                                          (normalizedDefaultValue.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                                           normalizedDefaultValue.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0);
+                bool isFlangeClampMode = normalizedPrompt.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         normalizedPrompt.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         normalizedDefaultValue.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         normalizedDefaultValue.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0;
 
                 if ((isConnectionField || hasFlangeStandardField) && isFlangeClampMode)
                 {

@@ -14,40 +14,57 @@ namespace GB_NewCadPlus_IV.Helpers
 {
     /// <summary>
     /// 管道 CAD 落图结果。
+    /// 包含管道主体、属性载体、标题和流向符号的对象 ID。
     /// </summary>
     public sealed class PipelineCadPlacementResult
     {
-        /// <summary>业务管道 ID。</summary>
+        /// <summary>业务管道唯一标识 ID（由系统生成）。</summary>
         public string PipeId { get; set; } = string.Empty;
 
-        /// <summary>管道主体 Polyline。</summary>
+        /// <summary>管道主体多段线（Polyline）的对象 ID。</summary>
         public ObjectId PipelineObjectId { get; set; } = ObjectId.Null;
 
-        /// <summary>隐藏属性块。</summary>
+        /// <summary>隐藏属性载体块参照的对象 ID，用于存储管道属性。</summary>
         public ObjectId AttributeCarrierObjectId { get; set; } = ObjectId.Null;
 
-        /// <summary>标题文字对象。</summary>
+        /// <summary>标题文字对象 ID（仅返回第一个标题）。</summary>
         public ObjectId TitleObjectId { get; set; } = ObjectId.Null;
 
-        /// <summary>流向符号对象。</summary>
+        /// <summary>流向符号对象 ID（仅返回第一个流向符号）。</summary>
         public ObjectId FlowDirectionObjectId { get; set; } = ObjectId.Null;
     }
 
     /// <summary>
     /// 管道 Polyline、属性、标题和流向符号落图服务。
+    /// 负责将管道草稿点集转换为正式的 CAD 实体，包括主体、属性块、标注文字和流向箭头，
+    /// 并处理管道交叉时的遮罩和显示顺序。
     /// </summary>
     public static class PipelineCadObjectService
     {
+        /// <summary>
+        /// 表示管道的一个线段（相邻顶点之间），用于标注和流向符号的定位。
+        /// </summary>
         private sealed class PipelineSegment
         {
+            /// <summary>线段在原始点集中的索引（起始顶点索引）。</summary>
             public int Index { get; set; }
+            /// <summary>线段起点。</summary>
             public Point3d Start { get; set; }
+            /// <summary>线段终点。</summary>
             public Point3d End { get; set; }
         }
 
         /// <summary>
-        /// 将一条管道草稿作为正式 CAD 对象写入当前空间。
+        /// 将一条管道草稿作为正式 CAD 对象写入当前空间（模型空间或图纸空间）。
         /// </summary>
+        /// <param name="database">当前 AutoCAD 数据库。</param>
+        /// <param name="points">管道路径点集（至少两个点）。</param>
+        /// <param name="sourceAttributes">外部传入的管道属性字典（可为空）。</param>
+        /// <param name="pipeRole">管道角色（"EXPORT" 或 "IMPORT"）。</param>
+        /// <returns>包含生成的各对象 ID 的 <see cref="PipelineCadPlacementResult"/>。</returns>
+        /// <exception cref="ArgumentNullException">database 为 null。</exception>
+        /// <exception cref="ArgumentException">points 为 null 或点数少于 2。</exception>
+        /// <exception cref="InvalidOperationException">当前空间不可写。</exception>
         public static PipelineCadPlacementResult PlacePipeline(
             Database database,
             IList<Point3d> points,
@@ -64,6 +81,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 throw new ArgumentException("管道至少需要两个点。", nameof(points));
             }
 
+            // 准备属性字典（忽略大小写），合并传入属性，并添加系统属性
             Dictionary<string, string> attributes = new Dictionary<string, string>(
                 sourceAttributes ?? new Dictionary<string, string>(),
                 StringComparer.OrdinalIgnoreCase);
@@ -77,10 +95,13 @@ namespace GB_NewCadPlus_IV.Helpers
             Stopwatch stopwatch = Stopwatch.StartNew();
             LogManager.Instance.LogInfo(
                 $"[管道落图][开始] PipeId={pipeId}, Role={normalizedRole}, PointCount={points.Count}, AttributeCount={attributes.Count}, Title={attributes["PIPELINETITLE"]}");
+
+            // 用于收集后续交叉处理所需的对象 ID
             List<ObjectId> titleIds = new List<ObjectId>();
             List<ObjectId> flowIds = new List<ObjectId>();
             List<ObjectId> flowFillIds = new List<ObjectId>();
             PipelineCadPlacementResult placementResult;
+
             using (Transaction transaction = database.TransactionManager.StartTransaction())
             {
                 LogManager.Instance.LogInfo("[管道落图][事务开始] 正在打开当前空间。");
@@ -92,16 +113,19 @@ namespace GB_NewCadPlus_IV.Helpers
                     throw new InvalidOperationException("当前图纸空间不可写。\n");
                 }
 
+                // 1. 创建管道主体多段线
                 Polyline pipeline = CreatePipelinePolyline(points, normalizedRole);
                 currentSpace.AppendEntity(pipeline);
                 transaction.AddNewlyCreatedDBObject(pipeline, true);
                 LogManager.Instance.LogInfo(
                     $"[管道落图][Polyline完成] ObjectId={pipeline.ObjectId}, VertexCount={pipeline.NumberOfVertices}");
 
+                // 2. 将属性写入管道主体的扩展字典（持久化）
                 WriteAttributesToExtensionDictionary(transaction, pipeline, attributes);
                 LogManager.Instance.LogInfo(
                     $"[管道落图][主体属性完成] ObjectId={pipeline.ObjectId}, AttributeCount={attributes.Count}");
 
+                // 3. 创建隐藏属性载体块（兼容 AttributeReference 读取）
                 ObjectId attributeCarrierId = CreateHiddenAttributeCarrier(
                     database,
                     transaction,
@@ -109,11 +133,13 @@ namespace GB_NewCadPlus_IV.Helpers
                     points[0],
                     attributes,
                     pipeId);
+                // 将载体句柄回写到主体属性中
                 attributes["ATTRIBUTE_CARRIER_HANDLE"] = GetHandle(attributeCarrierId);
                 WriteAttributesToExtensionDictionary(transaction, pipeline, attributes);
                 LogManager.Instance.LogInfo(
                     $"[管道落图][属性载体完成] ObjectId={attributeCarrierId}, Handle={attributes["ATTRIBUTE_CARRIER_HANDLE"]}");
 
+                // 4. 筛选用于标注的线段（长度大于阈值）
                 List<PipelineSegment> displaySegments = GetDisplaySegments(points);
                 if (displaySegments.Count == 0)
                 {
@@ -122,6 +148,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
                 foreach (PipelineSegment segment in displaySegments)
                 {
+                    // 4a. 创建标题文字
                     DBText title = CreateTitleText(
                         transaction,
                         database,
@@ -136,6 +163,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     LogManager.Instance.LogInfo(
                         $"[管道落图][标题完成] SegmentIndex={segment.Index}, ObjectId={title.ObjectId}, Text={title.TextString}, Position={title.Position}, Height={title.Height}, Layer={title.Layer}, ColorIndex={title.ColorIndex}");
 
+                    // 4b. 创建流向符号（三角形箭头 + 填充）
                     Solid flowFill;
                     Polyline flowDirection = CreateFlowDirectionSymbol(segment.Start, segment.End, normalizedRole, out flowFill);
                     currentSpace.AppendEntity(flowDirection);
@@ -156,6 +184,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 LogManager.Instance.LogInfo(
                     $"[管道落图][标注完成] SegmentCount={displaySegments.Count}, TitleCount={titleIds.Count}, FlowCount={flowIds.Count}");
 
+                // 提交事务，将所有实体写入数据库
                 LogManager.Instance.LogInfo("[管道落图][事务提交开始]");
                 transaction.Commit();
                 stopwatch.Stop();
@@ -171,9 +200,9 @@ namespace GB_NewCadPlus_IV.Helpers
                     TitleObjectId = titleIds.Count == 0 ? ObjectId.Null : titleIds[0],
                     FlowDirectionObjectId = flowIds.Count == 0 ? ObjectId.Null : flowIds[0]
                 };
-
             }
 
+            // 5. 在事务外处理管道交叉（遮罩和绘制顺序调整）
             try
             {
                 ProcessPipelineCrossingsAfterCommit(
@@ -195,7 +224,11 @@ namespace GB_NewCadPlus_IV.Helpers
 
         /// <summary>
         /// 创建支持夹点编辑的二维多段线主体。
+        /// 根据管道角色设置颜色，并应用当前显示比例。
         /// </summary>
+        /// <param name="points">路径点集。</param>
+        /// <param name="pipeRole">管道角色（用于颜色）。</param>
+        /// <returns>生成的多段线对象。</returns>
         private static Polyline CreatePipelinePolyline(IList<Point3d> points, string pipeRole)
         {
             Polyline pipeline = new Polyline();
@@ -204,9 +237,11 @@ namespace GB_NewCadPlus_IV.Helpers
             for (int index = 0; index < points.Count; index++)
             {
                 Point3d point = points[index];
+                // 添加顶点，设置起始和结束宽度为 0.3*比例（用于夹点显示）
                 pipeline.AddVertexAt(index, new Point2d(point.X, point.Y), 0, 0.3 * scale, 0.3 * scale);
             }
 
+            // 全局恒定宽度
             pipeline.ConstantWidth = 0.3 * scale;
             pipeline.Color = Color.FromColorIndex(ColorMethod.ByAci, GetPipeColor(pipeRole));
 
@@ -214,8 +249,16 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 创建隐藏属性块，保留现有 AttributeReference 读取兼容性。
+        /// 创建隐藏属性块，用于存储所有管道属性。
+        /// 该块参照包含不可见的属性定义，便于通过 AttributeReference 读取。
         /// </summary>
+        /// <param name="database">数据库。</param>
+        /// <param name="transaction">当前事务。</param>
+        /// <param name="currentSpace">当前空间。</param>
+        /// <param name="position">插入位置（取管道起点）。</param>
+        /// <param name="attributes">属性字典。</param>
+        /// <param name="pipeId">管道 ID，用于生成唯一块名。</param>
+        /// <returns>块参照的对象 ID。</returns>
         private static ObjectId CreateHiddenAttributeCarrier(
             Database database,
             Transaction transaction,
@@ -230,6 +273,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 return ObjectId.Null;
             }
 
+            // 创建唯一的块定义
             string blockName = $"GB_PIPE_ATTR_{pipeId}";
             blockTable.UpgradeOpen();
             BlockTableRecord definition = new BlockTableRecord
@@ -239,6 +283,7 @@ namespace GB_NewCadPlus_IV.Helpers
             ObjectId definitionId = blockTable.Add(definition);
             transaction.AddNewlyCreatedDBObject(definition, true);
 
+            // 为每个属性添加不可见的属性定义
             foreach (KeyValuePair<string, string> attribute in attributes)
             {
                 if (string.IsNullOrWhiteSpace(attribute.Key))
@@ -253,17 +298,19 @@ namespace GB_NewCadPlus_IV.Helpers
                     Prompt = string.Empty,
                     TextString = attribute.Value ?? string.Empty,
                     Height = 0.1,
-                    Invisible = true
+                    Invisible = true // 不可见
                 };
                 definitionAttribute.SetDatabaseDefaults();
                 definition.AppendEntity(definitionAttribute);
                 transaction.AddNewlyCreatedDBObject(definitionAttribute, true);
             }
 
+            // 创建块参照并插入到当前空间
             BlockReference carrier = new BlockReference(position, definitionId);
             currentSpace.AppendEntity(carrier);
             transaction.AddNewlyCreatedDBObject(carrier, true);
 
+            // 为块参照生成属性参照（从定义复制）
             foreach (ObjectId entityId in definition)
             {
                 AttributeDefinition definitionAttribute = transaction.GetObject(
@@ -286,7 +333,15 @@ namespace GB_NewCadPlus_IV.Helpers
 
         /// <summary>
         /// 创建图面标题文字。
+        /// 文字位于线段中点偏移一侧，方向与线段平行，并应用字体样式和颜色。
         /// </summary>
+        /// <param name="transaction">当前事务。</param>
+        /// <param name="database">数据库。</param>
+        /// <param name="start">线段起点。</param>
+        /// <param name="end">线段终点。</param>
+        /// <param name="title">标题文本。</param>
+        /// <param name="pipeRole">管道角色（用于颜色）。</param>
+        /// <returns>生成的 DBText 对象。</returns>
         private static DBText CreateTitleText(
             Transaction transaction,
             Database database,
@@ -302,6 +357,7 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             direction = direction.GetNormal();
+            // 计算垂直向量（指向 Y 轴正方向一侧）
             Vector3d perpendicular = new Vector3d(-direction.Y, direction.X, 0).GetNormal();
             if (perpendicular.DotProduct(Vector3d.YAxis) < 0)
             {
@@ -309,14 +365,15 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             double scale = GetDisplayScale();
-            double titleHeight = 3.5 * scale;
+            double titleHeight = 3.5 * scale;        // 文字高度 = 3.5 * 比例
             Point3d segmentMiddle = new Point3d(
                 (start.X + end.X) / 2.0,
                 (start.Y + end.Y) / 2.0,
                 (start.Z + end.Z) / 2.0);
-            double titleOffset = 4.0 * scale + titleHeight * 0.75;
+            double titleOffset = 4.0 * scale + titleHeight * 0.75; // 偏移量 = 4*比例 + 文字高度的0.75
             Point3d position = segmentMiddle + perpendicular * titleOffset;
 
+            // 文字旋转角度（保证文字始终正向可读）
             double textRotation = Math.Atan2(direction.Y, direction.X);
             if (Math.Cos(textRotation) < 0)
             {
@@ -334,6 +391,8 @@ namespace GB_NewCadPlus_IV.Helpers
             text.HorizontalMode = TextHorizontalMode.TextCenter;
             text.VerticalMode = TextVerticalMode.TextVerticalMid;
             text.Color = Color.FromColorIndex(ColorMethod.ByAci, GetTitleColor(pipeRole));
+
+            // 尝试应用项目自定义字体样式（若失败则保留默认）
             try
             {
                 using (DBTrans styleTransaction = new DBTrans())
@@ -354,7 +413,13 @@ namespace GB_NewCadPlus_IV.Helpers
 
         /// <summary>
         /// 创建简单三角形流向符号，方向与管道首尾方向一致。
+        /// 包含一个闭合多段线（箭头轮廓）和一个填充实体。
         /// </summary>
+        /// <param name="start">线段起点。</param>
+        /// <param name="end">线段终点。</param>
+        /// <param name="pipeRole">管道角色（用于颜色）。</param>
+        /// <param name="fill">输出填充实体（Solid）。</param>
+        /// <returns>箭头多段线对象。</returns>
         private static Polyline CreateFlowDirectionSymbol(
             Point3d start,
             Point3d end,
@@ -375,12 +440,13 @@ namespace GB_NewCadPlus_IV.Helpers
                 (start.Y + end.Y) / 2.0,
                 (start.Z + end.Z) / 2.0);
             double scale = GetDisplayScale();
-            double length = 10.0 * scale;
-            double height = 2.0 * scale;
+            double length = 10.0 * scale;   // 箭头长度 = 10 * 比例
+            double height = 2.0 * scale;    // 箭头高度 = 2 * 比例
             Point3d tip = center + direction * (length / 2.0);
             Point3d left = center - direction * (length / 2.0) - perpendicular * (height / 2.0);
             Point3d right = center - direction * (length / 2.0) + perpendicular * (height / 2.0);
 
+            // 箭头轮廓（三角形）
             Polyline arrow = new Polyline();
             arrow.SetDatabaseDefaults();
             arrow.AddVertexAt(0, new Point2d(tip.X, tip.Y), 0, 0, 0);
@@ -390,6 +456,7 @@ namespace GB_NewCadPlus_IV.Helpers
             arrow.Color = Color.FromColorIndex(ColorMethod.ByAci, GetPipeColor(pipeRole));
             arrow.LineWeight = LineWeight.LineWeight025;
 
+            // 填充实体（与三角形同色但使用独立颜色）
             fill = new Solid(
                 tip,
                 left,
@@ -404,6 +471,11 @@ namespace GB_NewCadPlus_IV.Helpers
             return arrow;
         }
 
+        /// <summary>
+        /// 获取需要标注的线段列表（长度大于 50 * 显示比例）。
+        /// </summary>
+        /// <param name="points">管道路径点集。</param>
+        /// <returns>符合条件的线段列表。</returns>
         private static List<PipelineSegment> GetDisplaySegments(IList<Point3d> points)
         {
             double minimumSegmentLength = 50.0 * GetDisplayScale();
@@ -424,6 +496,9 @@ namespace GB_NewCadPlus_IV.Helpers
             return segments;
         }
 
+        /// <summary>
+        /// 在事务外部处理管道交叉：扫描已存在的管道，显示交互对话框，根据用户选择创建遮罩并调整绘制顺序。
+        /// </summary>
         private static void ProcessPipelineCrossingsAfterCommit(
             Database database,
             ObjectId pipelineId,
@@ -459,6 +534,10 @@ namespace GB_NewCadPlus_IV.Helpers
             }
         }
 
+        /// <summary>
+        /// 管道交叉处理核心逻辑。
+        /// </summary>
+        /// <returns>如果用户取消操作（或选择删除新管道）返回 true，否则 false。</returns>
         private static bool ProcessPipelineCrossingsCore(
             Database database,
             Transaction transaction,
@@ -475,9 +554,12 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             double scale = GetDisplayScale();
-            double endpointTolerance = Math.Max(1.0, scale * 0.3);
-            double intersectionTolerance = Math.Max(1e-6, scale * 0.001);
+            double endpointTolerance = Math.Max(1.0, scale * 0.3);    // 端点容差
+            double intersectionTolerance = Math.Max(1e-6, scale * 0.001); // 交点合并容差
+
             List<CrossingOptionData> crossings = new List<CrossingOptionData>();
+
+            // 获取当前空间的所有实体
             BlockTableRecord currentSpace = transaction.GetObject(
                 database.CurrentSpaceId,
                 OpenMode.ForRead) as BlockTableRecord;
@@ -506,6 +588,7 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 try
                 {
+                    // 读取旧管道的扩展属性，检查是否为有效管道（包含 PIPEID 和 PIPE_ROLE）
                     Dictionary<string, string> oldAttributes =
                         PipelineEndpointPropertyHelper.ReadEntityProperties(transaction, oldPipeline);
                     if (!oldAttributes.TryGetValue("PIPEID", out string oldPipeId) ||
@@ -514,7 +597,7 @@ namespace GB_NewCadPlus_IV.Helpers
                         continue;
                     }
 
-                    // 标题、流向符号也带有 PIPEID，但只有主体管道具有 PIPE_ROLE。
+                    // 只有主体管道具有 PIPE_ROLE，标题和流向符号没有，用于过滤
                     if (!oldAttributes.ContainsKey("PIPE_ROLE"))
                     {
                         continue;
@@ -527,10 +610,13 @@ namespace GB_NewCadPlus_IV.Helpers
                         continue;
                     }
 
+                    // 计算新管道与旧管道的交点（排除端点附近的交点）
                     List<Point3d> intersections = GetPathIntersections(newPath, oldPath)
                         .Where(point => !IsNearEndpoint(point, newPath, endpointTolerance))
                         .Where(point => !IsNearEndpoint(point, oldPath, endpointTolerance))
                         .ToList();
+
+                    // 去重（相近交点合并）
                     List<Point3d> uniqueIntersections = new List<Point3d>();
                     foreach (Point3d intersection in intersections)
                     {
@@ -567,6 +653,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 return false;
             }
 
+            // 构建交互对话框的选项数据
             List<PipeCrossingMultiDialogWpf.CrossingOptionViewModel> options = crossings
                 .Select(crossing => new PipeCrossingMultiDialogWpf.CrossingOptionViewModel
                 {
@@ -576,10 +663,13 @@ namespace GB_NewCadPlus_IV.Helpers
                     NewPipeId = newPipeline.ObjectId
                 })
                 .ToList();
+
+            // 显示对话框让用户选择每个交叉点的处理方式
             PipeCrossingMultiDialogWpf dialog = new PipeCrossingMultiDialogWpf(options);
             bool? result = dialog.ShowDialogWithOwner();
             if (result != true || dialog.IsCancelled)
             {
+                // 用户取消或关闭对话框：删除新管道及其所有附属对象
                 EraseNewPipelineObjects(
                     transaction,
                     newPipeline.ObjectId,
@@ -590,22 +680,26 @@ namespace GB_NewCadPlus_IV.Helpers
                 return true;
             }
 
-            double maskSize = Math.Max(1.0, 5.0 * scale);
+            double maskSize = Math.Max(1.0, 5.0 * scale); // 遮罩尺寸 = 5 * 比例
+
+            // 根据用户选择处理每个交叉点
             foreach (PipeCrossingMultiDialogWpf.CrossingOptionViewModel option in dialog.Options)
             {
                 if (option.SelectedAction == PipeCrossingMultiDialogWpf.CrossingAction.Connect)
                 {
-                    continue;
+                    continue; // 连接模式（不处理遮罩）
                 }
 
                 bool newPipelineIsAbove =
                     option.SelectedAction == PipeCrossingMultiDialogWpf.CrossingAction.Cover;
+                // 创建遮罩（Wipeout）
                 ObjectId maskId = CreateBackgroundMask(
                     option.Intersection,
                     maskSize,
                     transaction,
                     database,
                     newPipeline.Layer);
+                // 调整绘制顺序：新管道或旧管道在上，遮罩在中间
                 SetDrawOrderBetweenPipelines(
                     transaction,
                     database,
@@ -617,10 +711,14 @@ namespace GB_NewCadPlus_IV.Helpers
                     $"[管道交叉][处理完成] Point={option.Intersection}, Action={option.SelectedAction}, MaskId={maskId}, NewPipelineAbove={newPipelineIsAbove}");
             }
 
+            // 关闭遮罩边框显示
             AcadApplication.SetSystemVariable("WIPEOUTFRAME", 0);
             return false;
         }
 
+        /// <summary>
+        /// 用于存储交叉点信息的内部类。
+        /// </summary>
         private sealed class CrossingOptionData
         {
             public Point3d Intersection { get; set; }
@@ -628,6 +726,9 @@ namespace GB_NewCadPlus_IV.Helpers
             public string OldPipeName { get; set; }
         }
 
+        /// <summary>
+        /// 从多段线提取顶点坐标列表。
+        /// </summary>
         private static List<Point3d> GetPolylinePath(Polyline polyline)
         {
             List<Point3d> path = new List<Point3d>();
@@ -639,6 +740,9 @@ namespace GB_NewCadPlus_IV.Helpers
             return path;
         }
 
+        /// <summary>
+        /// 计算两条折线路径的所有交点（逐段求交）。
+        /// </summary>
         private static List<Point3d> GetPathIntersections(
             IList<Point3d> pathA,
             IList<Point3d> pathB)
@@ -666,6 +770,9 @@ namespace GB_NewCadPlus_IV.Helpers
             return intersections;
         }
 
+        /// <summary>
+        /// 判断点是否接近路径的端点（用于排除端点交叉）。
+        /// </summary>
         private static bool IsNearEndpoint(
             Point3d point,
             IList<Point3d> path,
@@ -676,6 +783,9 @@ namespace GB_NewCadPlus_IV.Helpers
                  point.DistanceTo(path[path.Count - 1]) <= tolerance);
         }
 
+        /// <summary>
+        /// 获取管道的显示名称（优先使用标题，否则使用句柄）。
+        /// </summary>
         private static string GetPipelineDisplayName(
             IDictionary<string, string> attributes,
             Polyline pipeline)
@@ -689,6 +799,15 @@ namespace GB_NewCadPlus_IV.Helpers
             return pipeline.Handle.ToString();
         }
 
+        /// <summary>
+        /// 创建背景遮罩（Wipeout）矩形。
+        /// </summary>
+        /// <param name="center">中心点。</param>
+        /// <param name="size">正方形边长。</param>
+        /// <param name="transaction">事务。</param>
+        /// <param name="database">数据库。</param>
+        /// <param name="layer">图层（与管道相同）。</param>
+        /// <returns>遮罩对象 ID。</returns>
         private static ObjectId CreateBackgroundMask(
             Point3d center,
             double size,
@@ -717,6 +836,15 @@ namespace GB_NewCadPlus_IV.Helpers
             return wipeout.ObjectId;
         }
 
+        /// <summary>
+        /// 设置管道之间的绘制顺序，使指定的管道在上方，并插入遮罩。
+        /// </summary>
+        /// <param name="transaction">事务。</param>
+        /// <param name="database">数据库。</param>
+        /// <param name="newPipelineId">新管道 ID。</param>
+        /// <param name="oldPipelineId">旧管道 ID。</param>
+        /// <param name="maskId">遮罩 ID。</param>
+        /// <param name="newPipelineIsAbove">true 表示新管道在旧管道上方，false 表示旧管道在上方。</param>
         private static void SetDrawOrderBetweenPipelines(
             Transaction transaction,
             Database database,
@@ -743,11 +871,13 @@ namespace GB_NewCadPlus_IV.Helpers
 
             if (newPipelineIsAbove)
             {
+                // 新管道在上：顺序为 旧管道 → 遮罩 → 新管道
                 drawOrder.MoveAbove(new ObjectIdCollection { maskId }, oldPipelineId);
                 drawOrder.MoveAbove(new ObjectIdCollection { newPipelineId }, maskId);
             }
             else
             {
+                // 旧管道在上：顺序为 新管道 → 遮罩 → 旧管道
                 drawOrder.MoveAbove(new ObjectIdCollection { maskId }, newPipelineId);
                 drawOrder.MoveAbove(new ObjectIdCollection { oldPipelineId }, maskId);
             }
@@ -755,6 +885,9 @@ namespace GB_NewCadPlus_IV.Helpers
             database.TransactionManager.QueueForGraphicsFlush();
         }
 
+        /// <summary>
+        /// 擦除新管道及其所有附属对象（用于取消操作时清理）。
+        /// </summary>
         private static void EraseNewPipelineObjects(
             Transaction transaction,
             ObjectId pipelineId,
@@ -791,8 +924,12 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 向实体扩展字典写入单个字符串属性。
+        /// 向实体的扩展字典写入一组字符串属性（键值对）。
+        /// 数据以 Xrecord 形式存储在扩展字典中，键为 <see cref="PipelineCadPropertyKeyHelper.StorageKey"/>。
         /// </summary>
+        /// <param name="transaction">事务。</param>
+        /// <param name="entity">目标实体。</param>
+        /// <param name="attributes">属性字典。</param>
         private static void WriteAttributesToExtensionDictionary(
             Transaction transaction,
             Entity entity,
@@ -811,6 +948,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 return;
             }
 
+            // 构建结果缓冲区：每对键值作为一个 DxfCode.Text 组码
             List<TypedValue> values = new List<TypedValue>();
             foreach (KeyValuePair<string, string> attribute in attributes)
             {
@@ -825,6 +963,8 @@ namespace GB_NewCadPlus_IV.Helpers
 
             LogManager.Instance.LogInfo(
                 $"[管道落图][属性字典准备] ObjectId={entity.ObjectId}, StorageKey={PipelineCadPropertyKeyHelper.StorageKey}, PairCount={values.Count / 2}");
+
+            // 替换或添加 Xrecord
             if (dictionary.Contains(PipelineCadPropertyKeyHelper.StorageKey))
             {
                 dictionary.Remove(PipelineCadPropertyKeyHelper.StorageKey);
@@ -839,8 +979,12 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 给标题或流向符号写入 PipeId 和对象用途关联。
+        /// 给标题或流向符号写入 PipeId 和对象用途关联（用于交叉检测时识别归属）。
         /// </summary>
+        /// <param name="transaction">事务。</param>
+        /// <param name="entity">目标实体。</param>
+        /// <param name="pipeId">管道 ID。</param>
+        /// <param name="objectRole">对象角色（"TITLE" 或 "FLOW_DIRECTION" 等）。</param>
         private static void WriteLinkRecord(
             Transaction transaction,
             Entity entity,
@@ -858,7 +1002,7 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 计算多段线总长度。
+        /// 计算多段线总长度（各段距离之和）。
         /// </summary>
         private static double CalculateLength(IList<Point3d> points)
         {
@@ -872,7 +1016,7 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 规范化管道角色。
+        /// 规范化管道角色，非 "EXPORT" 均视为 "IMPORT"。
         /// </summary>
         private static string NormalizeRole(string pipeRole)
         {
@@ -882,30 +1026,31 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 根据管道返回标题和流向符号颜色。
-        /// </summary>      
-
+        /// 根据管道角色返回管道主体颜色（固定为绿色，或可扩展）。
+        /// </summary>
         private static short GetPipeColor(string pipeRole)
         {
-            return 3;
+            return 3; // AutoCAD 颜色索引 3 = 绿色
         }
+
         /// <summary>
-        /// 获取标题文字颜色，EXPORT 为红色，IMPORT 为蓝色。
+        /// 获取标题文字颜色，EXPORT 为红色（2），IMPORT 为蓝色（1）。
         /// </summary>
-        /// <param name="pipeRole"> 管道角色 </param>
-        /// <returns> 标题文字颜色 </returns>
         private static short GetTitleColor(string pipeRole)
         {
             return NormalizeRole(pipeRole) == "EXPORT" ? (short)2 : (short)1;
         }
 
+        /// <summary>
+        /// 获取流向符号填充颜色（固定为洋红或自定义）。
+        /// </summary>
         private static short GetArrowColor(string pipeRole)
         {
-            return 6;
+            return 6; // AutoCAD 颜色索引 6 = 洋红
         }
 
         /// <summary>
-        /// 获取对象句柄文本。
+        /// 获取对象句柄文本表示。
         /// </summary>
         private static string GetHandle(ObjectId objectId)
         {

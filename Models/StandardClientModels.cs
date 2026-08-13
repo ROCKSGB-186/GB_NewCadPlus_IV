@@ -15,10 +15,10 @@ namespace GB_NewCadPlus_IV.Models
         public string SeriesCode { get; set; } = "PLATE_WELD";
 
         /// <summary>标准号。</summary>
-        public string StandardNumber { get; set; } = "GB/T 9124.1-2019";
+        public string StandardNumber { get; set; } = string.Empty;
 
         /// <summary>标准表号。</summary>
-        public string TableNumber { get; set; } = "表52";
+        public string TableNumber { get; set; } = string.Empty;
 
         /// <summary>PN 筛选条件。</summary>
         public string PN { get; set; } = "PN10";

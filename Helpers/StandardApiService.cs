@@ -9,6 +9,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace GB_NewCadPlus_IV.Helpers
 {
@@ -228,6 +229,34 @@ namespace GB_NewCadPlus_IV.Helpers
                 message, "移动旧规范", cancellationToken).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// 通过服务器修改规范系列名称。
+        /// </summary>
+        public async Task<StandardManagementOperationClientResponse> RenameManagementSeriesAsync(
+            long seriesId,
+            string name,
+            string operatorName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (seriesId <= 0) throw new ArgumentException("规范系列 ID 必须大于 0。", nameof(seriesId));
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("规范名称不能为空。", nameof(name));
+
+            string requestJson = JsonConvert.SerializeObject(new StandardSeriesRenameClientRequest
+            {
+                Name = name.Trim()
+            });
+            using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using HttpRequestMessage message = new HttpRequestMessage(
+                HttpMethod.Put,
+                BuildServerUrl($"/api/standards/management/series/{seriesId}/name"))
+            {
+                Content = content
+            };
+            AddOperatorHeader(message, operatorName);
+            return await SendManagementRequestAsync<StandardManagementOperationClientResponse>(
+                message, "重命名规范系列", cancellationToken).ConfigureAwait(false);
+        }
+
         public async Task<System.Collections.Generic.List<StandardDocumentFileClient>> GetManagementFilesAsync(
             long versionId,
             CancellationToken cancellationToken = default(CancellationToken))
@@ -352,6 +381,7 @@ namespace GB_NewCadPlus_IV.Helpers
         public async Task<StandardImportPreviewClientResponse> PreviewImportAsync(
             string filePath,
             string operatorName,
+            long? categoryId = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
@@ -370,18 +400,22 @@ namespace GB_NewCadPlus_IV.Helpers
                 extension == ".json" ? "application/json" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             form.Add(content, "file", Path.GetFileName(filePath));
 
-            // Excel 预览接口需要系列元数据；第一阶段先提供法兰默认值，后续由新增规范库窗口填写。
+            // Excel 的系列元数据来自文件名，避免所有文件都被误导入到表52/PN10系列。
             if (extension != ".json")
             {
+                StandardImportFileMetadata metadata = ParseStandardImportFileName(filePath);
                 form.Add(new StringContent("FLANGE"), "familyCode");
                 form.Add(new StringContent("法兰"), "familyName");
                 form.Add(new StringContent("PLATE_WELD"), "seriesCode");
-                form.Add(new StringContent("板式平焊钢制管法兰"), "seriesName");
-                form.Add(new StringContent("GB/T 9124.1-2019"), "standardNumber");
-                form.Add(new StringContent("表52"), "tableNumber");
-                form.Add(new StringContent("PN10"), "pressureRating");
+                form.Add(new StringContent(metadata.SeriesName), "seriesName");
+                form.Add(new StringContent(metadata.StandardNumber), "standardNumber");
+                form.Add(new StringContent(metadata.TableNumber), "tableNumber");
+                form.Add(new StringContent(metadata.PressureRating), "pressureRating");
                 form.Add(new StringContent("PL"), "flangeType");
                 form.Add(new StringContent("RF"), "faceType");
+                if (categoryId.HasValue)
+                    form.Add(new StringContent(categoryId.Value.ToString()), "categoryId");
+                LogManager.Instance.LogInfo($"规范 Excel 元数据解析：文件={Path.GetFileName(filePath)}，系列={metadata.SeriesName}，标准号={metadata.StandardNumber}，表号={metadata.TableNumber}，压力等级={metadata.PressureRating}");
             }
 
             using (HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, requestUrl) { Content = form })
@@ -397,6 +431,43 @@ namespace GB_NewCadPlus_IV.Helpers
                     return result ?? throw new InvalidOperationException("服务器返回的规范预览为空。");
                 }
             }
+        }
+
+        private static StandardImportFileMetadata ParseStandardImportFileName(string filePath)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(filePath).Trim();
+            string[] parts = fileName.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 4)
+                throw new InvalidDataException("规范 Excel 文件名格式不正确，应为：规范名称_标准号_表号_压力等级.xlsx。");
+
+            string seriesName = parts[0].Trim();
+            string standardNumber = Regex.Replace(parts[1].Trim(), "^GB-T\\s*", "GB/T ", RegexOptions.IgnoreCase);
+            string tableNumber = parts[2].Trim();
+            string pressureRating = parts[3].Trim().ToUpperInvariant();
+            if (!Regex.IsMatch(standardNumber, @"^GB/T\s+\S+$", RegexOptions.IgnoreCase)
+                || !Regex.IsMatch(tableNumber, @"^表\s*\d+$", RegexOptions.IgnoreCase)
+                || !Regex.IsMatch(pressureRating, @"^PN\s*\d+$", RegexOptions.IgnoreCase))
+            {
+                throw new InvalidDataException("规范 Excel 文件名中的标准号、表号或压力等级格式不正确，应为：GB-T xxxx_表51_PN6。");
+            }
+
+            return new StandardImportFileMetadata(seriesName, standardNumber, tableNumber, pressureRating.Replace(" ", string.Empty));
+        }
+
+        private sealed class StandardImportFileMetadata
+        {
+            public StandardImportFileMetadata(string seriesName, string standardNumber, string tableNumber, string pressureRating)
+            {
+                SeriesName = seriesName;
+                StandardNumber = standardNumber;
+                TableNumber = tableNumber;
+                PressureRating = pressureRating;
+            }
+
+            public string SeriesName { get; }
+            public string StandardNumber { get; }
+            public string TableNumber { get; }
+            public string PressureRating { get; }
         }
 
         public async Task<StandardImportCommitClientResponse> CommitImportAsync(
@@ -666,6 +737,8 @@ namespace GB_NewCadPlus_IV.Helpers
             // 使用模型中的默认标准条件，仅补充本阶段验证所需的 DN50。
             var request = new FlangeStandardMatchRequest
             {
+                StandardNumber = "GB/T 9124.1-2019",
+                TableNumber = "表52",
                 DN = "DN50"
             };
 

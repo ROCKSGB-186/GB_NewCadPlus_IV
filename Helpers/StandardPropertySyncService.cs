@@ -22,12 +22,24 @@ namespace GB_NewCadPlus_IV.Helpers
             // 校验图元对象和服务器结果，避免查询失败时覆盖原有属性。
             if (entity == null || response == null || !response.Success) return;
 
+            ApplyToAttributesJson(entity, response.Attributes);
+        }
+
+        /// <summary>
+        /// 将通用规范属性合并到图元 JSON 字典，供管子、管件和阀门复用。
+        /// </summary>
+        public void ApplyToAttributesJson(
+            ImportEntityDto entity,
+            IDictionary<string, string> attributes)
+        {
+            if (entity == null || attributes == null) return;
+
             // 兼容历史数据中的 null 字典。
             entity.AttributesJson = entity.AttributesJson
                 ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             // 只写入服务器明确返回的属性，保留其他业务字段。
-            foreach (KeyValuePair<string, string> attribute in response.Attributes)
+            foreach (KeyValuePair<string, string> attribute in attributes)
             {
                 // 忽略空标签，避免产生无法使用的 JSON 键。
                 if (string.IsNullOrWhiteSpace(attribute.Key)) continue;
@@ -35,6 +47,15 @@ namespace GB_NewCadPlus_IV.Helpers
                 // 规范属性以服务器返回值为准，确保 JSON 与当前选定系列一致。
                 entity.AttributesJson[attribute.Key] = attribute.Value ?? string.Empty;
             }
+        }
+
+        /// <summary>
+        /// 将通用规范记录转换为 CAD 属性后写入图元 JSON。
+        /// </summary>
+        public void ApplyToAttributesJson(ImportEntityDto entity, StandardItemClient item)
+        {
+            if (entity == null || item == null) return;
+            ApplyToAttributesJson(entity, StandardCadAttributeMapper.ToAttributes(item));
         }
 
         /// <summary>
@@ -171,8 +192,20 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static string NormalizeTag(string tag)
         {
-            // 去除空白并统一大小写，保持与服务器属性键比较稳定。
-            return (tag ?? string.Empty).Trim().ToUpperInvariant();
+            // 先还原管道属性使用的编码 Tag，再统一大小写和常见分隔符。
+            string decoded = PipelineCadPropertyKeyHelper.Decode(tag ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(decoded)) return string.Empty;
+
+            var builder = new System.Text.StringBuilder(decoded.Length);
+            foreach (char character in decoded.Trim().ToUpperInvariant())
+            {
+                if (char.IsLetterOrDigit(character))
+                {
+                    builder.Append(character);
+                }
+            }
+
+            return builder.ToString();
         }
 
         /// <summary>
