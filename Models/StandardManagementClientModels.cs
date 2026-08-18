@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Linq;
 
 namespace GB_NewCadPlus_IV.Models
 {
@@ -33,6 +34,137 @@ namespace GB_NewCadPlus_IV.Models
         /// 规范分类的排序顺序。
         /// </summary>
         public int SortOrder { get; set; }
+    }
+
+    /// <summary>
+    /// 修改动态规范细分显示名称的请求。
+    /// </summary>
+    public sealed class StandardVersionRenameClientRequest
+    {
+        public string Name { get; set; } = string.Empty;
+    }
+
+    /// <summary>动态模板预览响应。</summary>
+    public sealed class DynamicStandardPreviewClientResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public bool IsTemplateMatched { get; set; }
+        public StandardTemplateClient Template { get; set; }
+        public List<DynamicStandardPreviewColumnClient> Columns { get; set; } = new List<DynamicStandardPreviewColumnClient>();
+        public List<DynamicStandardPreviewRowClient> Rows { get; set; } = new List<DynamicStandardPreviewRowClient>();
+        public List<string> UnmappedHeaders { get; set; } = new List<string>();
+        public int ErrorCount { get; set; }
+        public int WarningCount { get; set; }
+        public StandardTemplateDraftClient TemplateDraft { get; set; }
+        public DynamicStandardDifferenceClient Difference { get; set; }
+        public bool HasExistingVersion { get; set; }
+        public long? ExistingVersionId { get; set; }
+        public List<string> CandidateUniqueKeyFields { get; set; } = new List<string>();
+    }
+
+    /// <summary>动态模板信息。</summary>
+    public sealed class StandardTemplateClient
+    {
+        public long Id { get; set; }
+        public string TemplateCode { get; set; } = string.Empty;
+        public string TemplateName { get; set; } = string.Empty;
+        public string FamilyCode { get; set; } = string.Empty;
+        public string FileType { get; set; } = string.Empty;
+        public int Version { get; set; }
+    }
+
+    /// <summary>动态预览列定义。</summary>
+    public sealed class DynamicStandardPreviewColumnClient
+    {
+        public string Header { get; set; } = string.Empty;
+        public string FieldCode { get; set; } = string.Empty;
+        public string FieldName { get; set; } = string.Empty;
+        public string DataType { get; set; } = "TEXT";
+        public string Unit { get; set; } = string.Empty;
+        public bool IsRequired { get; set; }
+        public bool IsMapped { get; set; }
+    }
+
+    /// <summary>动态预览行。</summary>
+    public sealed class DynamicStandardPreviewRowClient
+    {
+        public int RowNumber { get; set; }
+        public Dictionary<string, string> Values { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public List<string> Errors { get; set; } = new List<string>();
+        public List<string> Warnings { get; set; } = new List<string>();
+    }
+
+    /// <summary>动态规范导入确认请求。</summary>
+    public sealed class DynamicStandardImportCommitClientRequest
+    {
+        public string BatchId { get; set; } = string.Empty;
+        public long SeriesId { get; set; }
+        public long? StandardDocumentId { get; set; }
+        public long? CategoryId { get; set; }
+        public string BaseStandardNumber { get; set; } = string.Empty;
+        public string BaseStandardName { get; set; } = string.Empty;
+        /// <summary>规范所属专业编码，例如 FLANGE。</summary>
+        public string FamilyCode { get; set; } = string.Empty;
+        public string SeriesName { get; set; } = string.Empty;
+        public string StandardNumber { get; set; } = string.Empty;
+        public string SeriesCode { get; set; } = string.Empty;
+        public string TableNumber { get; set; } = string.Empty;
+        public string PressureRating { get; set; } = string.Empty;
+        public long? VersionId { get; set; }
+        public long? TemplateId { get; set; }
+        public string SourceFileName { get; set; } = string.Empty;
+        public string SourceFileSha256 { get; set; } = string.Empty;
+        public bool AllowWarnings { get; set; }
+        public string UpdateStrategy { get; set; } = "REPLACE";
+        public bool ConfirmTemplateCreation { get; set; }
+        public StandardTemplateDraftClient TemplateDraft { get; set; }
+        public List<string> UniqueKeyFields { get; set; } = new List<string>();
+        public Dictionary<string, string> ConflictDecisions { get; set; } = new Dictionary<string, string>();
+        public List<DynamicStandardPreviewRowClient> Rows { get; set; } = new List<DynamicStandardPreviewRowClient>();
+    }
+
+    /// <summary>首次上传生成的动态模板草稿。</summary>
+    public sealed class StandardTemplateDraftClient
+    {
+        public string TemplateCode { get; set; } = string.Empty;
+        public string TemplateName { get; set; } = string.Empty;
+        public string FamilyCode { get; set; } = string.Empty;
+        public string FileType { get; set; } = "XLSX";
+        public List<StandardTemplateDraftColumnClient> Columns { get; set; } = new List<StandardTemplateDraftColumnClient>();
+    }
+
+    /// <summary>模板字段草稿。</summary>
+    public sealed class StandardTemplateDraftColumnClient
+    {
+        public string Header { get; set; } = string.Empty;
+        public string FieldCode { get; set; } = string.Empty;
+        public string FieldName { get; set; } = string.Empty;
+        public string DataType { get; set; } = "TEXT";
+        public bool IsRequired { get; set; }
+        public int SortOrder { get; set; }
+    }
+
+    /// <summary>动态规范差异摘要。</summary>
+    public sealed class DynamicStandardDifferenceClient
+    {
+        public List<string> AddedHeaders { get; set; } = new List<string>();
+        public List<string> RemovedHeaders { get; set; } = new List<string>();
+        public List<string> ChangedHeaders { get; set; } = new List<string>();
+        public int AddedRows { get; set; }
+        public int RemovedRows { get; set; }
+        public int ChangedRows { get; set; }
+        public List<string> ConflictRows { get; set; } = new List<string>();
+    }
+
+    /// <summary>动态规范导入确认响应。</summary>
+    public sealed class DynamicStandardImportCommitClientResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string BatchId { get; set; } = string.Empty;
+        public int SavedRowCount { get; set; }
+        public string Status { get; set; } = string.Empty;
     }
     /// <summary>
     /// 规范分类到新的父分类的请求参数。
@@ -142,6 +274,12 @@ namespace GB_NewCadPlus_IV.Models
         /// 规范系列所属的分类的唯一标识符。
         /// </summary>
         public long? CategoryId { get; set; }
+        /// <summary>所属基础规范号记录的 ID。</summary>
+        public long? StandardDocumentId { get; set; }
+        /// <summary>
+        /// 规范所属专业编码，例如 FLANGE。
+        /// </summary>
+        public string FamilyCode { get; set; } = string.Empty;
         /// <summary>
         /// 规范系列的编码。
         /// </summary>
@@ -170,6 +308,12 @@ namespace GB_NewCadPlus_IV.Models
         /// 规范系列的面类型。
         /// </summary>
         public string FaceType { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 下拉菜单显示文本，不参与数据库匹配。
+        /// </summary>
+        public string DisplayText => string.Join(" / ", new[] { SeriesName, StandardNumber }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
     }
 
     /// <summary>
@@ -189,10 +333,27 @@ namespace GB_NewCadPlus_IV.Models
         /// 表示规范分类列表。
         /// </summary>
         public List<StandardManagementCategoryClient> Categories { get; set; } = new List<StandardManagementCategoryClient>();
+        /// <summary>基础规范号列表。</summary>
+        public List<StandardDocumentClient> Documents { get; set; } = new List<StandardDocumentClient>();
         /// <summary>
         /// 表示规范系列列表。
         /// </summary>
         public List<StandardManagementSeriesClient> Series { get; set; } = new List<StandardManagementSeriesClient>();
+    }
+
+    /// <summary>客户端基础规范号模型。</summary>
+    public sealed class StandardDocumentClient
+    {
+        public long Id { get; set; }
+        public string FamilyCode { get; set; } = string.Empty;
+        public long? CategoryId { get; set; }
+        public string StandardNumber { get; set; } = string.Empty;
+        public string StandardName { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public string DisplayText => string.IsNullOrWhiteSpace(StandardName)
+            || string.Equals(StandardName.Trim(), StandardNumber.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? StandardNumber
+            : $"{StandardNumber} / {StandardName}";
     }
 
     /// <summary>
@@ -244,7 +405,78 @@ namespace GB_NewCadPlus_IV.Models
     }
 
     /// <summary>
-    /// 规范导入预览中的单行错误明细。
+    /// 规范导入预览中的规范元数据。
+    /// </summary>
+    public sealed class StandardImportSeriesClient
+    {
+        /// <summary>规范大类编码。</summary>
+        public string FamilyCode { get; set; } = string.Empty;
+        /// <summary>规范大类名称。</summary>
+        public string FamilyName { get; set; } = string.Empty;
+        /// <summary>规范系列编码。</summary>
+        public string SeriesCode { get; set; } = string.Empty;
+        /// <summary>规范注释名称。</summary>
+        public string SeriesName { get; set; } = string.Empty;
+        /// <summary>规范代号。</summary>
+        public string StandardNumber { get; set; } = string.Empty;
+        /// <summary>表号。</summary>
+        public string TableNumber { get; set; } = string.Empty;
+        /// <summary>型号或压力等级。</summary>
+        public string PressureRating { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// 规范导入预览中的一条完整法兰规范记录。
+    /// </summary>
+    public sealed class StandardImportRecordClient
+    {
+        /// <summary>公称尺寸。</summary>
+        public string DN { get; set; } = string.Empty;
+        /// <summary>公称尺寸数值。</summary>
+        public int DNValue { get; set; }
+        /// <summary>压力等级。</summary>
+        public string PN { get; set; } = string.Empty;
+        /// <summary>钢管外径，系列 I。</summary>
+        public decimal? PipeOuterDiameterSeriesI { get; set; }
+        /// <summary>钢管外径，系列 II。</summary>
+        public decimal? PipeOuterDiameterSeriesII { get; set; }
+        /// <summary>法兰外径。</summary>
+        public decimal? FlangeOuterDiameter { get; set; }
+        /// <summary>螺栓孔中心圆直径。</summary>
+        public decimal? BoltCircleDiameter { get; set; }
+        /// <summary>螺栓孔直径。</summary>
+        public decimal? BoltHoleDiameter { get; set; }
+        /// <summary>螺栓数量。</summary>
+        public int? BoltCount { get; set; }
+        /// <summary>螺栓规格。</summary>
+        public string BoltSpecification { get; set; } = string.Empty;
+        /// <summary>法兰厚度。</summary>
+        public decimal? FlangeThickness { get; set; }
+        /// <summary>突面高度。</summary>
+        public decimal? RaisedFaceHeight { get; set; }
+    }
+
+    /// <summary>
+    /// 预览阶段命中的已有规范系列。
+    /// </summary>
+    public sealed class StandardImportDuplicateSeriesClient
+    {
+        /// <summary>已存在规范系列 ID。</summary>
+        public long SeriesId { get; set; }
+        /// <summary>已存在规范显示名称。</summary>
+        public string SeriesName { get; set; } = string.Empty;
+        /// <summary>已存在规范代号。</summary>
+        public string StandardNumber { get; set; } = string.Empty;
+        /// <summary>已存在规范表号。</summary>
+        public string TableNumber { get; set; } = string.Empty;
+        /// <summary>已存在规范型号。</summary>
+        public string PressureRating { get; set; } = string.Empty;
+        /// <summary>已有有效记录数量。</summary>
+        public int RecordCount { get; set; }
+    }
+
+    /// <summary>
+    /// 规范导入预览中的单行数据和校验结果。
     /// </summary>
     public sealed class StandardImportPreviewRowClient
     {
@@ -252,6 +484,8 @@ namespace GB_NewCadPlus_IV.Models
         /// 表示该行数据在导入文件中的行号。
         /// </summary>
         public int RowNumber { get; set; }
+        /// <summary>该行解析出的完整规范记录。</summary>
+        public StandardImportRecordClient? Record { get; set; }
         /// <summary>
         /// 表示该行数据在导入文件中的错误信息列表。
         /// </summary>
@@ -260,6 +494,17 @@ namespace GB_NewCadPlus_IV.Models
         /// 表示该行数据在导入文件中的警告信息列表。
         /// </summary>
         public List<string> Warnings { get; set; } = new List<string>();
+
+        /// <summary>该行是否存在错误。</summary>
+        public bool HasErrors => Errors.Count > 0;
+        /// <summary>该行是否存在警告。</summary>
+        public bool HasWarnings => Warnings.Count > 0;
+        /// <summary>该行的校验状态文本。</summary>
+        public string ValidationStatus => HasErrors ? "错误" : HasWarnings ? "警告" : "正常";
+        /// <summary>该行错误的显示文本。</summary>
+        public string ErrorText => string.Join("；", Errors);
+        /// <summary>该行警告的显示文本。</summary>
+        public string WarningText => string.Join("；", Warnings);
     }
 
     /// <summary>
@@ -279,6 +524,12 @@ namespace GB_NewCadPlus_IV.Models
         /// 表示导入批次的唯一标识符。
         /// </summary>
         public string BatchId { get; set; } = string.Empty;
+        /// <summary>用户选择的原始规范文件名。</summary>
+        public string SourceFileName { get; set; } = string.Empty;
+        /// <summary>本次导入的规范元数据。</summary>
+        public StandardImportSeriesClient Series { get; set; } = new StandardImportSeriesClient();
+        /// <summary>同一业务标识下已存在的规范系列；未命中时为 null。</summary>
+        public StandardImportDuplicateSeriesClient? DuplicateSeries { get; set; }
         /// <summary>
         /// 表示导入过程中发生的错误数量。
         /// </summary>
@@ -309,6 +560,23 @@ namespace GB_NewCadPlus_IV.Models
         /// 表示是否允许提交包含警告的导入批次。
         /// </summary>
         public bool AllowWarnings { get; set; }
+        /// <summary>用户最终确认的规范元数据。</summary>
+        public StandardImportSeriesClient Series { get; set; } = new StandardImportSeriesClient();
+        /// <summary>命中已有规范时的处理策略。</summary>
+        public StandardImportDuplicateStrategyClient DuplicateStrategy { get; set; } = StandardImportDuplicateStrategyClient.NewImport;
+    }
+
+    /// <summary>
+    /// 客户端向服务器声明的同名规范处理策略。
+    /// </summary>
+    public enum StandardImportDuplicateStrategyClient
+    {
+        /// <summary>仅导入未命中旧规范的新规范。</summary>
+        NewImport = 0,
+        /// <summary>请求创建新版本，当前版本快照完成前不可用。</summary>
+        CreateVersion = 1,
+        /// <summary>请求覆盖当前数据，当前版本快照完成前不可用。</summary>
+        OverwriteCurrent = 2
     }
     /// <summary>
     /// 规范导入提交响应。

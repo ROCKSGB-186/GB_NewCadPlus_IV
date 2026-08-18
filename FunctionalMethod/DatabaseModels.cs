@@ -113,6 +113,53 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         public Dictionary<string, string> AttributesJson { get; set; }
             = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// 插入图元的业务类型。
+    /// 类型由分类树映射得到，Unknown 表示本地旧资源或暂时无法识别的分类。
+    /// </summary>
+    public enum GraphicEntityType
+    {
+        Unknown,
+        Pipeline,
+        Flange,
+        Valve,
+        Fitting
+    }
+
+    /// <summary>
+    /// 从图元分类树解析出的插入上下文。
+    /// 该对象会随图元按钮一路传递到 AutoCAD 插入命令，避免核心方法依赖文件名猜测类型。
+    /// </summary>
+    public sealed class GraphicInsertContext
+    {
+        /// <summary>图元文件 ID。</summary>
+        public int FileId { get; set; }
+
+        /// <summary>图元所属分类 ID。</summary>
+        public int CategoryId { get; set; }
+
+        /// <summary>图元分类类型，通常为 main 或 sub。</summary>
+        public string CategoryType { get; set; } = string.Empty;
+
+        /// <summary>主专业分类 ID。</summary>
+        public int MainCategoryId { get; set; }
+
+        /// <summary>主专业分类名称。</summary>
+        public string MainCategoryName { get; set; } = string.Empty;
+
+        /// <summary>直接所属分类 ID。</summary>
+        public int SubcategoryId { get; set; }
+
+        /// <summary>直接所属分类名称。</summary>
+        public string SubcategoryName { get; set; } = string.Empty;
+
+        /// <summary>完整分类路径，例如“工艺/管道”。</summary>
+        public string CategoryPath { get; set; } = string.Empty;
+
+        /// <summary>根据分类映射出的业务图元类型。</summary>
+        public GraphicEntityType EntityType { get; set; }
+    }
     /// <summary>
     /// 同步清单模型，用于描述服务器和客户端文件状态的对比结果，辅助同步决策。
     /// </summary>

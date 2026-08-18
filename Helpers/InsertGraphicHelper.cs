@@ -1065,12 +1065,16 @@ namespace GB_NewCadPlus_IV.Helpers
         private static byte[]? _lastCopyDwgBytes;// 最后一次复制的 DWG 文件字节内容，优先使用字节缓存以避免临时文件被删后无法重复
         private static string? _lastCopyDwgFileNameBase; // 最后一次复制的 DWG 文件基础名称（不含路径和扩展名，用于生成临时文件名，避免重复执行时文件名过长或包含非法字符）
         private static string? _lastCopyDwgPath; // 最后一次复制的 DWG 文件路径（仅在没有字节缓存时使用，存在被删除风险）
+        private static GraphicInsertContext? _lastGraphicInsertContext; // 与上一次 DWG 缓存配套的分类上下文，确保重复插入时文件和类型一致
 
         /// <summary>
         /// 执行“整图复制”命令，并缓存相关信息以支持重复执行（空格键再次插入同一图元）
         /// </summary>
         /// <param name="sourceFilePath">源文件路径</param>
-        public static void ExecuteCopyDwgAllFastWithRepeat(string sourceFilePath)
+        /// <param name="insertContext">当前图元的分类插入上下文</param>
+        public static void ExecuteCopyDwgAllFastWithRepeat(
+            string sourceFilePath,
+            GraphicInsertContext? insertContext = null)
         {
             // 新增：Drag/执行中禁止再次触发，避免命令重入导致 CAD 崩溃
             if (IsCopyDwgAllFastDragging || IsCopyDwgAllFastBusy)
@@ -1081,6 +1085,9 @@ namespace GB_NewCadPlus_IV.Helpers
 
             try
             {
+                // 先缓存上下文，再发出 AutoCAD 命令，保证 COPYDWGALLFASTLAST 能使用同一图元类型。
+                _lastGraphicInsertContext = insertContext;
+
                 //判断源文件路径有效性
                 if (VariableDictionary.resourcesFile != null && VariableDictionary.resourcesFile.Length > 0)
                 {
@@ -1156,7 +1163,7 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 if (tempFilePath != null)
                     //插入源文件中的图元到当前图纸
-                    CopyDwgAllFast(tempFilePath);// 直接调用插入方法，传入路径
+                    CopyDwgAllFast(tempFilePath, _lastGraphicInsertContext);// 直接调用插入方法，传入路径和分类上下文
             }
             catch (Exception ex)
             {
@@ -1170,12 +1177,15 @@ namespace GB_NewCadPlus_IV.Helpers
         /// 新增功能：如果插入点与现有图元重叠，自动继承重叠图元的业务属性（如压力、介质等）。
         /// </summary>
         [CommandMethod("COPYDWGALLFAST")] // 注册 CAD 命令名，允许在命令行输入 COPYDWGALLFAST 调用
-        public static void CopyDwgAllFast(string sourceFilePath) // 整图插入主方法，参数 sourceFilePath 为源 DWG 文件的路径
+        public static void CopyDwgAllFast(
+            string sourceFilePath,
+            GraphicInsertContext? insertContext = null) // 整图插入主方法，同时接收可选的分类上下文
         {
             // 获取 LogManager 的单例实例，用于记录日志
             var logger = LogManager.Instance;
             // 在日志文件中记录命令开始执行
-            logger.LogInfo(">>> 开始执行 COPYDWGALLFAST 命令");
+            logger.LogInfo(
+                $">>> 开始执行 COPYDWGALLFAST 命令：CategoryPath={insertContext?.CategoryPath ?? "未知"}, EntityType={insertContext?.EntityType.ToString() ?? "Unknown"}");
 
             // 获取当前活动的 AutoCAD 文档对象
             var doc = Application.DocumentManager.MdiActiveDocument;
@@ -1451,11 +1461,11 @@ namespace GB_NewCadPlus_IV.Helpers
 
                         logger.LogInfo($"准备执行规范匹配：块ObjectId={fileEntity.ObjectId}");
 
-                        // 法兰图元必须在炸开前完成规范查询，否则规范属性无法写入块参照的 AttributeReference。
+                        // 所有插入图元都在炸开前完成连接规范查询，确保规范属性可以写入原始块的 AttributeReference。
                         FlangeStandardMatchResponse? flangeStandardResponse =
                             ApplyFlangeStandardAttributes(tr, fileEntity, overlapSourcePropertyMap, logger);
 
-                        // 在炸开原始蝶阀块之前先回写规范属性，确保入口块自身的 FLG_STD 等属性不会丢失
+                        // 在炸开原始图元块之前先回写规范属性，确保原始块自身的规范属性不会丢失。
                         if (flangeStandardResponse?.Success == true)
                         {
                             int blockUpdatedCount = new StandardPropertySyncService()
@@ -1465,7 +1475,7 @@ namespace GB_NewCadPlus_IV.Helpers
                                     flangeStandardResponse,
                                     createMissingAttributes: false);
                             logger.LogInfo(
-                                $"插入块炸开前法兰标准回写完成：ObjectId={fileEntity.ObjectId}, 写入数量={blockUpdatedCount}");
+                                $"插入块炸开前连接规范回写完成：ObjectId={fileEntity.ObjectId}, 写入数量={blockUpdatedCount}");
                         }
 
                         // ================== 结束核心新功能 ==================
@@ -1642,13 +1652,13 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 根据从管道继承的属性构建规范查询请求，调用 API 匹配法兰标准，并返回匹配结果。
+        /// 根据插入图元自身或重叠图元继承的属性构建连接规范查询请求，调用 API 匹配规范并返回结果。
         /// </summary>
         /// <param name="transaction">数据库事务，用于可能的数据读写。</param>
-        /// <param name="flangeBlock">当前处理的法兰块参照，用于获取块信息。</param>
-        /// <param name="inheritedProperties">从入口管道继承的属性字典（键为属性名，值为属性值）。</param>
+        /// <param name="flangeBlock">当前处理的图元块参照，用于获取图元信息。</param>
+        /// <param name="inheritedProperties">从重叠图元继承的属性字典（键为属性名，值为属性值）。</param>
         /// <param name="logger">日志管理器，记录操作和诊断信息。</param>
-        /// <returns>规范匹配响应对象；若参数无效、缺少关键属性或 API 调用失败则返回 null。</returns>
+        /// <returns>连接规范匹配响应对象；若不属于目标连接方式、缺少关键属性或 API 调用失败则返回 null。</returns>
         private static FlangeStandardMatchResponse? ApplyFlangeStandardAttributes(
             DBTrans transaction,
             BlockReference flangeBlock,
@@ -1663,10 +1673,10 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             // 记录开始处理信息
-            logger.LogInfo($"开始规范查询：块ObjectId={flangeBlock.ObjectId}, 图块名={flangeBlock.Name}, 继承属性数量={inheritedProperties.Count}");
+            logger.LogInfo($"开始连接规范查询：块ObjectId={flangeBlock.ObjectId}, 图块名={flangeBlock.Name}, 继承属性数量={inheritedProperties.Count}");
             logger.LogInfo($"可用属性键：{string.Join(",", inheritedProperties.Keys)}");
 
-            // 合并入口图元属性和当前插入块已有属性，兼容连接方式位于不同属性来源的情况
+            // 合并入口图元属性和当前插入块已有属性，兼容连接方式位于不同属性来源的情况。
             var queryProperties = new Dictionary<string, string>(inheritedProperties, StringComparer.OrdinalIgnoreCase);
             var insertedBlockProperties = ReadEntityPropertyMap(transaction, flangeBlock);
             foreach (KeyValuePair<string, string> property in insertedBlockProperties)
@@ -1677,17 +1687,24 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
             }
 
-            // 仅对“法兰，对夹”连接方式执行法兰标准查询，避免普通图元误触发规范查询
-            bool hasFlangeConnectionDefinition = HasFlangeConnectionDefinition(transaction, flangeBlock);
-            if (!ShouldQueryFlangeStandard(queryProperties) && !hasFlangeConnectionDefinition)
+            // 连接方式必须来自当前蝶阀的实际属性值，不能仅凭块定义的 Prompt 或默认值触发查询。
+            // 这样可以避免普通阀门或连接方式尚未同步完成时误调用法兰规范接口。
+            string connectionMode = FindProperty(
+                queryProperties,
+                "连接方式",
+                "CONN_TYPE",
+                "DNCONN_TYPE",
+                "CONNECTION_MODE",
+                "CONNECTIONTYPE",
+                "连接形式",
+                "连接型式",
+                "连接类别") ?? string.Empty;
+            if (!ShouldQueryFlangeStandard(queryProperties))
             {
-                logger.LogInfo("当前图元不是“法兰，对夹”连接方式，跳过法兰标准查询。");
+                logger.LogInfo($"当前图元连接方式不属于法兰/对夹，跳过连接规范查询：CONN_TYPE={connectionMode}");
                 return null;
             }
-            if (hasFlangeConnectionDefinition && !ShouldQueryFlangeStandard(queryProperties))
-            {
-                logger.LogInfo("根据块定义属性 Prompt/Tag 识别为“法兰、对夹”组件，继续执行法兰标准查询。");
-            }
+            logger.LogInfo($"当前图元连接方式确认，开始查询法兰/对夹连接规范：CONN_TYPE={connectionMode}");
 
             // 从继承属性中提取关键信息：DN、PN，使用多个可能的键名进行查找（不区分大小写）
             string dn = FindProperty(queryProperties, "DN", "公称通径", "通径", "管径", "公称直径");
@@ -1703,6 +1720,9 @@ namespace GB_NewCadPlus_IV.Helpers
             // 构建查询请求对象
             var request = new FlangeStandardMatchRequest
             {
+                // 如果图元自身携带规范库编码，则优先使用图元配置；没有配置时使用现有法兰库默认值。
+                FamilyCode = FindProperty(queryProperties, "FAMILY_CODE", "规范大类编码") ?? "FLANGE",
+                SeriesCode = FindProperty(queryProperties, "SERIES_CODE", "规范系列编码") ?? "PLATE_WELD",
                 // 标准化 DN、PN、系列
                 DN = NormalizeDn(dn),
                 PN = NormalizePn(pn),
@@ -1918,12 +1938,14 @@ namespace GB_NewCadPlus_IV.Helpers
                 "连接型式",
                 "连接类别");
 
-            // 去除常见分隔符后再判断，兼容“法兰连接”“法兰，对夹”等写法
+            // 去除常见分隔符后，所有图元统一接受业务明确允许的四种连接方式。
             string normalizedMode = NormalizeConnectionMode(connectionMode);
 
-            // “法兰”“法兰连接”和“对夹”都是有效连接方式；对夹可能作为独立下拉值返回。
-            return normalizedMode.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   normalizedMode.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0;
+            // 所有图元只有在这四种连接方式下才需要查询法兰连接规范。
+            return string.Equals(normalizedMode, "法兰", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(normalizedMode, "法兰连接", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(normalizedMode, "对夹", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(normalizedMode, "对夹连接", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

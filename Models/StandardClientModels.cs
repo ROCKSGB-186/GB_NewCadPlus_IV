@@ -88,4 +88,19 @@ namespace GB_NewCadPlus_IV.Models
             = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public List<string> Warnings { get; set; } = new List<string>();
     }
+
+    public sealed class DynamicStandardContentClientResponse
+    {
+        public long SeriesId { get; set; }
+        public long VersionId { get; set; }
+        public string VersionNo { get; set; } = string.Empty;
+        public string VersionLabel { get; set; } = string.Empty;
+        public List<DynamicStandardContentRowClient> Rows { get; set; } = new List<DynamicStandardContentRowClient>();
+    }
+
+    public sealed class DynamicStandardContentRowClient
+    {
+        public int RowNumber { get; set; }
+        public Dictionary<string, string> Values { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
 }

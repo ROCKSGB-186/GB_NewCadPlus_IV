@@ -153,6 +153,7 @@ namespace GB_NewCadPlus_IV
         /// 规范管理树数据源，避免与图元分类树缓存混用。
         /// </summary>
         private readonly List<CategoryTreeNode> _standardTreeNodes = new List<CategoryTreeNode>();
+        private StandardTreeStateSnapshot? _pendingStandardTreeStateSnapshot;
         /// <summary>
         /// 当前选中的分类节点
         /// </summary>
@@ -316,6 +317,157 @@ namespace GB_NewCadPlus_IV
             }
         }
 
+        private List<StandardManagementSeriesClient> GetExportSeries(CategoryTreeNode node)
+        {
+            if (node.Data is StandardManagementSeriesClient series)
+                return new List<StandardManagementSeriesClient> { series };
+
+            if (node.Data is DynamicSubdivisionTreeData subdivision)
+            {
+                StandardManagementSeriesClient? current = FindSeriesById(subdivision.SeriesId);
+                return current == null ? new List<StandardManagementSeriesClient>() : new List<StandardManagementSeriesClient> { current };
+            }
+
+            return FlattenStandardTree(node)
+                .Select(item => item.Data as StandardManagementSeriesClient)
+                .Where(item => item != null && (!string.IsNullOrWhiteSpace(item.TableNumber) || !string.IsNullOrWhiteSpace(item.PressureRating)))
+                .GroupBy(item => item.Id)
+                .Select(group => group.First()!)
+                .ToList();
+        }
+
+        private async Task ExportSeriesListToWorkbookAsync(string nodeName, List<StandardManagementSeriesClient> seriesList)
+        {
+            List<(StandardManagementSeriesClient Series, List<FlangeStandardRecordClient> Records)> exports = new List<(StandardManagementSeriesClient, List<FlangeStandardRecordClient>)>();
+            foreach (StandardManagementSeriesClient series in seriesList)
+            {
+                List<FlangeStandardRecordClient> records = await _standardManagementApiService.GetFlangeRecordsAsync(series.Id).ConfigureAwait(true);
+                if (records.Count > 0) exports.Add((series, records));
+            }
+
+            if (exports.Count == 0)
+            {
+                MessageBox.Show("所选规范没有可导出的实际内容。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string safeName = new string((nodeName ?? "规范导出").Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character).ToArray());
+            if (string.IsNullOrWhiteSpace(safeName)) safeName = "规范导出";
+            using var saveDialog = new System.Windows.Forms.SaveFileDialog
+            {
+                FileName = safeName + ".xlsx", DefaultExt = "xlsx", AddExtension = true,
+                Filter = "Excel 文件 (*.xlsx)|*.xlsx", Title = "导出规范"
+            };
+            if (saveDialog.ShowDialog() != DialogResult.OK) return;
+
+            await Task.Run(() =>
+            {
+                IWorkbook workbook = new XSSFWorkbook();
+                string[] headers = { "DN", "PN", "钢管外径Ⅰ", "钢管外径Ⅱ", "法兰外径D", "螺栓中心圆K", "螺栓孔径L", "螺栓数量n", "螺栓规格", "法兰厚度C", "突面高度f1", "法兰内径BⅠ", "法兰内径BⅡ", "原始行号" };
+                HashSet<string> sheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach ((StandardManagementSeriesClient series, List<FlangeStandardRecordClient> records) in exports)
+                {
+                    ISheet sheet = workbook.CreateSheet(BuildExcelSheetName(series, sheetNames));
+                    IRow header = sheet.CreateRow(0);
+                    for (int index = 0; index < headers.Length; index++) header.CreateCell(index).SetCellValue(headers[index]);
+                    for (int rowIndex = 0; rowIndex < records.Count; rowIndex++)
+                    {
+                        FlangeStandardRecordClient record = records[rowIndex];
+                        IRow row = sheet.CreateRow(rowIndex + 1);
+                        SetExcelCell(row, 0, record.DN); SetExcelCell(row, 1, record.PN);
+                        SetExcelCell(row, 2, record.PipeOuterDiameterSeriesI); SetExcelCell(row, 3, record.PipeOuterDiameterSeriesII);
+                        SetExcelCell(row, 4, record.FlangeOuterDiameter); SetExcelCell(row, 5, record.BoltCircleDiameter);
+                        SetExcelCell(row, 6, record.BoltHoleDiameter); SetExcelCell(row, 7, record.BoltCount);
+                        SetExcelCell(row, 8, record.BoltSpecification); SetExcelCell(row, 9, record.FlangeThickness);
+                        SetExcelCell(row, 10, record.RaisedFaceHeight); SetExcelCell(row, 11, record.FlangeInnerDiameterSeriesI);
+                        SetExcelCell(row, 12, record.FlangeInnerDiameterSeriesII); SetExcelCell(row, 13, record.SourceRowNumber);
+                    }
+                    for (int index = 0; index < headers.Length; index++) sheet.AutoSizeColumn(index);
+                }
+                using FileStream stream = File.Create(saveDialog.FileName);
+                workbook.Write(stream);
+                workbook.Close();
+            }).ConfigureAwait(true);
+
+            MessageBox.Show($"已导出 {exports.Count} 个细分规范。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private static string BuildExcelSheetName(StandardManagementSeriesClient series, HashSet<string> existingNames)
+        {
+            string name = string.Join(" / ", new[] { series.TableNumber, series.PressureRating }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            if (string.IsNullOrWhiteSpace(name)) name = series.SeriesName;
+            name = new string(name.Select(character => "[]:*?/\\".Contains(character) ? '_' : character).ToArray()).Trim();
+            if (string.IsNullOrWhiteSpace(name)) name = "规范内容";
+            name = name.Substring(0, Math.Min(31, name.Length));
+            string baseName = name;
+            int suffix = 2;
+            while (!existingNames.Add(name))
+            {
+                string suffixText = "_" + suffix++;
+                name = baseName.Substring(0, Math.Min(31 - suffixText.Length, baseName.Length)) + suffixText;
+            }
+            return name;
+        }
+
+        /// <summary>
+        /// 保存规范树刷新前的展开节点和当前选中节点，节点身份使用数据库 ID 而不是显示文字。
+        /// </summary>
+        private sealed class StandardTreeStateSnapshot
+        {
+            public HashSet<string> ExpandedKeys { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public string? SelectedKey { get; set; }
+        }
+        /// <summary>
+        /// 获取规范树节点的唯一标识键，用于保存展开状态和选中状态。根据节点类型（Category、Series、Version）生成不同的键。
+        /// </summary>
+        /// <param name="node">规范树节点</param>
+        /// <returns>唯一标识键</returns>
+        private static string GetStandardTreeNodeKey(CategoryTreeNode node)
+        {
+            if (node.Data is StandardManagementCategoryClient category)
+                return $"CATEGORY:{category.Id}";
+
+            if (node.Data is StandardManagementSeriesClient series)
+                return $"SERIES:{series.Id}";
+
+            if (node.Data is DynamicSubdivisionTreeData subdivision)
+                return $"VERSION:{subdivision.VersionId}";
+
+            return $"NODE:{node.Id}";
+        }
+        /// <summary>
+        /// 标准树状态快照：保存当前展开的节点和选中的节点，便于刷新后恢复状态。
+        /// </summary>
+        /// <returns></returns>
+        private StandardTreeStateSnapshot CaptureStandardTreeState()
+        {
+            var snapshot = new StandardTreeStateSnapshot
+            {
+                SelectedKey = SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode
+                    ? GetStandardTreeNodeKey(selectedNode)
+                    : null
+            };
+
+            foreach (CategoryTreeNode root in _standardTreeNodes)
+                CaptureExpandedStandardTreeNodes(root, snapshot.ExpandedKeys);
+
+            LogManager.Instance.LogInfo($"已保存规范树刷新状态：展开节点数={snapshot.ExpandedKeys.Count}，选中节点={snapshot.SelectedKey ?? "无"}");
+            return snapshot;
+        }
+        /// <summary>
+        /// 递归捕获规范树节点的展开状态，将展开的节点键添加到 expandedKeys 集合中。
+        /// </summary>
+        /// <param name="node"></param>
+        /// <param name="expandedKeys"></param>
+        private static void CaptureExpandedStandardTreeNodes(CategoryTreeNode node, ISet<string> expandedKeys)
+        {
+            if (node.IsExpanded)
+                expandedKeys.Add(GetStandardTreeNodeKey(node));
+
+            foreach (CategoryTreeNode child in node.Children)
+                CaptureExpandedStandardTreeNodes(child, expandedKeys);
+        }
+
         /// <summary>
         /// 选择规范系列后，将服务器返回的实际规范记录显示到属性表格。
         /// </summary>
@@ -331,15 +483,75 @@ namespace GB_NewCadPlus_IV
         {
             SpecificationPropertiesDataGrid.ItemsSource = null;
 
-            if (!(e.NewValue is CategoryTreeNode selectedNode)
-                || !(selectedNode.Data is StandardManagementSeriesClient series))
+            if (!(e.NewValue is CategoryTreeNode selectedNode))
                 return;
+
+            StandardManagementSeriesClient? series = selectedNode.Data as StandardManagementSeriesClient;
+            long? versionId = null;
+            if (series == null && selectedNode.Data is DynamicSubdivisionTreeData subdivision)
+            {
+                series = FindSeriesById(subdivision.SeriesId);
+                versionId = subdivision.VersionId;
+            }
+            if (series == null)
+                return;
+
+            // 旧版动态版本节点直接携带 VersionId；新版表号/型号节点直接携带 StandardManagementSeriesClient。
+            // 对新版细分系列，使用当前系列内容接口加载当前版本数据。
+            if (!versionId.HasValue)
+            {
+                bool isFinalSubdivision = !string.IsNullOrWhiteSpace(series.TableNumber)
+                    || !string.IsNullOrWhiteSpace(series.PressureRating);
+                if (!isFinalSubdivision)
+                {
+                    LogManager.Instance.LogInfo($"选中规范系列容器，清空实际内容：SeriesId={series.Id}");
+                    return;
+                }
+
+                LogManager.Instance.LogInfo($"选中细分规范系列，加载当前内容：SeriesId={series.Id}，表号={series.TableNumber}，型号={series.PressureRating}");
+            }
 
             try
             {
                 List<FlangeStandardRecordClient> records = await _standardManagementApiService
                     .GetFlangeRecordsAsync(series.Id)
                     .ConfigureAwait(true);
+
+                if (records.Count == 0)
+                {
+                    DynamicStandardContentClientResponse? dynamicContent = versionId.HasValue
+                        ? await _standardManagementApiService.GetDynamicContentByVersionAsync(versionId.Value).ConfigureAwait(true)
+                        : await _standardManagementApiService.GetDynamicContentAsync(series.Id).ConfigureAwait(true);
+                    if (dynamicContent != null)
+                    {
+                        List<CategoryPropertyEditModel> dynamicRows = dynamicContent.Rows
+                            .SelectMany(row =>
+                            {
+                                List<KeyValuePair<string, string>> fields = row.Values.ToList();
+                                var result = new List<CategoryPropertyEditModel>();
+                                for (int index = 0; index < fields.Count; index += 2)
+                                {
+                                    KeyValuePair<string, string> first = fields[index];
+                                    KeyValuePair<string, string>? second = index + 1 < fields.Count
+                                        ? fields[index + 1]
+                                        : (KeyValuePair<string, string>?)null;
+                                    result.Add(new CategoryPropertyEditModel
+                                    {
+                                        PropertyName1 = first.Key,
+                                        PropertyValue1 = first.Value,
+                                        PropertyName2 = second?.Key ?? string.Empty,
+                                        PropertyValue2 = second?.Value ?? string.Empty
+                                    });
+                                }
+
+                                return result;
+                            })
+                            .ToList();
+                        SpecificationPropertiesDataGrid.ItemsSource = dynamicRows;
+                        LogManager.Instance.LogInfo($"已加载动态规范实际内容：SeriesId={series.Id}，VersionId={dynamicContent.VersionId}，记录数={dynamicRows.Count}");
+                        return;
+                    }
+                }
 
                 if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode currentNode)
                     || !ReferenceEquals(currentNode.Data, series))
@@ -407,10 +619,35 @@ namespace GB_NewCadPlus_IV
                 MessageBox.Show($"加载规范内容失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
+        /// <summary>
+        /// 根据规范系列 ID 查找对应的 StandardManagementSeriesClient 对象。
+        /// </summary>
+        /// <param name="seriesId">规范系列 ID</param>
+        /// <returns>对应的 StandardManagementSeriesClient 对象，如果未找到则返回 null</returns>
+        private StandardManagementSeriesClient? FindSeriesById(long seriesId)
+        {
+            return _standardTreeNodes
+                .SelectMany(FlattenStandardTree)
+                .Select(node => node.Data as StandardManagementSeriesClient)
+                .FirstOrDefault(item => item?.Id == seriesId);
+        }
+        /// <summary>
+        /// 递归展开规范树节点，返回所有子节点（包括自身），用于遍历整个树结构。
+        /// </summary>
+        /// <param name="node">规范树节点</param>
+        /// <returns>包含自身及所有子节点的集合</returns>
+        private static IEnumerable<CategoryTreeNode> FlattenStandardTree(CategoryTreeNode node)
+        {
+            yield return node;
+            foreach (CategoryTreeNode child in node.Children.SelectMany(FlattenStandardTree))
+                yield return child;
+        }
 
         /// <summary>
-        /// 将规范尺寸值转换为适合 DataGrid 显示的文本。
+        /// 格式化规范值为字符串，保留最多四位小数，使用 InvariantCulture，若值为 null 则返回空字符串。
         /// </summary>
+        /// <param name="value">要格式化的规范值</param>
+        /// <returns>格式化后的字符串</returns>
         private static string FormatStandardValue(decimal? value)
         {
             return value.HasValue
@@ -419,9 +656,9 @@ namespace GB_NewCadPlus_IV
         }
 
         /// <summary>
-        /// 异步初始化 LayerDictionary_DataGrid 的数据源与事件订阅（使用时调用）
+        /// 初始化 LayerDictionary_DataGrid 的数据源和事件订阅，确保下拉列表和编辑行为正常。
         /// </summary>
-        /// <returns></returns>
+        /// <returns>一个表示异步操作的任务</returns>
         private async Task InitializeLayerDictionaryDataGridSource()
         {
             // 把行集合绑定到 DataGrid
@@ -1217,7 +1454,8 @@ namespace GB_NewCadPlus_IV
                 {
                     Type = "FileStorage",
                     ButtonName = caption,
-                    fileStorage = file
+                    fileStorage = file,
+                    InsertContext = BuildGraphicInsertContext(file)
                 },
                 Background = Brushes.Azure
             };
@@ -1353,6 +1591,7 @@ namespace GB_NewCadPlus_IV
                 // 解析文件储存信息
                 var file = ResolveFileStorageFromTag((sender as Button)?.Tag);
                 if (file == null) return;
+                GraphicInsertContext insertContext = ResolveGraphicInsertContextFromTag((sender as Button)?.Tag, file);
                 // 确保 DWG 文件在本地有缓存副本并获取有效路径（内部已包含“有则返回，无则下载”的逻辑）
                 var validPath = await EnsureLocalCachedFilePathAsync(file);
                 if (string.IsNullOrEmpty(validPath))
@@ -1363,7 +1602,7 @@ namespace GB_NewCadPlus_IV
 
                 VariableDictionary.btnFileName = file.FileName;
                 //GetPath._cacheStoragePath = validPath;
-                var (ok, err) = await ExecuteInsertAndWaitResultAsync(validPath);// 内部已包含插入命令执行和结果等待逻辑
+                var (ok, err) = await ExecuteInsertAndWaitResultAsync(validPath, insertContext);// 内部已包含插入命令执行和结果等待逻辑
                 if (!ok) LogManager.Instance.LogWarning("插入失败: " + err);
             }
             catch (Exception ex)
@@ -1391,10 +1630,12 @@ namespace GB_NewCadPlus_IV
                         var file = ResolveFileStorageFromTag(btn.Tag); // 解析按钮关联的 FileStorage 对象
                         if (file != null) // 如果成功解析出文件信息，则继续处理拖拽插入逻辑
                         {
+                            VariableDictionary.btnFileName = file.FileName;
+                            GraphicInsertContext insertContext = ResolveGraphicInsertContextFromTag(btn.Tag, file);
                             var localPath = await EnsureLocalCachedFilePathAsync(file); // 确保 DWG 文件在本地有缓存副本并获取路径（内部已包含“有则返回，无则下载”的逻辑）
                             if (!string.IsNullOrWhiteSpace(localPath)) // 如果成功获取到有效的本地文件路径，则执行插入命令并等待结果（内部已包含插入命令执行和结果等待逻辑）
                             {
-                                var (ok, err) = await ExecuteInsertAndWaitResultAsync(localPath); // 内部已包含插入命令执行和结果等待逻辑
+                                var (ok, err) = await ExecuteInsertAndWaitResultAsync(localPath, insertContext); // 内部已包含插入命令执行和结果等待逻辑
                                 if (!ok) LogManager.Instance.LogWarning("插入失败: " + err);
                             }
                         }
@@ -1763,6 +2004,99 @@ namespace GB_NewCadPlus_IV
                     break;
             }
             return null;
+        }
+
+        /// <summary>
+        /// 从按钮 Tag 获取分类上下文；旧按钮没有上下文时根据 FileStorage 重新反查。
+        /// </summary>
+        private GraphicInsertContext ResolveGraphicInsertContextFromTag(object tag, FileStorage file)
+        {
+            if (tag is ButtonTagCommandInfo info && info.InsertContext != null)
+                return info.InsertContext;
+
+            return BuildGraphicInsertContext(file);
+        }
+
+        /// <summary>
+        /// 根据图元分类 ID 反查主专业、子分类和业务图元类型。
+        /// 分类树无法识别时返回 Unknown，避免把本地旧资源误判为特定专业图元。
+        /// </summary>
+        private GraphicInsertContext BuildGraphicInsertContext(FileStorage file)
+        {
+            var context = new GraphicInsertContext
+            {
+                FileId = file?.Id ?? 0,
+                CategoryId = file?.CategoryId ?? 0,
+                CategoryType = file?.CategoryType ?? string.Empty
+            };
+
+            if (file == null || file.CategoryId <= 0 || _categoryTreeNodes == null || _categoryTreeNodes.Count == 0)
+                return context;
+
+            CategoryTreeNode? node = FindCategoryTreeNode(_categoryTreeNodes, file.CategoryId);
+            if (node == null)
+                return context;
+
+            CategoryTreeNode current = node;
+            CategoryTreeNode? mainNode = node.Level == 0 ? node : null;
+            while (mainNode == null && current.ParentId > 0)
+            {
+                CategoryTreeNode? parent = FindCategoryTreeNode(_categoryTreeNodes, current.ParentId);
+                if (parent == null) break;
+                current = parent;
+                if (current.Level == 0) mainNode = current;
+            }
+
+            mainNode ??= node.Level == 0 ? node : null;
+            context.MainCategoryId = mainNode?.Id ?? 0;
+            context.MainCategoryName = mainNode?.DisplayName ?? mainNode?.Name ?? string.Empty;
+            context.SubcategoryId = node.Level > 0 ? node.Id : 0;
+            context.SubcategoryName = node.Level > 0
+                ? node.DisplayName ?? node.Name ?? string.Empty
+                : string.Empty;
+            context.CategoryPath = string.IsNullOrWhiteSpace(context.SubcategoryName)
+                ? context.MainCategoryName
+                : $"{context.MainCategoryName}/{context.SubcategoryName}";
+            context.EntityType = ResolveGraphicEntityType(context.CategoryPath);
+
+            LogManager.Instance.LogInfo(
+                $"图元分类上下文解析完成：FileId={context.FileId}, CategoryPath={context.CategoryPath}, EntityType={context.EntityType}");
+            return context;
+        }
+
+        /// <summary>
+        /// 在分类树中递归查找指定 ID 的节点。
+        /// </summary>
+        private static CategoryTreeNode? FindCategoryTreeNode(
+            IEnumerable<CategoryTreeNode> nodes,
+            int id)
+        {
+            foreach (CategoryTreeNode node in nodes)
+            {
+                if (node.Id == id) return node;
+                CategoryTreeNode? child = FindCategoryTreeNode(node.Children, id);
+                if (child != null) return child;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 将分类路径映射为后续规范查询使用的业务图元类型。
+        /// </summary>
+        private static GraphicEntityType ResolveGraphicEntityType(string categoryPath)
+        {
+            string value = (categoryPath ?? string.Empty).Replace(" ", string.Empty);
+            if (value.IndexOf("管道", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GraphicEntityType.Pipeline;
+            if (value.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GraphicEntityType.Flange;
+            if (value.IndexOf("阀门", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("蝶阀", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GraphicEntityType.Valve;
+            if (value.IndexOf("管件", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GraphicEntityType.Fitting;
+            return GraphicEntityType.Unknown;
         }
 
         /// <summary>
@@ -2654,7 +2988,9 @@ namespace GB_NewCadPlus_IV
         /// 执行 DWG 插入并等待结果的异步包装（返回 (成功, 错误信息)）
         /// 实现说明：尝试使用已有的辅助方法插入（InsertGraphicHelper），尽量采用同步到 CAD 的方式并且避免阻塞 UI 线程
         /// </summary>
-        private Task<(bool, string)> ExecuteInsertAndWaitResultAsync(string localDwgPath)
+        private Task<(bool, string)> ExecuteInsertAndWaitResultAsync(
+            string localDwgPath,
+            GraphicInsertContext? insertContext = null)
         {
             return Task.Run(() =>
             {
@@ -2666,7 +3002,7 @@ namespace GB_NewCadPlus_IV
                     // 优先使用 InsertGraphicHelper 的快速插入，如果存在该工具
                     try
                     {
-                        InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwgPath);
+                        InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(localDwgPath, insertContext);
                         return (true, string.Empty);
                     }
                     catch (Exception ex)
@@ -3875,13 +4211,24 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
+                if (_categoryManager == null)
+                {
+                    throw new InvalidOperationException("分类管理器未初始化，无法加载CAD分类树。");
+                }
+
+                if (_databaseManager == null || !_databaseManager.IsDatabaseAvailable)
+                {
+                    throw new InvalidOperationException("数据库管理器不可用，无法加载CAD分类树。");
+                }
+
                 await _categoryManager.LoadCategoryTreeAsync(_categoryTreeNodes, _databaseManager);
                 _categoryTreeView = CategoryTreeView;//赋值给全局变量
                 _categoryManager.DisplayCategoryTree(_categoryTreeView, _categoryTreeNodes);
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogInfo($"初始化架构树失败: {ex.Message}");
+                LogManager.Instance.LogError($"初始化CAD分类树失败: {ex}");
+                throw;
             }
         }
 
@@ -4441,6 +4788,10 @@ namespace GB_NewCadPlus_IV
             /// </summary>
             public FileStorage? fileStorage { get; set; }
             /// <summary>
+            /// 图元插入时使用的分类上下文。
+            /// </summary>
+            public GraphicInsertContext? InsertContext { get; set; }
+            /// <summary>
             /// 命令信息
             /// </summary>
             public ButtonTagCommandInfo? CommandInfo { get; set; }
@@ -4613,6 +4964,170 @@ namespace GB_NewCadPlus_IV
             await 导入规范到分类库Async(category.Id).ConfigureAwait(true);
         }
 
+        /// <summary>
+        /// 根据上传文件名解析规范四段信息，并从服务器规范目录中查找对应系列。
+        /// </summary>
+        private async Task<long?> FindDynamicImportSeriesIdAsync(string filePath)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(filePath ?? string.Empty);
+            string[] parts = fileName.Split(new[] { '_' }, StringSplitOptions.None);
+            if (parts.Length < 4)
+            {
+                LogManager.Instance.LogInfo($"动态规范导入未能解析完整文件名，无法匹配规范系列：文件={filePath}。");
+                return null;
+            }
+
+            string seriesName = parts[0].Trim();
+            string standardNumber = parts[1].Trim();
+            string tableNumber = parts[2].Trim();
+            string pressureRating = string.Join("_", parts.Skip(3)).Trim();
+
+            StandardManagementTreeClientResponse response = await _standardManagementApiService
+                .GetManagementTreeAsync()
+                .ConfigureAwait(true);
+            List<StandardManagementSeriesClient> seriesList = response.Series ?? new List<StandardManagementSeriesClient>();
+            List<StandardManagementSeriesClient> baseSeriesMatches = seriesList
+                .Where(series =>
+                    string.Equals(series.SeriesName?.Trim(), seriesName, StringComparison.OrdinalIgnoreCase)
+                    && NormalizeStandardText(series.StandardNumber) == NormalizeStandardText(standardNumber)
+                    && string.IsNullOrWhiteSpace(series.TableNumber)
+                    && string.IsNullOrWhiteSpace(series.PressureRating))
+                .ToList();
+            StandardManagementSeriesClient? match = baseSeriesMatches.Count == 1
+                ? baseSeriesMatches[0]
+                : null;
+
+            if (match == null)
+            {
+                List<StandardManagementSeriesClient> sameIdentitySeries = seriesList
+                    .Where(series =>
+                        string.Equals(series.SeriesName?.Trim(), seriesName, StringComparison.OrdinalIgnoreCase)
+                        && NormalizeStandardText(series.StandardNumber) == NormalizeStandardText(standardNumber))
+                    .ToList();
+                if (baseSeriesMatches.Count > 1)
+                {
+                    LogManager.Instance.LogInfo($"动态规范导入匹配到多个基础系列，打开人工选择：文件={filePath}，系列={seriesName}_{standardNumber}。");
+                    match = ShowDynamicSeriesSelectionDialog(baseSeriesMatches, seriesName, standardNumber, tableNumber, pressureRating, true);
+                }
+                else
+                {
+                    LogManager.Instance.LogInfo($"动态规范导入未找到基础系列，将在预览确认时由服务器创建：文件={filePath}，基础规范={seriesName}_{standardNumber}，细分={tableNumber}_{pressureRating}，同标识旧系列数={sameIdentitySeries.Count}。");
+                    return null;
+                }
+            }
+            else
+            {
+                LogManager.Instance.LogInfo($"动态规范导入已匹配目标规范系列：文件={filePath}，SeriesId={match.Id}。");
+            }
+            return match?.Id > 0 ? match.Id : (long?)null;
+        }
+
+        /// <summary>
+        /// 自动匹配失败时显示规范系列选择窗口，避免用户看不到 SeriesId 来源。
+        /// </summary>
+        private StandardManagementSeriesClient? ShowDynamicSeriesSelectionDialog(
+            IReadOnlyList<StandardManagementSeriesClient> series,
+            string seriesName,
+            string standardNumber,
+            string tableNumber,
+            string pressureRating,
+            bool multipleMatches)
+        {
+            Window dialog = new Window
+            {
+                Title = "选择动态规范目标系列",
+                Width = 760,
+                Height = 520,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.CanResize
+            };
+            Grid root = new Grid { Margin = new Thickness(12) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            TextBlock description = new TextBlock
+            {
+                Text = $"{(multipleMatches ? "同一规范系列名称和代号对应多个目标系列，请选择具体系列。" : "未能按文件名自动匹配规范系列，请选择目标系列。")}\n规范系列：{seriesName}_{standardNumber}\n本次细分：{tableNumber}_{pressureRating}",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid.SetRow(description, 0);
+            root.Children.Add(description);
+
+            System.Windows.Controls.ListBox listBox = new System.Windows.Controls.ListBox { ItemsSource = series };
+            listBox.SelectionChanged += (_, _) => { };
+            listBox.ItemTemplate = new DataTemplate
+            {
+                VisualTree = CreateDynamicSeriesItemTemplate()
+            };
+            StandardManagementSeriesClient? suggested = multipleMatches
+                ? null
+                : series.FirstOrDefault(item =>
+                    string.Equals(item.SeriesName, seriesName, StringComparison.OrdinalIgnoreCase)
+                    || NormalizeStandardText(item.StandardNumber) == NormalizeStandardText(standardNumber));
+            listBox.SelectedItem = suggested;
+            Grid.SetRow(listBox, 1);
+            root.Children.Add(listBox);
+
+            StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
+            Button cancel = new Button { Content = "取消", Width = 100, Margin = new Thickness(0, 0, 8, 0), IsCancel = true };
+            Button confirm = new Button { Content = "使用所选系列", Width = 130, IsDefault = true };
+            confirm.Click += (_, _) =>
+            {
+                if (listBox.SelectedItem == null)
+                {
+                    MessageBox.Show("请选择一个目标规范系列。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                dialog.DialogResult = true;
+            };
+            buttons.Children.Add(cancel);
+            buttons.Children.Add(confirm);
+            Grid.SetRow(buttons, 2);
+            root.Children.Add(buttons);
+            dialog.Content = root;
+            return dialog.ShowDialog() == true ? listBox.SelectedItem as StandardManagementSeriesClient : null;
+        }
+        /// <summary>
+        /// 创建动态规范系列列表项模板
+        /// </summary>
+        /// <returns></returns>
+        private static FrameworkElementFactory CreateDynamicSeriesItemTemplate()
+        {
+            FrameworkElementFactory panel = new FrameworkElementFactory(typeof(StackPanel));
+            panel.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+            FrameworkElementFactory text = new FrameworkElementFactory(typeof(TextBlock));
+            text.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("SeriesName"));
+            text.SetValue(TextBlock.WidthProperty, 210.0);
+            panel.AppendChild(text);
+            FrameworkElementFactory detail = new FrameworkElementFactory(typeof(TextBlock));
+            detail.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("StandardNumber"));
+            detail.SetValue(TextBlock.MarginProperty, new Thickness(12, 0, 0, 0));
+            panel.AppendChild(detail);
+            FrameworkElementFactory subdivision = new FrameworkElementFactory(typeof(TextBlock));
+            subdivision.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("TableNumber"));
+            subdivision.SetValue(TextBlock.MarginProperty, new Thickness(12, 0, 0, 0));
+            panel.AppendChild(subdivision);
+            FrameworkElementFactory pressure = new FrameworkElementFactory(typeof(TextBlock));
+            pressure.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("PressureRating"));
+            pressure.SetValue(TextBlock.MarginProperty, new Thickness(12, 0, 0, 0));
+            panel.AppendChild(pressure);
+            return panel;
+        }
+
+        /// <summary>统一 GB-T、GB/T 及空格差异，避免文件名和数据库格式差异导致匹配失败。</summary>
+        private static string NormalizeStandardText(string value)
+        {
+            return (value ?? string.Empty)
+                .Trim()
+                .Replace(" ", string.Empty)
+                .Replace("－", "-")
+                .Replace("／", "/")
+                .Replace("GB-T", "GB/T")
+                .Replace("gb-t", "GB/T");
+        }
+
         private async Task 导入规范到分类库Async(long categoryId)
         {
             if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
@@ -4631,19 +5146,39 @@ namespace GB_NewCadPlus_IV
 
             try
             {
+                if (string.Equals(Path.GetExtension(dialog.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
+                {
+                    DynamicStandardPreviewClientResponse dynamicResponse = await _standardManagementApiService
+                        .PreviewDynamicImportAsync(dialog.FileName, VariableDictionary._userName ?? string.Empty)
+                        .ConfigureAwait(true);
+                    long? seriesId = await FindDynamicImportSeriesIdAsync(dialog.FileName).ConfigureAwait(true);
+                    StandardImportPreviewWindow dynamicPreviewWindow = new StandardImportPreviewWindow(
+                        dynamicResponse,
+                        Path.GetFileName(dialog.FileName),
+                        _standardManagementApiService,
+                        VariableDictionary._userName ?? string.Empty,
+                        seriesId,
+                        categoryId);
+                    bool dynamicImportConfirmed = dynamicPreviewWindow.ShowDialog() == true;
+                    if (dynamicImportConfirmed)
+                    {
+                        // 动态预览窗口内部完成提交后，主窗口必须重新请求目录树，才能显示新导入的细分节点。
+                        LogManager.Instance.LogInfo($"动态规范导入窗口已确认：文件={dialog.FileName}，开始刷新规范树。");
+                        await RefreshStandardTreeAsync().ConfigureAwait(true);
+                        LogManager.Instance.LogInfo($"动态规范导入后的规范树刷新完成：文件={dialog.FileName}。");
+                    }
+                    return;
+                }
+
                 StandardImportPreviewClientResponse response = await _standardManagementApiService
                     .PreviewImportAsync(dialog.FileName, VariableDictionary._userName ?? string.Empty, categoryId)
                     .ConfigureAwait(true);
-                string detailText = BuildImportPreviewDetailText(response);
-                MessageBoxResult confirm = MessageBox.Show(
-                    $"文件预览完成。\n{response.Message}\n错误：{response.ErrorCount}\n警告：{response.WarningCount}{detailText}\n\n是否确认导入？",
-                    response.Success ? "规范预览成功" : "规范预览存在问题",
-                    response.Success ? MessageBoxButton.YesNo : MessageBoxButton.OK,
-                    response.Success ? MessageBoxImage.Question : MessageBoxImage.Warning);
-                if (response.Success && confirm == MessageBoxResult.Yes)
+                LogManager.Instance.LogInfo($"分类库规范文件预览完成：文件={dialog.FileName}，批次={response.BatchId}，错误={response.ErrorCount}，警告={response.WarningCount}，重名系列={response.DuplicateSeries?.SeriesId.ToString() ?? "无"}。");
+                var previewWindow = new StandardImportPreviewWindow(response);
+                if (previewWindow.ShowDialog() == true)
                 {
                     StandardImportCommitClientResponse commit = await _standardManagementApiService
-                        .CommitImportAsync(response.BatchId, response.WarningCount > 0, VariableDictionary._userName ?? string.Empty)
+                        .CommitImportAsync(previewWindow.ConfirmedRequest, VariableDictionary._userName ?? string.Empty)
                         .ConfigureAwait(true);
                     MessageBox.Show($"{commit.Message}\n导入数量：{commit.ImportedCount}\n警告：{commit.WarningCount}",
                         commit.Success ? "规范导入成功" : "规范导入失败", MessageBoxButton.OK,
@@ -4660,32 +5195,20 @@ namespace GB_NewCadPlus_IV
 
         private async void 导出分类库规范_MenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode node)
-                || !(node.Data is StandardManagementCategoryClient category))
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode node))
             {
                 MessageBox.Show("请先选择要导出的分类库。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            CategoryTreeNode? categoryTreeNode = _standardTreeNodes
-                .Select(root => FindStandardCategoryNode(root, category.Id))
-                .FirstOrDefault(item => item != null);
-            List<StandardManagementSeriesClient> series = categoryTreeNode?.Children
-                .Select(item => item.Data)
-                .OfType<StandardManagementSeriesClient>()
-                .ToList() ?? new List<StandardManagementSeriesClient>();
+            List<StandardManagementSeriesClient> series = GetExportSeries(node);
             if (series.Count == 0)
             {
                 MessageBox.Show("当前分类库下没有可导出的规范。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            foreach (StandardManagementSeriesClient item in series)
-            {
-                List<FlangeStandardRecordClient> records = await _standardManagementApiService.GetFlangeRecordsAsync(item.Id).ConfigureAwait(true);
-                if (records.Count > 0)
-                    await ExportFlangeRecordsToExcelAsync(item, records).ConfigureAwait(true);
-            }
+            await ExportSeriesListToWorkbookAsync(node.DisplayText, series).ConfigureAwait(true);
         }
         /// <summary>
         /// 解析更新的分类属性
@@ -4740,32 +5263,71 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private async void LoadCadDatabase_Btn_Click(object sender, RoutedEventArgs e)
         {
+            if (sender is Button loadButton)
+            {
+                loadButton.IsEnabled = false;
+            }
+
             try
             {
-                // 设置当前数据库类型
+                LogManager.Instance.LogInfo("[加载CAD数据库] 点击事件已触发");
+
                 _currentDatabaseType = "CAD";
-                LogManager.Instance.LogInfo("设置数据库类型为: " + _currentDatabaseType);
-                LogManager.Instance.LogInfo("=== 开始加载CAD数据库 ===");
-                if (!_useDatabaseMode || _databaseManager == null || !_databaseManager.IsDatabaseAvailable)
+                LogManager.Instance.LogInfo($"[加载CAD数据库] 设置当前数据库类型: {_currentDatabaseType}");
+
+                LogManager.Instance.LogInfo(
+                    $"[加载CAD数据库] 当前状态: useDatabaseMode={_useDatabaseMode}, " +
+                    $"databaseManagerNull={_databaseManager == null}, " +
+                    $"databaseAvailable={_databaseManager?.IsDatabaseAvailable.ToString() ?? "null"}");
+
+                LogManager.Instance.LogInfo("[加载CAD数据库] 检查并建立数据库连接");
+                if (!await EnsureDatabaseConnectedSingleEntryAsync())
                 {
+                    LogManager.Instance.LogError("[加载CAD数据库] 数据库连接不可用，加载终止");
                     System.Windows.MessageBox.Show("数据库不可用，请检查数据库连接配置");
-                    LogManager.Instance.LogInfo("数据库不可用，请检查数据库连接配置");
                     return;
                 }
-                _cadStoragePath = await _databaseManager.GetConfigValueAsync("cad_storage_path");  // 获取CAD存储路径
+
+                if (_categoryManager == null)
+                {
+                    LogManager.Instance.LogInfo("[加载CAD数据库] 分类管理器未初始化，正在创建");
+                    _categoryManager = new CategoryManager(_databaseManager!);
+                }
+
+                LogManager.Instance.LogInfo("[加载CAD数据库] 开始读取CAD存储路径配置");
+                _cadStoragePath = await _databaseManager!.GetConfigValueAsync("cad_storage_path");
+                LogManager.Instance.LogInfo(
+                    $"[加载CAD数据库] CAD存储路径配置读取结果: " +
+                    (string.IsNullOrWhiteSpace(_cadStoragePath) ? "为空，将使用默认路径" : _cadStoragePath));
+
                 if (string.IsNullOrEmpty(_cadStoragePath))
                 {
                     _cadStoragePath = System.IO.Path.Combine(AppPath, "CadFiles");
                 }
-                System.IO.Directory.CreateDirectory(_cadStoragePath); // 确保存储路径存在
 
-                // 加载并显示CAD分类树
+                LogManager.Instance.LogInfo($"[加载CAD数据库] 确保存储目录存在: {_cadStoragePath}");
+                System.IO.Directory.CreateDirectory(_cadStoragePath);
+                LogManager.Instance.LogInfo("[加载CAD数据库] 存储目录准备完成");
+
+                LogManager.Instance.LogInfo("[加载CAD数据库] 开始请求分类树数据");
                 await InitializeCategoryTreeAsync();
+                LogManager.Instance.LogInfo(
+                    $"[加载CAD数据库] 分类树加载并显示完成，节点数: {_categoryTreeNodes.Count}");
 
             }
             catch (Exception ex)
             {
+                LogManager.Instance.LogError($"[加载CAD数据库] 执行失败: {ex}");
                 System.Windows.MessageBox.Show($"加载CAD数据库时出错: {ex.Message}");
+            }
+            finally
+            {
+                if (sender is Button button)
+                {
+                    button.IsEnabled = true;
+                }
+
+                LogManager.Instance.LogInfo("[加载CAD数据库] 点击事件处理结束");
             }
         }
 
@@ -14484,11 +15046,82 @@ namespace GB_NewCadPlus_IV
 
         private async Task RefreshStandardTreeAsync()
         {
+            StandardTreeStateSnapshot snapshot = CaptureStandardTreeState();
             StandardManagementTreeClientResponse response = await _standardManagementApiService
                 .GetManagementTreeAsync()
                 .ConfigureAwait(true);
             if (response.Success)
+            {
+                _pendingStandardTreeStateSnapshot = snapshot;
                 BuildStandardTree(response);
+                RestoreStandardTreeState(snapshot);
+                LogManager.Instance.LogInfo($"规范架构树刷新成功：分类数量={response.Categories.Count}，规范系列数量={response.Series.Count}。");
+            }
+            else
+            {
+                LogManager.Instance.LogError($"规范架构树刷新失败：服务器返回失败，消息={response.Message ?? "未提供错误消息"}。");
+            }
+        }
+
+        private void RestoreStandardTreeState(StandardTreeStateSnapshot snapshot)
+        {
+            if (snapshot == null)
+                return;
+
+            CategoryTreeNode? selectedNode = null;
+            foreach (CategoryTreeNode root in _standardTreeNodes)
+                RestoreStandardTreeNodeState(root, snapshot, ref selectedNode);
+
+            if (selectedNode != null)
+            {
+                selectedNode.IsExpanded = true;
+                SelectStandardTreeNode(selectedNode);
+            }
+
+            SpecificationTreeView.Items.Refresh();
+            LogManager.Instance.LogInfo($"已恢复规范树刷新状态：展开节点数={snapshot.ExpandedKeys.Count}，选中节点={selectedNode?.DisplayText ?? "无"}");
+        }
+
+        private void SelectStandardTreeNode(CategoryTreeNode node)
+        {
+            // TreeView.SelectedItem 是只读属性，必须通过对应的 TreeViewItem 设置 IsSelected。
+            if (FindVisualTreeItem(SpecificationTreeView, node) is TreeViewItem treeViewItem)
+            {
+                treeViewItem.IsSelected = true;
+                treeViewItem.Focus();
+            }
+        }
+
+        private static DependencyObject? FindVisualTreeItem(DependencyObject? root, CategoryTreeNode target)
+        {
+            if (root == null)
+                return null;
+
+            if (root is TreeViewItem item && ReferenceEquals(item.DataContext, target))
+                return item;
+
+            for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+            {
+                DependencyObject? result = FindVisualTreeItem(VisualTreeHelper.GetChild(root, index), target);
+                if (result != null)
+                    return result;
+            }
+
+            return null;
+        }
+
+        private static void RestoreStandardTreeNodeState(
+            CategoryTreeNode node,
+            StandardTreeStateSnapshot snapshot,
+            ref CategoryTreeNode? selectedNode)
+        {
+            string key = GetStandardTreeNodeKey(node);
+            node.IsExpanded = snapshot.ExpandedKeys.Contains(key);
+            if (string.Equals(snapshot.SelectedKey, key, StringComparison.OrdinalIgnoreCase))
+                selectedNode = node;
+
+            foreach (CategoryTreeNode child in node.Children)
+                RestoreStandardTreeNodeState(child, snapshot, ref selectedNode);
         }
 
         private async void 删除规范库_Click(object sender, RoutedEventArgs e)
@@ -14588,17 +15221,27 @@ namespace GB_NewCadPlus_IV
                 && node.Data is StandardManagementCategoryClient;
             bool isSeries = SpecificationTreeView.SelectedItem is CategoryTreeNode seriesNode
                 && seriesNode.Data is StandardManagementSeriesClient;
+            bool isStandardDocument = SpecificationTreeView.SelectedItem is CategoryTreeNode documentNode
+                && documentNode.Data is StandardDocumentClient;
+            bool isSeriesGroup = SpecificationTreeView.SelectedItem is CategoryTreeNode groupNode
+                && groupNode.Data is StandardSeriesGroupTreeData;
             bool isUncategorizedSeries = SpecificationTreeView.SelectedItem is CategoryTreeNode oldSeriesNode
                 && oldSeriesNode.Data is StandardManagementSeriesClient oldSeries
                 && !oldSeries.CategoryId.HasValue;
+            bool isSubdivision = SpecificationTreeView.SelectedItem is CategoryTreeNode subdivisionNode
+                && subdivisionNode.Data is DynamicSubdivisionTreeData;
 
             SetContextMenuItemEnabled(menu, "添加子规范库", isCategory && IsMainCategorySelected());
             SetContextMenuItemEnabled(menu, "上移规范库", isCategory && HasStandardCategorySibling(-1));
             SetContextMenuItemEnabled(menu, "下移规范库", isCategory && HasStandardCategorySibling(1));
-            SetContextMenuItemEnabled(menu, "重命名", isCategory || isSeries);
+            SetContextMenuItemEnabled(menu, "重命名", isCategory || isSeries || isSubdivision);
             SetContextMenuItemEnabled(menu, "修改规范库", isCategory);
             SetContextMenuItemEnabled(menu, "移动规范位置", isCategory || isUncategorizedSeries);
-            SetContextMenuItemEnabled(menu, "删除规范库", isCategory || isSeries);
+            SetContextMenuItemEnabled(menu, "删除", isCategory || isSeries || isSubdivision);
+            // 分类节点和规范系列节点都属于可导入规范的“库”节点；动态细分节点只代表某个版本，不能直接作为导入目标。
+            SetContextMenuItemEnabled(menu, "导入规范", isCategory || isSeries || isStandardDocument || isSeriesGroup);
+            SetContextMenuItemEnabled(menu, "导出规范", isCategory || isSeries || isStandardDocument || isSeriesGroup || isSubdivision);
+            //SetContextMenuItemEnabled(menu, "删除", isSubdivision);
         }
 
         private bool IsMainCategorySelected()
@@ -14686,6 +15329,87 @@ namespace GB_NewCadPlus_IV
         private async void 右键删除规范库_Click(object sender, RoutedEventArgs e)
         {
             删除规范库_Click(sender, e);
+        }
+
+        private async void 右键导入规范_Click(object sender, RoutedEventArgs e)
+        {
+            // 右键导入时优先使用当前系列所属的分类，保证 JSON 等传统规范导入也能获得目标分类。
+            if (SpecificationTreeView.SelectedItem is CategoryTreeNode node)
+            {
+                if (node.Data is StandardManagementCategoryClient category)
+                {
+                    await 导入规范到分类库Async(category.Id).ConfigureAwait(true);
+                    return;
+                }
+
+                StandardManagementSeriesClient? series = node.Data as StandardManagementSeriesClient
+                    ?? FlattenStandardTree(node)
+                        .Select(item => item.Data as StandardManagementSeriesClient)
+                        .FirstOrDefault(item => item != null);
+                if (series?.CategoryId.HasValue == true)
+                {
+                    await 导入规范到分类库Async(series.CategoryId.Value).ConfigureAwait(true);
+                    return;
+                }
+            }
+
+            // 没有可解析的分类时保留原有入口行为，动态 Excel 导入仍会通过文件名匹配目标系列。
+            导入规范_Btn_Click(sender, e);
+        }
+
+        private void 右键导出规范_Click(object sender, RoutedEventArgs e)
+        {
+            导出规范_Btn_Click(sender, e);
+        }
+
+        private async void 右键删除规范细分_Click(object sender, RoutedEventArgs e)
+        {
+            await DeleteSelectedStandardSubdivisionAsync().ConfigureAwait(true);
+        }
+
+        private async Task DeleteSelectedStandardSubdivisionAsync()
+        {
+            if (!IsAdminUser(VariableDictionary._userName ?? string.Empty))
+            {
+                MessageBox.Show("只有管理员可以删除规范细分。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
+                || !(selectedNode.Data is DynamicSubdivisionTreeData subdivision))
+            {
+                MessageBox.Show("请先选择要删除的表号/PN规范细分。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            MessageBoxResult confirm = MessageBox.Show(
+                $"确定删除规范细分“{selectedNode.DisplayText}”吗？\n\n只删除该表号/PN版本，不删除基础规范系列。",
+                "确认删除规范细分",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                StandardManagementOperationClientResponse response = await _standardManagementApiService
+                    .DeleteManagementVersionAsync(subdivision.VersionId, VariableDictionary._userName ?? string.Empty)
+                    .ConfigureAwait(true);
+                if (!response.Success)
+                {
+                    MessageBox.Show(response.Message, "删除规范细分失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                SpecificationPropertiesDataGrid.ItemsSource = null;
+                await RefreshStandardTreeAsync().ConfigureAwait(true);
+                MessageBox.Show(response.Message, "删除规范细分成功", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"删除规范细分失败：VersionId={subdivision.VersionId}，错误={ex.Message}");
+                MessageBox.Show($"删除规范细分失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void 右键展开折叠规范_Click(object sender, RoutedEventArgs e)
@@ -14859,6 +15583,14 @@ namespace GB_NewCadPlus_IV
                             Description = category.Description,
                             SortOrder = category.SortOrder
                         },
+                        VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
+                }
+                else if (selectedNode.Data is DynamicSubdivisionTreeData subdivision)
+                {
+                    // 动态细分只修改版本显示标签，不修改基础系列、版本号和动态数据。
+                    response = await _standardManagementApiService.RenameManagementVersionAsync(
+                        subdivision.VersionId,
+                        renameName,
                         VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
                 }
                 else if (selectedNode.Data is StandardManagementSeriesClient series)
@@ -15141,20 +15873,8 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                StandardManagementTreeClientResponse response = await _standardManagementApiService
-                    .GetManagementTreeAsync()
-                    .ConfigureAwait(true);
-
-                if (!response.Success)
-                {
-                    LogManager.Instance.LogInfo($"规范架构树刷新失败：{response.Message}");
-                    MessageBox.Show(response.Message, "规范目录查询失败", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                BuildStandardTree(response);
-                LogManager.Instance.LogInfo($"规范架构树刷新完成：专业/类别 {response.Categories.Count} 个，规范系列 {response.Series.Count} 个。");
-                //MessageBox.Show($"规范架构树刷新完成：专业/类别 {response.Categories.Count} 个，规范系列 {response.Series.Count} 个。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+                await RefreshStandardTreeAsync().ConfigureAwait(true);
+                LogManager.Instance.LogInfo("规范架构树刷新完成，已尝试恢复当前位置。");
             }
             catch (Exception ex)
             {
@@ -15184,21 +15904,26 @@ namespace GB_NewCadPlus_IV
 
             try
             {
+                if (string.Equals(Path.GetExtension(dialog.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
+                {
+                    DynamicStandardPreviewClientResponse dynamicResponse = await _standardManagementApiService
+                        .PreviewDynamicImportAsync(dialog.FileName, VariableDictionary._userName ?? string.Empty)
+                        .ConfigureAwait(true);
+                    long? seriesId = await FindDynamicImportSeriesIdAsync(dialog.FileName).ConfigureAwait(true);
+                    new StandardImportPreviewWindow(dynamicResponse, Path.GetFileName(dialog.FileName), _standardManagementApiService, VariableDictionary._userName ?? string.Empty, seriesId).ShowDialog();
+                    return;
+                }
+
                 StandardImportPreviewClientResponse response = await _standardManagementApiService
                     .PreviewImportAsync(dialog.FileName, VariableDictionary._userName ?? string.Empty)
                     .ConfigureAwait(true);
                 string batchText = string.IsNullOrWhiteSpace(response.BatchId) ? "未生成" : response.BatchId;
-                LogManager.Instance.LogInfo($"文件预览完成：{response.Message}，错误：{response.ErrorCount}，警告：{response.WarningCount}，批次：{batchText}");
-                string detailText = BuildImportPreviewDetailText(response);
-                MessageBoxResult confirm = MessageBox.Show(
-                    $"文件预览完成。\n{response.Message}\n错误：{response.ErrorCount}\n警告：{response.WarningCount}\n批次：{batchText}{detailText}\n\n是否确认导入？",
-                    response.Success ? "规范预览成功" : "规范预览存在问题",
-                    response.Success ? MessageBoxButton.YesNo : MessageBoxButton.OK,
-                    response.Success ? MessageBoxImage.Question : MessageBoxImage.Warning);
-                if (response.Success && confirm == MessageBoxResult.Yes)
+                LogManager.Instance.LogInfo($"规范文件预览完成：文件={dialog.FileName}，批次={batchText}，错误={response.ErrorCount}，警告={response.WarningCount}，重名系列={response.DuplicateSeries?.SeriesId.ToString() ?? "无"}。");
+                var previewWindow = new StandardImportPreviewWindow(response);
+                if (previewWindow.ShowDialog() == true)
                 {
                     StandardImportCommitClientResponse commit = await _standardManagementApiService
-                        .CommitImportAsync(response.BatchId, response.WarningCount > 0, VariableDictionary._userName ?? string.Empty)
+                        .CommitImportAsync(previewWindow.ConfirmedRequest, VariableDictionary._userName ?? string.Empty)
                         .ConfigureAwait(true);
                     LogManager.Instance.LogInfo($"规范导入完成：{commit.Message}，导入数量：{commit.ImportedCount}，警告：{commit.WarningCount}");
                     MessageBox.Show(
@@ -15239,13 +15964,43 @@ namespace GB_NewCadPlus_IV
 
             return details.ToString();
         }
-
+        /// <summary>
+        /// 导出当前选中的规范系列的实际法兰记录或 Excel 附件。
+        /// </summary>
+        /// <param name="sender">事件源</param>
+        /// <param name="e">事件参数</param>
         private async void 导出规范_Btn_Click(object sender, RoutedEventArgs e)
         {
-            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
-                || !(selectedNode.Data is StandardManagementSeriesClient series))
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode))
             {
-                MessageBox.Show("请先选择一个规范系列。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("请先选择一个规范分类或规范系列。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            List<StandardManagementSeriesClient> exportSeries = GetExportSeries(selectedNode);
+            bool isSubtreeNode = selectedNode.Data is StandardManagementCategoryClient
+                || selectedNode.Data is StandardDocumentClient
+                || selectedNode.Data is StandardSeriesGroupTreeData;
+            if (isSubtreeNode)
+            {
+                await ExportSeriesListToWorkbookAsync(selectedNode.DisplayText, exportSeries).ConfigureAwait(true);
+                return;
+            }
+
+            StandardManagementSeriesClient? series = selectedNode.Data as StandardManagementSeriesClient;
+            if (series == null && selectedNode.Data is DynamicSubdivisionTreeData subdivision)
+                series = FindSeriesById(subdivision.SeriesId);
+            if (series == null && selectedNode.Data is StandardManagementCategoryClient)
+            {
+                series = selectedNode.Children
+                    .SelectMany(FlattenStandardTree)
+                    .Select(node => node.Data as StandardManagementSeriesClient)
+                    .FirstOrDefault(item => item != null);
+            } 
+
+            if (series == null)
+            {
+                MessageBox.Show("当前分类库下没有可导出的规范系列。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -15413,7 +16168,7 @@ namespace GB_NewCadPlus_IV
         /// </summary>
         private void BuildStandardTree(StandardManagementTreeClientResponse response)
         {
-            LogManager.Instance.LogInfo($"开始生成规范树：分类数量={response.Categories.Count}，规范系列数量={response.Series.Count}");
+            LogManager.Instance.LogInfo($"开始生成规范树：分类数量={response.Categories.Count}，基础规范号数量={response.Documents?.Count ?? 0}，规范系列数量={response.Series.Count}");
             _standardTreeNodes.Clear();
             var nodeMap = new Dictionary<long, CategoryTreeNode>();
 
@@ -15440,27 +16195,261 @@ namespace GB_NewCadPlus_IV
                     _standardTreeNodes.Add(node);
             }
 
-            foreach (StandardManagementSeriesClient series in response.Series.OrderBy(item => item.SeriesName).ThenBy(item => item.Id))
+            // 基础规范号是分类下的第二级节点。
+            Dictionary<long, CategoryTreeNode> documentNodeMap = new Dictionary<long, CategoryTreeNode>();
+            foreach (StandardDocumentClient document in (response.Documents ?? new List<StandardDocumentClient>())
+                .OrderBy(item => item.StandardNumber).ThenBy(item => item.Id))
+            {
+                CategoryTreeNode documentNode = new CategoryTreeNode(
+                    unchecked((int)(document.Id ^ (document.Id >> 32))),
+                    document.StandardNumber,
+                    document.DisplayText,
+                    2,
+                    document.CategoryId.HasValue ? unchecked((int)document.CategoryId.Value) : 0,
+                    document);
+                documentNodeMap[document.Id] = documentNode;
+
+                if (document.CategoryId.HasValue && nodeMap.TryGetValue(document.CategoryId.Value, out CategoryTreeNode? categoryParent))
+                    categoryParent.Children.Add(documentNode);
+                else
+                    _standardTreeNodes.Add(documentNode);
+            }
+
+            // 同一基础规范号下，按细分规范名称分组，再显示具体表号和压力等级。
+            foreach (IGrouping<string, StandardManagementSeriesClient> seriesGroup in response.Series
+                .Where(item => item.StandardDocumentId.HasValue && documentNodeMap.ContainsKey(item.StandardDocumentId.Value))
+                .GroupBy(item => $"{item.StandardDocumentId.Value}:{item.SeriesName}", StringComparer.OrdinalIgnoreCase))
+            {
+                StandardManagementSeriesClient firstSeries = seriesGroup.First();
+                CategoryTreeNode documentNode = documentNodeMap[firstSeries.StandardDocumentId.Value];
+                int groupId = unchecked((int)seriesGroup.Key.GetHashCode());
+                CategoryTreeNode seriesGroupNode = new CategoryTreeNode(
+                    groupId,
+                    firstSeries.SeriesCode,
+                    string.IsNullOrWhiteSpace(firstSeries.SeriesName) ? firstSeries.SeriesCode : firstSeries.SeriesName,
+                    3,
+                    documentNode.Id,
+                    new StandardSeriesGroupTreeData(firstSeries.StandardDocumentId.Value, firstSeries.SeriesName));
+                documentNode.Children.Add(seriesGroupNode);
+
+                foreach (StandardManagementSeriesClient series in seriesGroup.OrderBy(item => item.TableNumber).ThenBy(item => item.PressureRating).ThenBy(item => item.Id))
+                {
+                    string subdivisionText = BuildSeriesSubdivisionDisplayText(series);
+                    LogManager.Instance.LogInfo($"生成规范细分节点：SeriesId={series.Id}，基础规范号={firstSeries.StandardNumber}，显示名称={subdivisionText}");
+                    CategoryTreeNode seriesNode = new CategoryTreeNode(
+                        unchecked((int)series.Id),
+                        series.SeriesCode,
+                        subdivisionText,
+                        4,
+                        seriesGroupNode.Id,
+                        series);
+                    seriesGroupNode.Children.Add(seriesNode);
+                    AddDynamicSubdivisionNodes(seriesNode, series);
+                }
+            }
+
+            // 兼容尚未挂接 STANDARD_DOCUMENT_ID 的旧系列，继续按旧方式显示。
+            foreach (StandardManagementSeriesClient series in response.Series
+                .Where(item => !item.StandardDocumentId.HasValue || !documentNodeMap.ContainsKey(item.StandardDocumentId.Value))
+                .OrderBy(item => item.SeriesName).ThenBy(item => item.Id))
             {
                 string displayText = BuildStandardSeriesDisplayText(series);
-                LogManager.Instance.LogInfo($"生成规范节点：SeriesId={series.Id}，原始名称={series.SeriesName}，标准号={series.StandardNumber}，最终显示名称={displayText}");
-                var seriesNode = new CategoryTreeNode(
-                    unchecked((int)series.Id),
-                    series.SeriesCode,
-                    displayText,
-                    2,
-                    series.CategoryId.HasValue ? unchecked((int)series.CategoryId.Value) : 0,
-                    series);
-
+                var seriesNode = new CategoryTreeNode(unchecked((int)series.Id), series.SeriesCode, displayText, 2,
+                    series.CategoryId.HasValue ? unchecked((int)series.CategoryId.Value) : 0, series);
                 if (series.CategoryId.HasValue && nodeMap.TryGetValue(series.CategoryId.Value, out CategoryTreeNode? parent))
                     parent.Children.Add(seriesNode);
                 else
                     _standardTreeNodes.Add(seriesNode);
+                AddDynamicSubdivisionNodes(seriesNode, series);
             }
 
+            RefreshStandardTreeViewItemsSource();
+            LogManager.Instance.LogInfo($"规范树生成完成：根节点数量={_standardTreeNodes.Count}");
+        }
+
+        /// <summary>
+        /// 重新绑定规范树数据源，并立即通知 WPF 重新生成 TreeView 容器。
+        /// </summary>
+        private void RefreshStandardTreeViewItemsSource()
+        {
+            // 动态节点可能由后台异步任务追加，因此统一切回界面线程执行绑定。
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(RefreshStandardTreeViewItemsSource);
+                return;
+            }
+
+            // 先解除旧数据源，再绑定当前节点集合，确保新增节点触发 TreeView 重建。
             SpecificationTreeView.ItemsSource = null;
             SpecificationTreeView.ItemsSource = _standardTreeNodes;
-            LogManager.Instance.LogInfo($"规范树生成完成：根节点数量={_standardTreeNodes.Count}");
+            SpecificationTreeView.Items.Refresh();
+            SpecificationTreeView.UpdateLayout();
+        }
+
+        /// <summary>
+        /// 为基础规范系列添加动态版本的表号/型号细分节点。
+        /// </summary>
+        private void AddDynamicSubdivisionNodes(CategoryTreeNode seriesNode, StandardManagementSeriesClient series)
+        {
+            // 已经具有表号或型号的系列本身就是最终细分节点，不能再从版本标签追加同名子节点。
+            if (!string.IsNullOrWhiteSpace(series.TableNumber)
+                || !string.IsNullOrWhiteSpace(series.PressureRating))
+                return;
+
+            _ = LoadDynamicSubdivisionNodesAsync(seriesNode, series);
+        }
+
+        /// <summary>
+        /// 生成细分规范节点文字，例如“表50 / PN2.5”；没有细分字段时显示系列基本信息。
+        /// </summary>
+        private static string BuildSeriesSubdivisionDisplayText(StandardManagementSeriesClient series)
+        {
+            string subdivision = string.Join(" / ", new[] { series.TableNumber, series.PressureRating }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+            return string.IsNullOrWhiteSpace(subdivision)
+                ? BuildStandardSeriesDisplayText(series)
+                : subdivision;
+        }
+        /// <summary>
+        /// 加载动态规范细分节点，按表号/型号去重，只保留最新版本。
+        /// </summary>
+        /// <param name="seriesNode">规范系列节点</param>
+        /// <param name="series">规范系列客户端对象</param>
+        /// <returns>返回一个表示异步操作的任务</returns>
+        private async Task LoadDynamicSubdivisionNodesAsync(CategoryTreeNode seriesNode, StandardManagementSeriesClient series)
+        {
+            try
+            {
+                List<StandardDocumentVersionClient> versions = await _standardManagementApiService
+                    .GetManagementVersionsAsync(series.Id)
+                    .ConfigureAwait(true);
+                // 同一个“表号_PN”可能因为重复导入产生多个历史版本。
+                // 规范树默认只显示每个业务细分名称最新的版本，历史版本仍保留在服务器版本管理中。
+                var latestVersions = versions
+                    .Where(item => string.Equals(item.SourceType, "DYNAMIC_IMPORT", StringComparison.OrdinalIgnoreCase))
+                    .Select(version => new
+                    {
+                        Version = version,
+                        Subdivision = ParseDynamicSubdivision(version.VersionLabel)
+                    })
+                    .Where(item => !string.IsNullOrWhiteSpace(item.Subdivision))
+                    .GroupBy(item => item.Subdivision, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group
+                        .OrderByDescending(item => item.Version.IsCurrent)
+                        .ThenByDescending(item => item.Version.CreatedAt ?? DateTime.MinValue)
+                        .ThenByDescending(item => item.Version.Id)
+                        .First())
+                    .OrderBy(item => item.Subdivision, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                foreach (var item in latestVersions)
+                {
+                    StandardDocumentVersionClient version = item.Version;
+                    string subdivision = item.Subdivision;
+
+                    // 异步刷新可能同时触发多次加载，因此同时按版本 ID 和显示业务键去重。
+                    if (seriesNode.Children.Any(item => item.Data is DynamicSubdivisionTreeData existing
+                        && (existing.VersionId == version.Id
+                            || string.Equals(existing.DisplayName, subdivision, StringComparison.OrdinalIgnoreCase))))
+                        continue;
+
+                    seriesNode.Children.Add(new CategoryTreeNode(
+                        unchecked((int)(version.Id ^ (version.Id >> 32))),
+                        version.VersionNo,
+                        subdivision,
+                        seriesNode.Level + 1,
+                        seriesNode.Id,
+                        new DynamicSubdivisionTreeData(series.Id, version.Id, subdivision)));
+
+                    LogManager.Instance.LogInfo($"动态规范细分节点已去重：SeriesId={series.Id}，Subdivision={subdivision}，VersionId={version.Id}，IsCurrent={version.IsCurrent}");
+                }
+
+                Dispatcher.Invoke(() =>
+                {
+                    RefreshStandardTreeViewItemsSource();
+                    if (_pendingStandardTreeStateSnapshot != null)
+                    {
+                        RestoreStandardTreeState(_pendingStandardTreeStateSnapshot);
+                    }
+                });
+                LogManager.Instance.LogInfo($"动态规范细分节点加载完成：SeriesId={series.Id}，节点数量={seriesNode.Children.Count}");
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError($"加载动态规范细分节点失败：SeriesId={series.Id}，错误={ex.Message}");
+            }
+        }
+        /// <summary>
+        /// 解析动态规范版本标签，提取表号和 PN 型号，返回格式为 "表号_PN型号"。
+        /// </summary>
+        /// <param name="versionLabel">版本标签</param>
+        /// <returns>返回解析后的表号和 PN 型号，如果解析失败则返回空字符串</returns>
+
+        private static string ParseDynamicSubdivision(string versionLabel)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(versionLabel ?? string.Empty);
+            // 文件名示例：板式平焊钢制管法兰_GB-T 9124.1-2019_表50_PN2.5。
+            // 允许表号与 PN 之间使用下划线、短横线、中文连接符或空格，并保留 PN 小数部分。
+            Match match = Regex.Match(fileName, @"(?<table>表\s*[0-9０-９]+)\s*(?:[_\-－—_、，,：: ]\s*)?(?<pn>PN\s*[0-9０-９]+(?:[.．][0-9０-９]+)?)", RegexOptions.IgnoreCase);
+            if (!match.Success)
+                return string.Empty;
+
+            string table = NormalizeDynamicNumber(match.Groups["table"].Value);
+            string pn = NormalizeDynamicNumber(match.Groups["pn"].Value).ToUpperInvariant();
+            return $"{table}_{pn}";
+        }
+        /// <summary>
+        /// 将全角数字、中文句点和空格转换为半角数字、英文句点，并去除前后空白。
+        /// </summary>
+        /// <param name="value">要规范化的字符串值</param>
+        /// <returns>返回规范化后的字符串</returns>
+        private static string NormalizeDynamicNumber(string value)
+        {
+            return (value ?? string.Empty)
+                .Replace('０', '0').Replace('１', '1').Replace('２', '2').Replace('３', '3').Replace('４', '4')
+                .Replace('５', '5').Replace('６', '6').Replace('７', '7').Replace('８', '8').Replace('９', '9')
+                .Replace('．', '.')
+                .Replace(" ", string.Empty)
+                .Trim();
+        }
+        /// <summary>
+        /// 动态规范细分节点的数据类，包含系列 ID、版本 ID 和显示名称。
+        /// </summary>
+        private sealed class DynamicSubdivisionTreeData
+        {
+            public DynamicSubdivisionTreeData(long seriesId, long versionId, string displayName)
+            {
+                SeriesId = seriesId;
+                VersionId = versionId;
+                DisplayName = displayName;
+            }
+            /// <summary>
+            /// 规范系列 ID
+            /// </summary>
+            public long SeriesId { get; }
+            /// <summary>
+            /// 规范版本 ID
+            /// </summary>
+            public long VersionId { get; }
+            /// <summary>
+            /// 显示名称，通常为 "表号_PN型号" 格式
+            /// </summary>
+            public string DisplayName { get; }
+        }
+
+        /// <summary>
+        /// 基础规范号下的系列名称分组节点，只用于展示和承载细分节点。
+        /// </summary>
+        private sealed class StandardSeriesGroupTreeData
+        {
+            public StandardSeriesGroupTreeData(long standardDocumentId, string seriesName)
+            {
+                StandardDocumentId = standardDocumentId;
+                SeriesName = seriesName ?? string.Empty;
+            }
+
+            public long StandardDocumentId { get; }
+            public string SeriesName { get; }
         }
 
         /// <summary>

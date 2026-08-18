@@ -45,11 +45,72 @@ namespace GB_NewCadPlus_IV.Helpers
                     StandardManagementTreeClientResponse? result = JsonConvert.DeserializeObject<StandardManagementTreeClientResponse>(body);
                     return result ?? throw new InvalidOperationException("服务器返回的规范目录为空。");
                 }
+
             }
             catch (Exception ex)
             {
                 LogManager.Instance.LogError($"规范目录查询异常：地址={requestUrl}，错误={ex.Message}");
                 throw;
+            }
+        }
+
+        public async Task<DynamicStandardContentClientResponse?> GetDynamicContentAsync(
+            long seriesId,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (seriesId <= 0)
+                throw new ArgumentException("规范系列 ID 必须大于 0。", nameof(seriesId));
+
+            string requestUrl = BuildServerUrl($"/api/standards/dynamic/series/{seriesId}/content");
+            using (HttpResponseMessage response = await HttpClient.GetAsync(requestUrl, cancellationToken).ConfigureAwait(false))
+            {
+                string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if ((int)response.StatusCode == 404)
+                    return null;
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"动态规范内容查询失败，HTTP {(int)response.StatusCode}，响应：{responseBody}");
+                return JsonConvert.DeserializeObject<DynamicStandardContentClientResponse>(responseBody);
+            }
+        }
+
+        public async Task<StandardManagementOperationClientResponse> RenameManagementVersionAsync(
+            long versionId,
+            string name,
+            string operatorName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (versionId <= 0) throw new ArgumentException("规范版本 ID 必须大于 0。", nameof(versionId));
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("规范版本名称不能为空。", nameof(name));
+
+            string requestJson = JsonConvert.SerializeObject(new StandardVersionRenameClientRequest { Name = name.Trim() });
+            using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using HttpRequestMessage message = new HttpRequestMessage(
+                HttpMethod.Put,
+                BuildServerUrl($"/api/standards/management/versions/{versionId}/name"))
+            {
+                Content = content
+            };
+            AddOperatorHeader(message, operatorName);
+            return await SendManagementRequestAsync<StandardManagementOperationClientResponse>(
+                message, "重命名动态规范细分", cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<DynamicStandardContentClientResponse?> GetDynamicContentByVersionAsync(
+            long versionId,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (versionId <= 0)
+                throw new ArgumentException("规范版本 ID 必须大于 0。", nameof(versionId));
+
+            string requestUrl = BuildServerUrl($"/api/standards/dynamic/versions/{versionId}/content");
+            using (HttpResponseMessage response = await HttpClient.GetAsync(requestUrl, cancellationToken).ConfigureAwait(false))
+            {
+                string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if ((int)response.StatusCode == 404)
+                    return null;
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"动态规范版本内容查询失败，HTTP {(int)response.StatusCode}，响应：{responseBody}");
+                return JsonConvert.DeserializeObject<DynamicStandardContentClientResponse>(responseBody);
             }
         }
 
@@ -306,6 +367,7 @@ namespace GB_NewCadPlus_IV.Helpers
             string operatorName,
             CancellationToken cancellationToken = default(CancellationToken))
         {
+            LogManager.Instance.LogInfo($"动态预览步骤 1/4：开始准备上传文件。文件={Path.GetFileName(filePath)}");
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 throw new FileNotFoundException("规范附件不存在。", filePath);
 
@@ -315,6 +377,7 @@ namespace GB_NewCadPlus_IV.Helpers
             using var content = new StreamContent(stream);
             content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             form.Add(content, "file", Path.GetFileName(filePath));
+            LogManager.Instance.LogInfo($"动态预览步骤 2/4：已创建 multipart 请求。地址={requestUrl}，大小={stream.Length}");
             using HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, requestUrl) { Content = form };
             AddOperatorHeader(message, operatorName);
             return await SendManagementRequestAsync<StandardFileUploadClientResponse>(message, "上传规范附件", cancellationToken).ConfigureAwait(false);
@@ -370,6 +433,7 @@ namespace GB_NewCadPlus_IV.Helpers
         {
             using HttpResponseMessage response = await HttpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
             string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            LogManager.Instance.LogInfo($"动态预览步骤 3/4：服务器已返回响应。HTTP={(int)response.StatusCode}，响应长度={body.Length}");
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"{operation}失败，HTTP {(int)response.StatusCode}，响应：{body}");
             return JsonConvert.DeserializeObject<T>(body) ?? throw new InvalidOperationException($"服务器返回的{operation}响应为空。");
@@ -433,6 +497,87 @@ namespace GB_NewCadPlus_IV.Helpers
             }
         }
 
+        /// <summary>
+        /// 按服务器模板预览任意 Excel 表头，不写入规范数据。
+        /// </summary>
+        public async Task<DynamicStandardPreviewClientResponse> PreviewDynamicImportAsync(
+            string filePath,
+            string operatorName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                throw new FileNotFoundException("规范文件不存在。", filePath);
+            if (!string.Equals(Path.GetExtension(filePath), ".xlsx", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("动态规范预览当前只支持 .xlsx 文件。");
+
+            string requestUrl = BuildServerUrl("/api/standards/import/dynamic-preview");
+            using var form = new MultipartFormDataContent();
+            using var stream = File.OpenRead(filePath);
+            using var content = new StreamContent(stream);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            form.Add(content, "file", Path.GetFileName(filePath));
+
+            using HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, requestUrl) { Content = form };
+            AddOperatorHeader(message, operatorName);
+            using HttpResponseMessage response = await HttpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                LogManager.Instance.LogError($"动态预览步骤 3/4：服务器返回失败。HTTP={(int)response.StatusCode}，响应={body}");
+                throw new HttpRequestException($"动态规范预览失败，HTTP {(int)response.StatusCode}，响应：{body}");
+            }
+
+            DynamicStandardPreviewClientResponse result = JsonConvert.DeserializeObject<DynamicStandardPreviewClientResponse>(body)
+                ?? throw new InvalidOperationException("服务器返回的动态规范预览为空。");
+            LogManager.Instance.LogInfo($"动态预览步骤 4/4：响应解析完成。模板匹配={result.IsTemplateMatched}，行数={result.Rows?.Count ?? 0}，错误={result.ErrorCount}，警告={result.WarningCount}");
+            return result;
+        }
+
+        /// <summary>
+        /// 确认动态预览并保存为服务器导入批次，不直接发布到业务规范表。
+        /// </summary>
+        public async Task<DynamicStandardImportCommitClientResponse> CommitDynamicImportAsync(
+            DynamicStandardImportCommitClientRequest request,
+            string operatorName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            LogManager.Instance.LogInfo($"动态确认步骤 1/3：开始校验提交请求。批次={request?.BatchId}，系列={request?.SeriesId}，行数={request?.Rows?.Count ?? 0}");
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+            if (string.IsNullOrWhiteSpace(request.BatchId))
+                throw new ArgumentException("动态导入批次号不能为空。", nameof(request));
+            // SeriesId 大于 0 表示使用已有基础规范；SeriesId 等于 0 表示由服务器在确认事务中创建基础规范。
+            if (request.SeriesId < 0)
+                throw new ArgumentException("目标规范系列 ID 不能小于 0。", nameof(request));
+            // 新建基础规范时，客户端必须先提交完整身份信息，避免服务器进入事务后才发现字段缺失。
+            if (request.SeriesId == 0)
+            {
+                if (string.IsNullOrWhiteSpace(request.SeriesName))
+                    throw new ArgumentException("新建基础规范时，基础规范名称不能为空。", nameof(request));
+                if (string.IsNullOrWhiteSpace(request.StandardNumber))
+                    throw new ArgumentException("新建基础规范时，标准号不能为空。", nameof(request));
+                if (string.IsNullOrWhiteSpace(request.SeriesCode))
+                    throw new ArgumentException("新建基础规范时，系列编码不能为空。", nameof(request));
+                if (string.IsNullOrWhiteSpace(request.FamilyCode))
+                    throw new ArgumentException("新建基础规范时，专业编码不能为空。", nameof(request));
+            }
+
+            string requestJson = JsonConvert.SerializeObject(request);
+            using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using HttpRequestMessage message = new HttpRequestMessage(
+                HttpMethod.Post,
+                BuildServerUrl("/api/standards/import/dynamic-commit"))
+            {
+                Content = content
+            };
+            AddOperatorHeader(message, operatorName);
+            LogManager.Instance.LogInfo("动态确认步骤 2/3：已创建 JSON 提交请求。");
+            DynamicStandardImportCommitClientResponse result = await SendManagementRequestAsync<DynamicStandardImportCommitClientResponse>(
+                message, "确认动态规范导入", cancellationToken).ConfigureAwait(false);
+            LogManager.Instance.LogInfo($"动态确认步骤 3/3：服务器响应解析完成。成功={result.Success}，批次={result.BatchId}，保存行数={result.SavedRowCount}");
+            return result;
+        }
+
         private static StandardImportFileMetadata ParseStandardImportFileName(string filePath)
         {
             string fileName = Path.GetFileNameWithoutExtension(filePath).Trim();
@@ -471,16 +616,23 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         public async Task<StandardImportCommitClientResponse> CommitImportAsync(
-            string batchId,
-            bool allowWarnings,
+            StandardImportCommitClientRequest request,
             string operatorName,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (string.IsNullOrWhiteSpace(batchId))
-                throw new ArgumentException("导入批次号不能为空。", nameof(batchId));
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+            if (string.IsNullOrWhiteSpace(request.BatchId))
+                throw new ArgumentException("导入批次号不能为空。", nameof(request));
+
+            string requestJson = JsonConvert.SerializeObject(request);
+            using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
             using HttpRequestMessage message = new HttpRequestMessage(
                 HttpMethod.Post,
-                BuildServerUrl($"/api/standards/import/commit?batchId={Uri.EscapeDataString(batchId.Trim())}&allowWarnings={allowWarnings.ToString().ToLowerInvariant()}"));
+                BuildServerUrl("/api/standards/import/commit"))
+            {
+                Content = content
+            };
             AddOperatorHeader(message, operatorName);
             return await SendManagementRequestAsync<StandardImportCommitClientResponse>(
                 message, "确认导入规范", cancellationToken).ConfigureAwait(false);

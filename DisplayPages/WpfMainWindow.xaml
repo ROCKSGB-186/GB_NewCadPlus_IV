@@ -4199,6 +4199,10 @@ Background="FloralWhite">
                                             <MenuItem Header="移动规范位置" Click="右键移动规范位置_Click" />
                                             <MenuItem Header="删除规范库" Click="右键删除规范库_Click" />
                                             <Separator />
+                                            <MenuItem Header="导入规范" Click="右键导入规范_Click" />
+                                            <MenuItem Header="导出规范" Click="右键导出规范_Click" />
+                                            <Separator />
+                                            <MenuItem Header="删除规范细分" Click="右键删除规范细分_Click" />
                                             <MenuItem Header="展开\折叠规范" Click="右键展开折叠规范_Click" />
                                             <MenuItem Header="刷新架构" Click="右键刷新架构_Click" />
                                         </ContextMenu>
