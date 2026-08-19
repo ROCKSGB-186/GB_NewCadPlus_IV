@@ -1720,9 +1720,9 @@ namespace GB_NewCadPlus_IV.Helpers
             // 构建查询请求对象
             var request = new FlangeStandardMatchRequest
             {
-                // 如果图元自身携带规范库编码，则优先使用图元配置；没有配置时使用现有法兰库默认值。
+                // 如果图元自身携带规范库编码，则使用图元配置；没有配置时交由服务器按规范号等条件选择候选系列。
                 FamilyCode = FindProperty(queryProperties, "FAMILY_CODE", "规范大类编码") ?? "FLANGE",
-                SeriesCode = FindProperty(queryProperties, "SERIES_CODE", "规范系列编码") ?? "PLATE_WELD",
+                SeriesCode = FindProperty(queryProperties, "SERIES_CODE", "规范系列编码") ?? string.Empty,
                 // 标准化 DN、PN、系列
                 DN = NormalizeDn(dn),
                 PN = NormalizePn(pn),
@@ -1730,7 +1730,8 @@ namespace GB_NewCadPlus_IV.Helpers
                 // 优先使用图元已有的 FLG_STD/法兰标准作为服务器筛选条件
                 StandardNumber = FindProperty(queryProperties, "FLG_STD", "法兰标准", "标准号") ?? string.Empty,
                 TableNumber = FindProperty(queryProperties, "TABLE_NUMBER", "标准表号", "表号") ?? string.Empty,
-                // 未明确提供时不额外限制系列，避免不同图元的法兰类型/密封面默认值阻断命中。
+                ConnectionMode = connectionMode,
+                // 连接方式与法兰类型是不同业务字段；未提供法兰类型时不限制候选记录。
                 FlangeType = FindProperty(queryProperties, "FLG_TYPE", "法兰类型") ?? string.Empty,
                 FaceType = FindProperty(queryProperties, "FACE_TYPE", "密封面形式", "密封面型式") ?? string.Empty
             };
@@ -1738,7 +1739,7 @@ namespace GB_NewCadPlus_IV.Helpers
             // 记录标准号来源信息，便于排查
             string inheritedStandard = FindProperty(queryProperties, "FLG_STD", "DRAWINGNO.STANDARDNO", "法兰标准", "标准号") ?? string.Empty;
             logger.LogInfo($"规范标准号来源：使用标准库配置值={request.StandardNumber}，入口管道属性中的候选值={inheritedStandard}");
-            logger.LogInfo($"请求参数：FamilyCode={request.FamilyCode}, SeriesCode={request.SeriesCode}, StandardNumber={request.StandardNumber}, TableNumber={request.TableNumber}, DN={request.DN}, PN={request.PN}, Series={request.Series}, FlangeType={request.FlangeType}, FaceType={request.FaceType}");
+            logger.LogInfo($"请求参数：FamilyCode={request.FamilyCode}, SeriesCode={request.SeriesCode}, StandardNumber={request.StandardNumber}, TableNumber={request.TableNumber}, DN={request.DN}, PN={request.PN}, Series={request.Series}, ConnectionMode={request.ConnectionMode}, FlangeType={request.FlangeType}, FaceType={request.FaceType}");
 
             try
             {

@@ -12,7 +12,7 @@ namespace GB_NewCadPlus_IV.Models
         public string FamilyCode { get; set; } = "FLANGE";
 
         /// <summary>规范系列编码。</summary>
-        public string SeriesCode { get; set; } = "PLATE_WELD";
+        public string SeriesCode { get; set; } = string.Empty;
 
         /// <summary>标准号。</summary>
         public string StandardNumber { get; set; } = string.Empty;
@@ -28,6 +28,9 @@ namespace GB_NewCadPlus_IV.Models
 
         /// <summary>钢管外径系列。</summary>
         public string Series { get; set; } = "Ⅰ系列";
+
+        /// <summary>连接方式，例如法兰或对夹；不等同于法兰类型编码。</summary>
+        public string ConnectionMode { get; set; } = string.Empty;
 
         /// <summary>法兰类型。</summary>
         public string FlangeType { get; set; } = "PL";

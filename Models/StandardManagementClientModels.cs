@@ -44,6 +44,14 @@ namespace GB_NewCadPlus_IV.Models
         public string Name { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// 修改基础规范号的请求参数。
+    /// </summary>
+    public sealed class StandardDocumentRenameClientRequest
+    {
+        public string Name { get; set; } = string.Empty;
+    }
+
     /// <summary>动态模板预览响应。</summary>
     public sealed class DynamicStandardPreviewClientResponse
     {

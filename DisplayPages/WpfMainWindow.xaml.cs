@@ -15234,7 +15234,7 @@ namespace GB_NewCadPlus_IV
             SetContextMenuItemEnabled(menu, "添加子规范库", isCategory && IsMainCategorySelected());
             SetContextMenuItemEnabled(menu, "上移规范库", isCategory && HasStandardCategorySibling(-1));
             SetContextMenuItemEnabled(menu, "下移规范库", isCategory && HasStandardCategorySibling(1));
-            SetContextMenuItemEnabled(menu, "重命名", isCategory || isSeries || isSubdivision);
+            SetContextMenuItemEnabled(menu, "重命名", isCategory || isStandardDocument || isSeries || isSubdivision);
             SetContextMenuItemEnabled(menu, "修改规范库", isCategory);
             SetContextMenuItemEnabled(menu, "移动规范位置", isCategory || isUncategorizedSeries);
             SetContextMenuItemEnabled(menu, "删除", isCategory || isSeries || isSubdivision);
@@ -15590,6 +15590,14 @@ namespace GB_NewCadPlus_IV
                     // 动态细分只修改版本显示标签，不修改基础系列、版本号和动态数据。
                     response = await _standardManagementApiService.RenameManagementVersionAsync(
                         subdivision.VersionId,
+                        renameName,
+                        VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
+                }
+                else if (selectedNode.Data is StandardDocumentClient document)
+                {
+                    // 基础规范号节点只更新 STANDARD_DOCUMENTS.STANDARD_NUMBER，不修改下属系列。
+                    response = await _standardManagementApiService.RenameManagementDocumentAsync(
+                        document.Id,
                         renameName,
                         VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
                 }

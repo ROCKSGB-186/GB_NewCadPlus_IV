@@ -4,6 +4,7 @@ using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Models;
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace GB_NewCadPlus_IV.Helpers
 {
@@ -76,6 +77,8 @@ namespace GB_NewCadPlus_IV.Helpers
             // 记录实际写入的属性数量，便于调用方日志和测试验证。
             int updatedCount = 0;
             var existingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string standardDn = FindAttributeValue(response.Attributes, NormalizeTag("DN"));
+            string standardPn = FindAttributeValue(response.Attributes, NormalizeTag("PN"));
 
             // 遍历块参照已有的属性，优先更新现有属性并保留其原始 Prompt。
             foreach (ObjectId attributeId in blockReference.AttributeCollection)
@@ -94,6 +97,10 @@ namespace GB_NewCadPlus_IV.Helpers
                 if (value == null && IsFlangeStandardTag(tag))
                 {
                     value = FindAttributeValue(response.Attributes, "FLG_STD");
+                }
+                if (value == null && IsModelSpecificationTag(tag))
+                {
+                    value = SynchronizeModelSpecification(attribute.TextString, standardDn, standardPn);
                 }
                 if (value == null) continue;
 
@@ -140,6 +147,51 @@ namespace GB_NewCadPlus_IV.Helpers
             return string.Equals(normalizedTag, NormalizeTag("FLG_STD"), StringComparison.Ordinal) ||
                    string.Equals(normalizedTag, NormalizeTag("法兰标准"), StringComparison.Ordinal) ||
                    string.Equals(normalizedTag, NormalizeTag("DRAWINGNO.STANDARDNO"), StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 判断属性 Tag 是否为需要根据法兰规范 DN、PN 更新参数的型号字段。
+        /// </summary>
+        private static bool IsModelSpecificationTag(string normalizedTag)
+        {
+            return string.Equals(normalizedTag, NormalizeTag("MODEL"), StringComparison.Ordinal) ||
+                   string.Equals(normalizedTag, NormalizeTag("SW_MODEL"), StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 保留现有型号文本，仅替换其中的 DN、PN 参数。
+        /// 兼容 DN150、PN10 及 法兰_PL100_PN10_RF.SLDPRT 这类法兰三维文件名。
+        /// </summary>
+        private static string SynchronizeModelSpecification(string currentValue, string standardDn, string standardPn)
+        {
+            if (string.IsNullOrWhiteSpace(currentValue) ||
+                string.IsNullOrWhiteSpace(standardDn) ||
+                string.IsNullOrWhiteSpace(standardPn))
+            {
+                return null;
+            }
+
+            string dnNumber = Regex.Replace(standardDn.Trim(), @"^DN\s*", string.Empty, RegexOptions.IgnoreCase);
+            string pnNumber = Regex.Replace(standardPn.Trim(), @"^PN\s*", string.Empty, RegexOptions.IgnoreCase);
+            if (string.IsNullOrWhiteSpace(dnNumber) || string.IsNullOrWhiteSpace(pnNumber)) return null;
+
+            string synchronized = Regex.Replace(
+                currentValue,
+                @"DN\s*\d+(?:\.\d+)?",
+                $"DN{dnNumber}",
+                RegexOptions.IgnoreCase);
+            synchronized = Regex.Replace(
+                synchronized,
+                @"PN\s*\d+(?:\.\d+)?",
+                $"PN{pnNumber}",
+                RegexOptions.IgnoreCase);
+            synchronized = Regex.Replace(
+                synchronized,
+                @"(?<prefix>法兰_[^_\d]*)(?<dn>\d+(?:\.\d+)?)(?=_PN)",
+                match => $"{match.Groups["prefix"].Value}{dnNumber}",
+                RegexOptions.IgnoreCase);
+
+            return string.Equals(currentValue, synchronized, StringComparison.Ordinal) ? null : synchronized;
         }
 
         /// <summary>

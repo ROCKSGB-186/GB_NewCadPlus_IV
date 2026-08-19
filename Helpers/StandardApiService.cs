@@ -95,6 +95,34 @@ namespace GB_NewCadPlus_IV.Helpers
                 message, "重命名动态规范细分", cancellationToken).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// 通过服务器修改基础规范号。
+        /// </summary>
+        public async Task<StandardManagementOperationClientResponse> RenameManagementDocumentAsync(
+            long documentId,
+            string standardNumber,
+            string operatorName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (documentId <= 0) throw new ArgumentException("基础规范号 ID 必须大于 0。", nameof(documentId));
+            if (string.IsNullOrWhiteSpace(standardNumber)) throw new ArgumentException("基础规范号不能为空。", nameof(standardNumber));
+
+            string requestJson = JsonConvert.SerializeObject(new StandardDocumentRenameClientRequest
+            {
+                Name = standardNumber.Trim()
+            });
+            using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using HttpRequestMessage message = new HttpRequestMessage(
+                HttpMethod.Put,
+                BuildServerUrl($"/api/standards/management/documents/{documentId}/name"))
+            {
+                Content = content
+            };
+            AddOperatorHeader(message, operatorName);
+            return await SendManagementRequestAsync<StandardManagementOperationClientResponse>(
+                message, "重命名基础规范号", cancellationToken).ConfigureAwait(false);
+        }
+
         public async Task<DynamicStandardContentClientResponse?> GetDynamicContentByVersionAsync(
             long versionId,
             CancellationToken cancellationToken = default(CancellationToken))
