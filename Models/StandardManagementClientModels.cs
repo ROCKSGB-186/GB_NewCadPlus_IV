@@ -316,6 +316,8 @@ namespace GB_NewCadPlus_IV.Models
         /// 规范系列的面类型。
         /// </summary>
         public string FaceType { get; set; } = string.Empty;
+        /// <summary>动态导入时保留的原始文件名，用于恢复规范系列父级名称。</summary>
+        public string SourceFileName { get; set; } = string.Empty;
 
         /// <summary>
         /// 下拉菜单显示文本，不参与数据库匹配。

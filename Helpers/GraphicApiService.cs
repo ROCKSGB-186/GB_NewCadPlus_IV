@@ -37,9 +37,7 @@ namespace GB_NewCadPlus_IV.Helpers
             {
                 throw new ArgumentException("categoryType 必须是 main 或 sub。", nameof(categoryType));
             }
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP) ? "127.0.0.1" : VariableDictionary._serverIP.Trim();
-            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/graphics/category/{categoryId}?categoryType={type}";
+            string requestUrl = ApiEndpoint.Build($"api/graphics/category/{categoryId}?categoryType={type}");
 
             using (HttpResponseMessage response = await HttpClient.GetAsync(requestUrl, cancellationToken).ConfigureAwait(false))
             {

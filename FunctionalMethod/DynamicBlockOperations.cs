@@ -835,6 +835,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             var selIds = selcetElementS.Value.GetObjectIds();// 获取选择图元实例Object的Id集合
             if (selIds == null || selIds.Length == 0)
                 return (deviceList, Array.Empty<ObjectId>());
+            LogManager.Instance.LogInfo($"[设备表][选择完成] SelectedObjectCount={selIds.Length}");
             //开启事务
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -844,7 +845,11 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                     {
                         if (_selectElement == null || _selectElement.ObjectId == ObjectId.Null) continue; // 如果这个选择的实例为空则跳过这个进行下一个实例
                         var _elementBr = tr.GetObject(_selectElement.ObjectId, OpenMode.ForRead) as BlockReference; // 拿到这个图元实例的引用块
-                        if (_elementBr == null) continue;
+                        if (_elementBr == null)
+                        {
+                            LogManager.Instance.LogWarning($"[设备表][图元跳过] ObjectId={_selectElement.ObjectId}, Reason=不是BlockReference");
+                            continue;
+                        }
 
                         var _elementBtr = tr.GetObject(_elementBr.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord; //拿到这个图元的块表记录
                         if (_elementBtr == null) continue;
@@ -877,16 +882,42 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                             catch { /* 忽略单个属性读取失败 */ }
                         }
 
+                         // 读取扩展字典中的 XRecord 属性。
+                         // 规范同步、管道属性继承等流程可能将 CONNECTION_TYPE、BOLT_COUNT、BOLT_SPEC 等业务字段保存到 XRecord，
+                         // 这些字段不在 AttributeCollection 中，必须与块的静态属性合并后再生成设备表。
+                         Dictionary<string, string> xrecordProperties =
+                             PipelineEndpointPropertyHelper.ReadEntityProperties(tr, _elementBr);
+                         foreach (KeyValuePair<string, string> property in xrecordProperties)
+                         {
+                             if (string.IsNullOrWhiteSpace(property.Key)) continue;
+                             device.Attributes[property.Key.Trim()] = property.Value?.Trim() ?? string.Empty;
+                             device.EnglishNames[property.Key.Trim()] =
+                                 DictionaryHelper.ChineseToEnglish.TryGetValue(property.Key.Trim(), out string englishName)
+                                     ? englishName
+                                     : property.Key.Trim();
+                         }
+
+                         // 读取动态块属性，兼容连接方式、规格和数量由动态属性提供的块。
+                         ProcessDynamicProperties(_elementBr, device);
+
+                         string allAttributes = string.Join("; ", device.Attributes
+                             .OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase)
+                             .Select(attribute => $"{attribute.Key}={attribute.Value}"));
+                         LogManager.Instance.LogInfo(
+                             $"[设备表][属性读取完成] ObjectId={_elementBr.ObjectId}, BlockName={_elementBtr.Name}, AttributeCount={device.Attributes.Count}, Attributes=[{allAttributes}]");
+
                         deviceList.add(device);
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // 忽略单个对象错误
+                        LogManager.Instance.LogError($"[设备表][图元分析失败] ObjectId={_selectElement?.ObjectId}, Error={ex.Message}");
                     }
                 }
 
                 tr.Commit();
             }
+
+            LogManager.Instance.LogInfo($"[设备表][选择分析完成] DeviceCount={deviceList.Count}, SelectedObjectCount={selIds.Length}");
 
             return (deviceList, selIds);
         }
@@ -900,28 +931,32 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             try
             {
-                //// 获取动态块的所有动态属性集合
-                //DynamicBlockReferencePropertyCollection dynProps = blockRef.DynamicBlockReferencePropertyCollection;
+                if (blockRef == null || device == null)
+                    return;
 
-                //// 遍历所有动态属性
-                //foreach (DynamicBlockReferenceProperty dynProp in dynProps)
-                //{
-                //    // 跳过只读属性（通常为系统保留属性，不可修改）
-                //    if (dynProp.ReadOnly) continue;
-                //    // 获取属性名称（如"拉伸距离"、"旋转角度"）
-                //    string propName = dynProp.PropertyName;
-                //    // 获取属性值并转换为字符串（处理可能的空值）
-                //    string propValue = dynProp.Value?.ToString() ?? "";
-                //    // 将动态属性添加到设备信息中，使用"动态_"前缀以便与普通属性区分
-                //    device.Attributes[$"动态_{propName}"] = propValue;
-                //    // 设置英文名称，使用"Dyn_"前缀表示动态属性
-                //    device.EnglishNames[$"动态_{propName}"] = $"Dyn_{propName}";
-                //}
+                // 读取动态块属性并保留原始属性名（不加“动态_”前缀），
+                // 以便后续逻辑正确识别 CONNECTION_TYPE、BOLT_SPEC、BOLT_COUNT 等字段。
+                DynamicBlockReferencePropertyCollection dynProps = blockRef.DynamicBlockReferencePropertyCollection;
+                foreach (DynamicBlockReferenceProperty dynProp in dynProps)
+                {
+                    if (dynProp == null || string.IsNullOrWhiteSpace(dynProp.PropertyName))
+                        continue;
+
+                    string propName = dynProp.PropertyName.Trim();
+                    string propValue = dynProp.Value?.ToString()?.Trim() ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(propValue))
+                        continue;
+
+                    device.Attributes[propName] = propValue;
+                    device.EnglishNames[propName] =
+                        DictionaryHelper.ChineseToEnglish.TryGetValue(propName, out string englishName)
+                            ? englishName
+                            : propName;
+                }
             }
             catch (Exception ex)
             {
-                // 忽略动态属性读取错误（确保不会因单个属性错误导致整个流程中断）
-                // 可根据需要添加日志记录，如：
+                // 动态属性读取失败时不中断流程，保留已有静态属性与 XRecord 属性。
                 Env.Editor.WriteMessage($"读取动态块属性失败: {ex.Message}");
             }
         }

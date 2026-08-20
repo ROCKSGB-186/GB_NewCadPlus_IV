@@ -172,16 +172,21 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
             var ed = doc.Editor;
             try
             {
+                LogManager.Instance.LogInfo("[设备表][命令开始] GenerateDeviceTable");
                 // 1. 使用原有的选择与分析逻辑（不变）
                 var (devices, selIds) = DynamicBlockOperations.SelectAndAnalyzeBlocks(ed, doc.Database);
+                LogManager.Instance.LogInfo($"[设备表][选择返回] SelectedObjectCount={selIds?.Length ?? 0}, DeviceCount={devices?.Count ?? 0}");
                 if (devices == null || devices.Count == 0)
                 {
+                    LogManager.Instance.LogWarning("[设备表][命令结束] 未获得可用设备图元。");
                     ed.WriteMessage("\n未找到可用的设备信息。");
                     return;
                 }
 
                 // 2. ★ 新增：智能合并重复设备（完全相同才合并，否则独立）
-                var mergedDevices = MergeDuplicateDeviceInfos(devices);
+                var mergedDevices = AggregateSelectedDeviceQuantities(devices);
+                LogManager.Instance.LogInfo($"[设备表][NAME聚合完成] SourceCount={devices.Count}, AggregatedCount={mergedDevices.Count}");
+                ed.WriteMessage($"\n[设备数量统计] 原始图元 {devices.Count} 个，合并后 {mergedDevices.Count} 行。" );
 
                 // 3. ★ 新增：按名称排序，使表格看上去整齐，并避免合并逻辑误判
                 var sortedDevices = mergedDevices
@@ -196,14 +201,430 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 foreach (var g in groups)
                 {
                     List<DeviceInfo> list = g.ToList();
+                    LogManager.Instance.LogInfo($"[设备表][生成类型表] Type={g.Key}, RowCount={list.Count}, Quantities=[{string.Join(",", list.Select(item => $"{item.Name}:{item.Quantity}"))}]");
                     CreateDeviceTable(doc.Database, list, scaleDenom); // 保持原有表样式
                     try { ed.Regen(); Application.UpdateScreen(); } catch { }
                     ed.WriteMessage($"\n已为类型 '{g.Key}' 生成表，包含 {list.Count} 条汇总项（使用比例分母 {scaleDenom}）。");
                 }
+
+                // 6. 使用原始选中图元统计螺栓，避免设备表合并影响每个图元的螺栓数量。
+                List<BoltStatisticRow> boltRows = BuildBoltStatistics(
+                    devices,
+                    out int boltCandidateCount,
+                    out int skippedBoltComponentCount);
+                ed.WriteMessage(
+                    $"\n[螺栓统计] 已分析 {devices.Count} 个设备图元，命中 {boltCandidateCount} 个法兰/对夹候选图元，得到 {boltRows.Count} 条有效汇总记录。");
+                if (boltRows.Count > 0)
+                {
+                    CreateBoltStatisticsTable(doc.Database, boltRows, scaleDenom);
+                    try { ed.Regen(); Application.UpdateScreen(); } catch { }
+                    ed.WriteMessage($"\n已生成螺栓统计表，包含 {boltRows.Count} 种螺栓规格。");
+                }
+                else if (skippedBoltComponentCount > 0)
+                {
+                    ed.WriteMessage($"\n已识别 {skippedBoltComponentCount} 个法兰/对夹部件，但缺少有效的螺栓规格或螺栓数量，未生成螺栓统计表。");
+                }
+                else
+                {
+                    ed.WriteMessage("\n未识别到法兰/对夹、法兰或管端盲板图元，未生成螺栓统计表。");
+                }
             }
             catch (System.Exception ex)
             {
+                LogManager.Instance.LogError($"[设备表][命令失败] Error={ex.Message}");
                 ed.WriteMessage($"\n生成设备表失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// WPF“生成设备表”按钮使用的唯一命令入口。
+        /// 使用独立命令名，避免 CAD 中旧插件命令缓存或同名命令冲突。
+        /// </summary>
+        [CommandMethod("GenerateDeviceTableWithBoltStatistics")]
+        public void GenerateDeviceTableWithBoltStatistics()
+        {
+            Document document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null)
+            {
+                return;
+            }
+
+            document.Editor.WriteMessage("\n[设备表新版入口] 已进入带螺栓统计的设备表生成逻辑。\n");
+            GenerateDeviceTable();
+        }
+
+        /// <summary>
+        /// 按属性块 NAME 值聚合本次选择的图元，并将相同图元数量累计到 Quantity。
+        /// NAME 是业务上的部件身份；块定义名称只在属性块缺少 NAME 时作为兜底值。
+        /// </summary>
+        private List<DeviceInfo> AggregateSelectedDeviceQuantities(List<DeviceInfo> devices)
+        {
+            if (devices == null || devices.Count == 0)
+            {
+                return new List<DeviceInfo>();
+            }
+
+            var aggregated = new Dictionary<string, DeviceInfo>(StringComparer.OrdinalIgnoreCase);
+            foreach (DeviceInfo source in devices.Where(device => device != null))
+            {
+                // 优先使用属性块中的 NAME 判断相同图元，不能使用 AutoCAD 块定义名代替 NAME。
+                string componentName = GetFirstAttributeValue(source.Attributes,
+                    "NAME", "Name", "部件名称", "组件名称", "名称", "设备名称");
+                if (string.IsNullOrWhiteSpace(componentName))
+                {
+                    componentName = (source.Name ?? string.Empty).Trim();
+                }
+
+                string specification = GetFirstAttributeValue(source.Attributes,
+                    "规格型号", "规格", "型号", "MODEL", "SPECIFICATION");
+                string material = GetFirstAttributeValue(source.Attributes,
+                    "材质", "材料", "MATERIAL", "MEDIUM");
+                string standardNumber = GetFirstAttributeValue(source.Attributes,
+                    "图号或标准号", "图号", "标准号", "DRAWINGNO", "STANDARDNO");
+
+                // 相同图元只按 NAME 判断；规格、材质和标准号作为该 NAME 首条记录的显示属性保留。
+                string groupingKey = NormalizeDeviceGroupingPart(componentName);
+
+                int sourceQuantity = GetSelectedDeviceQuantity(source);
+                LogManager.Instance.LogInfo(
+                    $"[设备表][NAME聚合输入] BlockName={source.Name}, NAME={componentName}, GroupKey={groupingKey}, RawQuantity={GetFirstAttributeValue(source.Attributes, "数量", "QTY", "QUANTITY", "Quantity")}, ParsedQuantity={sourceQuantity}");
+                if (!aggregated.TryGetValue(groupingKey, out DeviceInfo target))
+                {
+                    target = CloneDeviceInfo(source);
+                    target.Name = componentName;
+                    target.Specifications = specification;
+                    target.Material = material;
+                    target.DrawingNumber = standardNumber;
+                    target.Quantity = sourceQuantity;
+                    target.Count = sourceQuantity;
+                    target.Attributes["NAME"] = componentName;
+                    target.Attributes["名称"] = componentName;
+                    target.Attributes["规格"] = specification;
+                    target.Attributes["材料"] = material;
+                    target.Attributes["图号或标准号"] = standardNumber;
+                    target.Attributes["数量"] = sourceQuantity.ToString(CultureInfo.InvariantCulture);
+                    aggregated[groupingKey] = target;
+                    LogManager.Instance.LogInfo($"[设备表][NAME聚合新行] NAME={componentName}, Quantity={target.Quantity}");
+                }
+                else
+                {
+                    target.Quantity += sourceQuantity;
+                    target.Count = target.Quantity;
+                    target.Attributes["数量"] = target.Quantity.ToString(CultureInfo.InvariantCulture);
+                    LogManager.Instance.LogInfo($"[设备表][NAME聚合累计] NAME={componentName}, AddedQuantity={sourceQuantity}, TotalQuantity={target.Quantity}");
+                }
+            }
+
+            List<DeviceInfo> result = aggregated.Values.ToList();
+            for (int index = 0; index < result.Count; index++)
+            {
+                result[index].Id = index + 1;
+                LogManager.Instance.LogInfo($"[设备表][NAME聚合结果] Id={result[index].Id}, NAME={result[index].Name}, Quantity={result[index].Quantity}, Count={result[index].Count}");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 读取单个选中图元的数量；没有数量属性时，一个图元按一件计算。
+        /// </summary>
+        private static int GetSelectedDeviceQuantity(DeviceInfo device)
+        {
+            string rawQuantity = string.Empty;
+            if (device?.Attributes != null)
+            {
+                foreach (string key in new[] { "数量", "QTY", "QUANTITY", "Quantity" })
+                {
+                    if (device.Attributes.TryGetValue(key, out string value) && !string.IsNullOrWhiteSpace(value))
+                    {
+                        rawQuantity = value.Trim();
+                        break;
+                    }
+                }
+            }
+
+            int quantity = ParsePositiveInteger(rawQuantity);
+            if (quantity > 0)
+            {
+                return quantity;
+            }
+
+            return device != null && device.Quantity > 0 ? device.Quantity : 1;
+        }
+
+        /// <summary>
+        /// 统一设备分组键的文本格式，避免空格和大小写差异造成重复行。
+        /// </summary>
+        private static string NormalizeDeviceGroupingPart(string value)
+        {
+            return (value ?? string.Empty).Trim().ToUpperInvariant();
+        }
+
+        /// <summary>
+        /// 螺栓统计表中的单条汇总数据。
+        /// </summary>
+        private sealed class BoltStatisticRow
+        {
+            public string Specification { get; set; } = string.Empty;
+            public int Quantity { get; set; }
+            public string Length { get; set; } = string.Empty;
+            public string Material { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// 从本次选中的图元中提取螺栓统计数据。
+        /// 仅统计法兰/对夹连接图元，以及名称包含“法兰”或“管端盲板”的部件。
+        /// </summary>
+        private List<BoltStatisticRow> BuildBoltStatistics(
+            IEnumerable<DeviceInfo> devices,
+            out int candidateCount,
+            out int skippedCount)
+        {
+            candidateCount = 0;
+            skippedCount = 0;
+            if (devices == null)
+            {
+                return new List<BoltStatisticRow>();
+            }
+
+            var sourceRows = new List<BoltStatisticRow>();
+            foreach (DeviceInfo device in devices.Where(d => d != null))
+            {
+                if (!IsBoltStatisticCandidate(device))
+                {
+                    continue;
+                }
+
+                candidateCount++;
+
+                string specification = GetFirstAttributeValue(device.Attributes,
+                    "螺栓规格", "BOLT_SPEC", "BOLT_SPECIFICATION", "BOLT_SIZE", "BoltSpec", "BoltSpecification");
+                int quantity = ParsePositiveInteger(GetFirstAttributeValue(device.Attributes,
+                    "螺栓数量", "螺栓数量n", "螺栓数", "BOLT_HOLES", "BOLT_COUNT", "BOLT_QTY", "BOLT_NUM", "BoltCount"));
+                string length = GetFirstAttributeValue(device.Attributes,
+                    "螺栓长度", "BOLT_LENGTH", "BOLT_LEN", "BoltLength");
+                string material = GetFirstAttributeValue(device.Attributes,
+                    "螺栓材质", "螺栓材料", "BOLT_MATERIAL", "BOLT_MATL", "BoltMaterial", "MATERIAL", "材质", "材料");
+
+                NormalizeBoltSpecification(ref specification, ref length);
+                if (string.IsNullOrWhiteSpace(specification) || quantity <= 0)
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                sourceRows.Add(new BoltStatisticRow
+                {
+                    Specification = specification,
+                    Quantity = quantity,
+                    Length = length,
+                    Material = material
+                });
+            }
+
+            return sourceRows
+                .GroupBy(row => string.Join("|", row.Specification, row.Length, row.Material), StringComparer.OrdinalIgnoreCase)
+                .Select(group => new BoltStatisticRow
+                {
+                    Specification = group.First().Specification,
+                    Quantity = group.Sum(row => row.Quantity),
+                    Length = group.First().Length,
+                    Material = group.First().Material
+                })
+                .OrderBy(row => GetBoltSpecificationSortValue(row.Specification))
+                .ThenBy(row => row.Specification, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(row => row.Length, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// 判断图元是否属于需要统计螺栓的法兰连接部件。
+        /// </summary>
+        private static bool IsBoltStatisticCandidate(DeviceInfo device)
+        {
+            string connectionType = GetFirstAttributeValue(device.Attributes,
+                "连接方式", "连接形式", "CONN_TYPE", "CONNTYPE", "DNCONN_TYPE", "CONNECTION_TYPE", "CONNECTION_MODE", "ConnectionType");
+            string normalizedConnectionType = Regex.Replace(connectionType ?? string.Empty, @"\s|[-_/]", string.Empty);
+            bool isFlangeConnection = string.Equals(normalizedConnectionType, "法兰", StringComparison.OrdinalIgnoreCase) ||
+                                      string.Equals(normalizedConnectionType, "法兰连接", StringComparison.OrdinalIgnoreCase) ||
+                                      string.Equals(normalizedConnectionType, "对夹", StringComparison.OrdinalIgnoreCase) ||
+                                      string.Equals(normalizedConnectionType, "对夹连接", StringComparison.OrdinalIgnoreCase);
+            if (isFlangeConnection)
+            {
+                return true;
+            }
+
+            string componentName = GetFirstAttributeValue(device.Attributes, "部件名称", "组件名称", "名称", "COMPONENT_NAME");
+            string name = string.Join(" ", new[] { device.Name, componentName }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            return name.IndexOf("法兰", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("管端盲板", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// 按候选 Tag 读取第一个非空属性值，兼容不同块库的中英文属性名。
+        /// </summary>
+        private static string GetFirstAttributeValue(Dictionary<string, string> attributes, params string[] keys)
+        {
+            if (attributes == null || keys == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (string key in keys)
+            {
+                if (attributes.TryGetValue(key, out string value) && !string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+
+            foreach (KeyValuePair<string, string> item in attributes)
+            {
+                if (string.IsNullOrWhiteSpace(item.Key) || string.IsNullOrWhiteSpace(item.Value))
+                {
+                    continue;
+                }
+
+                string normalizedAttributeKey = NormalizeAttributeLookupKey(item.Key);
+                if (keys.Any(key => string.Equals(
+                    normalizedAttributeKey,
+                    NormalizeAttributeLookupKey(key),
+                    StringComparison.OrdinalIgnoreCase)))
+                {
+                    return item.Value.Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 归一化属性 Tag，兼容 BOLT_COUNT、Bolt Count 等仅分隔符不同的名称。
+        /// </summary>
+        private static string NormalizeAttributeLookupKey(string key)
+        {
+            return Regex.Replace(key ?? string.Empty, @"[\s_\-\.\(\)]+", string.Empty).Trim();
+        }
+
+        /// <summary>
+        /// 解析螺栓数量，兼容“8 个”“8套”等带单位的属性值。
+        /// </summary>
+        private static int ParsePositiveInteger(string value)
+        {
+            System.Text.RegularExpressions.Match match = Regex.Match(value ?? string.Empty, @"\d+");
+            return match.Success && int.TryParse(match.Value, out int quantity) && quantity > 0 ? quantity : 0;
+        }
+
+        /// <summary>
+        /// 拆分“ M16×80 ”等规格中的长度；独立长度属性优先保留。
+        /// </summary>
+        private static void NormalizeBoltSpecification(ref string specification, ref string length)
+        {
+            specification = (specification ?? string.Empty).Trim();
+            length = (length ?? string.Empty).Trim();
+            System.Text.RegularExpressions.Match match = Regex.Match(specification, @"(?i)M\s*(?<diameter>\d+(?:\.\d+)?)\s*(?:[x×*]\s*(?<length>\d+(?:\.\d+)?))?");
+            if (!match.Success)
+            {
+                return;
+            }
+
+            specification = "M" + match.Groups["diameter"].Value;
+            if (string.IsNullOrWhiteSpace(length) && match.Groups["length"].Success)
+            {
+                length = match.Groups["length"].Value;
+            }
+        }
+
+        /// <summary>
+        /// 提取规格中的直径数值，用于按 M12、M16、M20 的自然顺序排列。
+        /// </summary>
+        private static decimal GetBoltSpecificationSortValue(string specification)
+        {
+            System.Text.RegularExpressions.Match match = Regex.Match(specification ?? string.Empty, @"(?i)M\s*(\d+(?:\.\d+)?)");
+            return match.Success && decimal.TryParse(match.Groups[1].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value)
+                ? value
+                : decimal.MaxValue;
+        }
+
+        /// <summary>
+        /// 按设备表的样式创建四列螺栓统计表。
+        /// </summary>
+        private void CreateBoltStatisticsTable(Database database, List<BoltStatisticRow> rows, double scaleDenominator)
+        {
+            if (database == null || rows == null || rows.Count == 0)
+            {
+                return;
+            }
+
+            Editor editor = Application.DocumentManager.MdiActiveDocument?.Editor;
+            if (editor == null)
+            {
+                return;
+            }
+
+            PromptPointOptions pointOptions = new PromptPointOptions("\n'螺栓统计表'：指定插入位置（点击或输入点）：")
+            {
+                AllowNone = false
+            };
+            PromptPointResult pointResult = editor.GetPoint(pointOptions);
+            if (pointResult.Status != PromptStatus.OK)
+            {
+                editor.WriteMessage("\n未指定螺栓统计表插入位置，已跳过生成。");
+                return;
+            }
+
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                try
+                {
+                    BlockTableRecord currentSpace = transaction.GetObject(database.CurrentSpaceId, OpenMode.ForWrite) as BlockTableRecord;
+                    if (currentSpace == null)
+                    {
+                        return;
+                    }
+
+                    const int columnCount = 4;
+                    Table table = new Table();
+                    table.SetSize(rows.Count + 2, columnCount);
+                    table.Position = pointResult.Value;
+                    SetTableStyle(database, table, transaction, scaleDenominator);
+                    table.MergeCells(CellRange.Create(table, 0, 0, 0, columnCount - 1));
+                    table.Cells[0, 0].TextString = "螺栓统计表";
+                    table.Cells[0, 0].Alignment = CellAlignment.MiddleCenter;
+
+                    string[] headers = { "螺栓规格", "螺栓数量", "长度", "材质" };
+                    for (int columnIndex = 0; columnIndex < headers.Length; columnIndex++)
+                    {
+                        table.Cells[1, columnIndex].TextString = headers[columnIndex];
+                        table.Cells[1, columnIndex].Alignment = CellAlignment.MiddleCenter;
+                    }
+
+                    for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+                    {
+                        BoltStatisticRow row = rows[rowIndex];
+                        int tableRowIndex = rowIndex + 2;
+                        table.Cells[tableRowIndex, 0].TextString = row.Specification;
+                        table.Cells[tableRowIndex, 1].TextString = row.Quantity.ToString(CultureInfo.InvariantCulture);
+                        table.Cells[tableRowIndex, 2].TextString = row.Length;
+                        table.Cells[tableRowIndex, 3].TextString = row.Material;
+                        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++)
+                        {
+                            table.Cells[tableRowIndex, columnIndex].Alignment = CellAlignment.MiddleCenter;
+                        }
+                    }
+
+                    ApplyScaledHeightsToTable(table, scaleDenominator);
+                    AutoFitTableColumnsAdvanced(table);
+                    table.GenerateLayout();
+                    currentSpace.AppendEntity(table);
+                    transaction.AddNewlyCreatedDBObject(table, true);
+                    transaction.Commit();
+                }
+                catch
+                {
+                    transaction.Abort();
+                    throw;
+                }
             }
         }
 
@@ -243,17 +664,41 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 return string.Empty; // 未找到返回空
             }
 
+            // 获取单个图元应计入的数量：优先读取图元自身的数量属性，没有时按一个图元计一件。
+            int GetDeviceQuantity(DeviceInfo d)
+            {
+                string rawQuantity = string.Empty;
+                if (d?.Attributes != null)
+                {
+                    // 数量字段只按精确别名读取，避免误把“螺栓数量”等其他数量字段当成部件数量。
+                    foreach (string quantityKey in new[] { "数量", "QTY", "QUANTITY", "Quantity" })
+                    {
+                        if (d.Attributes.TryGetValue(quantityKey, out string value) && !string.IsNullOrWhiteSpace(value))
+                        {
+                            rawQuantity = value.Trim();
+                            break;
+                        }
+                    }
+                }
+
+                int quantity = ParsePositiveInteger(rawQuantity);
+                return quantity > 0 ? quantity : 1;
+            }
+
             // 遍历传入设备列表，逐个合并或新增
             foreach (var dev in devices)
             {
+                // 先确定当前图元的实际数量，避免重复图元只累加 Count 而忽略属性数量。
+                int deviceQuantity = GetDeviceQuantity(dev);
+
                 // 查找是否已存在相同设备（使用 AreDevicesIdentical 判定）
                 var existing = merged.FirstOrDefault(x => AreDevicesIdentical(x, dev));
 
                 if (existing != null)
                 {
-                    // 找到相同项：累加 Count 与 Quantity（数量字段）
-                    existing.Count += dev.Count; // 统计数量累加（保留 first 为主）
-                    existing.Quantity += dev.Quantity; // 数量字段累加
+                    // 找到相同项：将当前图元的实际数量累加到汇总数量。
+                    existing.Quantity += deviceQuantity;
+                    existing.Count = existing.Quantity;
                     // 补充缺失的属性（不覆盖已有非空属性）
                     if (dev.Attributes != null)
                     {
@@ -264,11 +709,24 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                                 existing.Attributes[kv.Key] = kv.Value; // 补充值
                         }
                     }
+
+                    // 将累计数量同步回属性字典，保证后续表格列读取到汇总值。
+                    existing.Attributes["数量"] = existing.Quantity.ToString(CultureInfo.InvariantCulture);
                 }
                 else
                 {
                     // 未找到相同项：添加当前设备的深拷贝以避免后续修改污染源对象
-                    merged.Add(CloneDeviceInfo(dev));
+                    DeviceInfo clone = CloneDeviceInfo(dev);
+                    clone.Quantity = deviceQuantity;
+                    clone.Count = deviceQuantity;
+                    if (clone.Attributes == null)
+                    {
+                        clone.Attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    }
+
+                    // 即使原图元没有数量属性，也补充统一的数量值 1，供表格直接读取。
+                    clone.Attributes["数量"] = deviceQuantity.ToString(CultureInfo.InvariantCulture);
+                    merged.Add(clone);
                 }
             }
 
@@ -5928,6 +6386,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         {
             // 参数检验：数据库和设备列表不能为空
             if (db == null || deviceList == null || deviceList.Count == 0) return;
+            LogManager.Instance.LogInfo($"[设备表][表格创建开始] InputRowCount={deviceList.Count}, Quantities=[{string.Join(",", deviceList.Select(item => $"{item.Name}:{item.Quantity}"))}]");
 
             // 本地辅助：安全读取属性并做一次 Trim/空值归一化
             static string SafeAttr(Dictionary<string, string> attrs, string[] keys, string fallback)
@@ -5992,11 +6451,13 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     clone.Attributes["材料"] = clone.Material;
                     clone.Attributes["图号或标准号"] = clone.DrawingNumber;
                     clone.Attributes["数量"] = clone.Quantity.ToString();
+                    LogManager.Instance.LogInfo($"[设备表][表格二次聚合] NAME={clone.Name}, SourceRows={g.Count()}, FinalQuantity={clone.Quantity}");
                     return clone;
                 })
                 .ToList();
 
             if (mergedDeviceList.Count == 0) return;
+            LogManager.Instance.LogInfo($"[设备表][表格二次聚合完成] OutputRowCount={mergedDeviceList.Count}");
 
             // 打开事务与空间（保留原有逻辑）
             using (Transaction trans = db.TransactionManager.StartTransaction())
@@ -6081,6 +6542,17 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     // 从设备项与列键获取最终显示值的统一函数（减少重复判断）
                     string GetValueForColumn(DeviceInfo item, string rawColKey)
                     {
+                        // “数量”列必须使用前序 NAME 聚合后的 Quantity，不能回读实例遗留 QTY=1 属性。
+                        if (string.Equals(rawColKey, "数量", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string quantityText = item.Quantity > 0
+                                ? item.Quantity.ToString(CultureInfo.InvariantCulture)
+                                : (item.Count > 0 ? item.Count.ToString(CultureInfo.InvariantCulture) : "1");
+                            LogManager.Instance.LogInfo(
+                                $"[设备表][数量列取值] NAME={item.Name}, Quantity={item.Quantity}, Count={item.Count}, AttributeQuantity={GetFirstAttributeValue(item.Attributes, "数量")}, DisplayQuantity={quantityText}");
+                            return quantityText;
+                        }
+
                         var colKey = MapColumnKey(rawColKey);
                         // 先尝试从属性字典取值（使用现有映射方法）
                         string val = GetAttributeValueByMappedKey(item.Attributes, colKey);
@@ -6110,6 +6582,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                         {
                             string display = GetValueForColumn(item, dynamicColumns[c]);
                             table.Cells[rowIndex, c].TextString = display ?? string.Empty;
+                            LogManager.Instance.LogInfo($"[设备表][表格写入] Row={rowIndex}, Column={dynamicColumns[c]}, NAME={item.Name}, Value={display ?? string.Empty}");
                         }
                     }
 

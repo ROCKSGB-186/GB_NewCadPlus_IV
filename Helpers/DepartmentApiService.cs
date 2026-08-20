@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,26 +19,67 @@ namespace GB_NewCadPlus_IV.Helpers
 
         public async Task<List<DepartmentModel>> GetDepartmentsWithCountsAsync(CancellationToken cancellationToken = default)
         {
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/departments";
+            string requestUrl = ApiEndpoint.Build("api/departments");
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            LogManager.Instance.LogInfo($"部门接口请求开始：GET {requestUrl}");
 
-            using (HttpResponseMessage response = await HttpClient.GetAsync(requestUrl, cancellationToken).ConfigureAwait(false))
+            try
             {
-                string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
-                    throw new HttpRequestException($"部门接口请求失败，HTTP {(int)response.StatusCode}，响应：{responseBody}");
+                using (HttpResponseMessage response = await HttpClient.GetAsync(requestUrl, cancellationToken).ConfigureAwait(false))
+                {
+                    string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    string contentType = response.Content.Headers.ContentType?.MediaType ?? "未声明";
+                    LogManager.Instance.LogInfo(
+                        $"部门接口响应：HTTP {(int)response.StatusCode} {response.ReasonPhrase}, ContentType={contentType}, BodyLength={responseBody.Length}, ElapsedMs={stopwatch.ElapsedMilliseconds}");
 
-                DepartmentListApiResponse? result = JsonConvert.DeserializeObject<DepartmentListApiResponse>(responseBody);
-                if (result == null || !result.Success)
-                    throw new InvalidOperationException(result?.Message ?? "服务器部门查询失败。");
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        string errorMessage = TryReadErrorMessage(responseBody);
+                        LogManager.Instance.LogWarning(
+                            $"部门接口返回失败：HTTP {(int)response.StatusCode}, SafeMessage={errorMessage}, ElapsedMs={stopwatch.ElapsedMilliseconds}");
+                        throw new HttpRequestException($"部门接口请求失败，HTTP {(int)response.StatusCode}：{errorMessage}");
+                    }
 
-                result.Departments ??= new List<DepartmentModel>();
-                LogManager.Instance.LogInfo($"通过服务器加载部门成功：地址={requestUrl}，部门数={result.Departments.Count}，部门={string.Join("；", result.Departments.ConvertAll(d => $"{d.Id}:{d.Name},用户={d.UserCount}"))}");
-                return result.Departments;
+                    DepartmentListApiResponse? result = JsonConvert.DeserializeObject<DepartmentListApiResponse>(responseBody);
+                    if (result == null || !result.Success)
+                        throw new InvalidOperationException(result?.Message ?? "服务器部门查询失败。");
+
+                    result.Departments ??= new List<DepartmentModel>();
+                    LogManager.Instance.LogInfo($"通过服务器加载部门成功：地址={requestUrl}，部门数={result.Departments.Count}，ElapsedMs={stopwatch.ElapsedMilliseconds}");
+                    return result.Departments;
+                }
             }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError(
+                    $"部门接口请求异常：URL={requestUrl}, ExceptionType={ex.GetType().FullName}, Message={ex.Message}, ElapsedMs={stopwatch.ElapsedMilliseconds}");
+                throw;
+            }
+            finally
+            {
+                stopwatch.Stop();
+            }
+        }
+
+        private static string TryReadErrorMessage(string responseBody)
+        {
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return "服务器未返回错误详情。";
+
+            try
+            {
+                DepartmentErrorResponse? error = JsonConvert.DeserializeObject<DepartmentErrorResponse>(responseBody);
+                if (!string.IsNullOrWhiteSpace(error?.Message))
+                    return error.Message.Trim();
+            }
+            catch (JsonException)
+            {
+                // 非 JSON 响应（例如旧版本服务器返回的 HTML）不继续输出原始内容。
+            }
+
+            return responseBody.TrimStart().StartsWith("<", StringComparison.Ordinal)
+                ? "服务器返回了无效的错误响应。"
+                : "服务器返回了错误响应。";
         }
 
         private sealed class DepartmentListApiResponse
@@ -45,6 +87,11 @@ namespace GB_NewCadPlus_IV.Helpers
             public bool Success { get; set; }
             public string Message { get; set; } = string.Empty;
             public List<DepartmentModel> Departments { get; set; } = new List<DepartmentModel>();
+        }
+
+        private sealed class DepartmentErrorResponse
+        {
+            public string Message { get; set; } = string.Empty;
         }
     }
 }

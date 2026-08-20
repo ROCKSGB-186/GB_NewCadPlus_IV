@@ -74,9 +74,7 @@ namespace GB_NewCadPlus_IV.Helpers
 
         private static async Task<T> SendAsync<T>(HttpMethod method, string path, object body, CancellationToken cancellationToken)
         {
-            string host = string.IsNullOrWhiteSpace(VariableDictionary._serverIP) ? "127.0.0.1" : VariableDictionary._serverIP.Trim();
-            int port = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            using (var request = new HttpRequestMessage(method, "http://" + host + ":" + port + "/" + path))
+            using (var request = new HttpRequestMessage(method, ApiEndpoint.Build(path)))
             {
                 if (body != null) request.Content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
                 using (var response = await HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))

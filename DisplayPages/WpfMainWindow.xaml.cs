@@ -3394,9 +3394,7 @@ namespace GB_NewCadPlus_IV
             try
             {
                 // 构建服务器 URL
-                string serverIp = VariableDictionary._serverIP?.Trim() ?? "127.0.0.1";
-                int serverPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-                string apiUrl = $"http://{serverIp}:{serverPort}/api/graphics/upload";
+                string apiUrl = ApiEndpoint.Build("api/graphics/upload");
 
                 LogManager.Instance.LogInfo($"[ReplacePreview|{traceId}] 上传目标 URL: {apiUrl}");
                 LogManager.Instance.LogInfo($"[ReplacePreview|{traceId}] 上传参数: storageId={storage.Id}, 文件名={Path.GetFileName(localPreviewPath)}");
@@ -5955,10 +5953,7 @@ namespace GB_NewCadPlus_IV
             }
 
             // ========== 2. 构建服务端 URL ==========
-            string serverIp = VariableDictionary._serverIP ?? "127.0.0.1";
-            int serverPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            string baseUrl = $"http://{serverIp}:{serverPort}";
-            string uploadUrl = $"{baseUrl}/api/graphics/upload";
+            string uploadUrl = ApiEndpoint.Build("api/graphics/upload");
 
             LogManager.Instance.LogInfo($"[Upload] 目标地址: {uploadUrl}");
 
@@ -6082,7 +6077,7 @@ namespace GB_NewCadPlus_IV
             catch (HttpRequestException ex)
             {
                 LogManager.Instance.LogError($"[Upload] 网络异常: {ex.Message}");
-                return (false, $"无法连接到服务器 ({serverIp}:{serverPort})，请检查网络", 0);
+                return (false, $"无法连接到服务器 ({ApiEndpoint.GetDisplayAddress()})，请检查网络", 0);
             }
             catch (Exception ex)
             {
@@ -8575,7 +8570,8 @@ namespace GB_NewCadPlus_IV
         {
             try
             {
-                Env.Document.SendStringToExecute("GenerateDeviceTable ", false, false, false);
+                // 使用唯一命令名，确保按钮进入包含螺栓统计逻辑的最新命令入口。
+                Env.Document.SendStringToExecute("GenerateDeviceTableWithBoltStatistics ", false, false, false);
             }
             catch (Exception ex)
             {
@@ -11175,37 +11171,10 @@ namespace GB_NewCadPlus_IV
         /// <param name="e"></param>
         private void DepartmentAdminControl_Loaded(object sender, RoutedEventArgs e)
         {
-            // 从 login 配置优先读取服务器/端口（与之前主界面约定一致）
             try
             {
-                var cfgPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GB_NewCadPlus_IV", "login_config.json");
-                string host = "127.0.0.1";
-                string port = "5236";
-                if (System.IO.File.Exists(cfgPath))
-                {
-                    var json = System.IO.File.ReadAllText(cfgPath);
-                    var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
-                    var cfg = ser.Deserialize<LoginConfig>(json);
-                    if (cfg != null)
-                    {
-                        if (!string.IsNullOrWhiteSpace(cfg.ServerIP)) host = cfg.ServerIP;
-                        if (!string.IsNullOrWhiteSpace(cfg.DataBaseserverPort)) port = cfg.DataBaseserverPort;
-                    }
-                }
-
-                // 中文注释：部门/人员模块必须使用数据库物理连接账号，不能使用应用登录用户名。
-                var dbType = (VariableDictionary._databaseType ?? "DM").ToUpperInvariant();
-                var dbUser = string.IsNullOrWhiteSpace(VariableDictionary._dbUserName)
-                    ? (dbType == "MYSQL" ? "root" : "SYSDBA")
-                    : VariableDictionary._dbUserName.Trim();
-                var dbPwd = string.IsNullOrWhiteSpace(VariableDictionary._dbPassWord)
-                    ? (dbType == "MYSQL" ? "123456" : "675756SGBsgb")
-                    : VariableDictionary._dbPassWord;
-
-                LogManager.Instance.LogInfo($"部门服务使用服务器 API: host={host}, apiPort={VariableDictionary._apiPort}");
-                VariableDictionary._serverIP = host;
-                if (VariableDictionary._apiPort <= 0)
-                    VariableDictionary._apiPort = 10010;
+                ApiEndpoint.LoadDefaults();
+                LogManager.Instance.LogInfo($"部门服务使用服务器 API: {ApiEndpoint.GetDisplayAddress()}");
                 RefreshDepartmentsAsync();
             }
             catch (Exception ex)
@@ -11227,10 +11196,7 @@ namespace GB_NewCadPlus_IV
 
             try
             {
-                if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
-                    VariableDictionary._serverIP = "127.0.0.1";
-                if (VariableDictionary._apiPort <= 0)
-                    VariableDictionary._apiPort = 10010;
+                ApiEndpoint.LoadDefaults();
 
                 LogManager.Instance.LogInfo($"开始获取部门：API={VariableDictionary._serverIP}:{VariableDictionary._apiPort}");
                 var departments = await _departmentApiService.GetDepartmentsWithCountsAsync();
@@ -15375,15 +15341,24 @@ namespace GB_NewCadPlus_IV
                 return;
             }
 
-            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode)
-                || !(selectedNode.Data is DynamicSubdivisionTreeData subdivision))
+            if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode))
+            {
+                MessageBox.Show("请先选择要删除的表号/PN规范细分。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            DynamicSubdivisionTreeData? subdivision = selectedNode.Data as DynamicSubdivisionTreeData;
+            StandardManagementSeriesClient? series = selectedNode.Data as StandardManagementSeriesClient;
+            bool isSeriesSubdivision = series != null
+                && (!string.IsNullOrWhiteSpace(series.TableNumber) || !string.IsNullOrWhiteSpace(series.PressureRating));
+            if (subdivision == null && !isSeriesSubdivision)
             {
                 MessageBox.Show("请先选择要删除的表号/PN规范细分。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             MessageBoxResult confirm = MessageBox.Show(
-                $"确定删除规范细分“{selectedNode.DisplayText}”吗？\n\n只删除该表号/PN版本，不删除基础规范系列。",
+                $"确定删除规范细分“{selectedNode.DisplayText}”吗？\n\n只删除该表号/PN规范，不删除同一部件系列的其他规范；历史数据会保留。",
                 "确认删除规范细分",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
@@ -15392,9 +15367,19 @@ namespace GB_NewCadPlus_IV
 
             try
             {
-                StandardManagementOperationClientResponse response = await _standardManagementApiService
-                    .DeleteManagementVersionAsync(subdivision.VersionId, VariableDictionary._userName ?? string.Empty)
-                    .ConfigureAwait(true);
+                StandardManagementOperationClientResponse response;
+                if (subdivision != null)
+                {
+                    response = await _standardManagementApiService.DeleteManagementVersionAsync(
+                        subdivision.VersionId,
+                        VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
+                }
+                else
+                {
+                    response = await _standardManagementApiService.DeleteManagementSubdivisionSeriesAsync(
+                        series!.Id,
+                        VariableDictionary._userName ?? string.Empty).ConfigureAwait(true);
+                }
                 if (!response.Success)
                 {
                     MessageBox.Show(response.Message, "删除规范细分失败", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -15407,7 +15392,7 @@ namespace GB_NewCadPlus_IV
             }
             catch (Exception ex)
             {
-                LogManager.Instance.LogError($"删除规范细分失败：VersionId={subdivision.VersionId}，错误={ex.Message}");
+                LogManager.Instance.LogError($"删除规范细分失败：节点={selectedNode.DisplayText}，SeriesId={series?.Id}，VersionId={subdivision?.VersionId}，错误={ex.Message}");
                 MessageBox.Show($"删除规范细分失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -15560,6 +15545,19 @@ namespace GB_NewCadPlus_IV
             if (!(SpecificationTreeView.SelectedItem is CategoryTreeNode selectedNode))
             {
                 MessageBox.Show("请先选择要重命名的规范。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 细分节点的显示文字由表号和压力等级自动组成，不能把“表81 / PN6”写入父级 SeriesName。
+            if (selectedNode.Data is StandardManagementSeriesClient subdivisionSeries
+                && (!string.IsNullOrWhiteSpace(subdivisionSeries.TableNumber)
+                    || !string.IsNullOrWhiteSpace(subdivisionSeries.PressureRating)))
+            {
+                MessageBox.Show(
+                    "当前节点是规范细分项，名称由表号和压力等级自动生成，不能直接重命名。\n\n请修改规范的表号或压力等级字段，避免破坏所属规范系列层级。",
+                    "不允许重命名细分项",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
                 return;
             }
 
@@ -16223,10 +16221,42 @@ namespace GB_NewCadPlus_IV
                     _standardTreeNodes.Add(documentNode);
             }
 
+            // 历史数据可能没有 STANDARD_DOCUMENT_ID，先根据规范号和目录归属补齐基础规范号。
+            foreach (StandardManagementSeriesClient series in response.Series)
+            {
+                if (series.StandardDocumentId.HasValue && documentNodeMap.ContainsKey(series.StandardDocumentId.Value))
+                    continue;
+
+                List<StandardDocumentClient> candidates = (response.Documents ?? new List<StandardDocumentClient>())
+                    .Where(document => string.Equals(
+                        NormalizeStandardText(document.StandardNumber),
+                        NormalizeStandardText(series.StandardNumber),
+                        StringComparison.OrdinalIgnoreCase))
+                    .Where(document => !series.CategoryId.HasValue
+                        || !document.CategoryId.HasValue
+                        || document.CategoryId.Value == series.CategoryId.Value)
+                    .Where(document => string.IsNullOrWhiteSpace(series.FamilyCode)
+                        || string.IsNullOrWhiteSpace(document.FamilyCode)
+                        || string.Equals(series.FamilyCode.Trim(), document.FamilyCode.Trim(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (candidates.Count == 1)
+                {
+                    series.StandardDocumentId = candidates[0].Id;
+                    LogManager.Instance.LogInfo(
+                        $"已补齐历史规范系列的基础规范号归属：SeriesId={series.Id}，DocumentId={series.StandardDocumentId}，StandardNumber={series.StandardNumber}");
+                }
+                else
+                {
+                    LogManager.Instance.LogWarning(
+                        $"无法唯一补齐规范系列的基础规范号归属：SeriesId={series.Id}，StandardNumber={series.StandardNumber}，候选数量={candidates.Count}");
+                }
+            }
+
             // 同一基础规范号下，按细分规范名称分组，再显示具体表号和压力等级。
             foreach (IGrouping<string, StandardManagementSeriesClient> seriesGroup in response.Series
                 .Where(item => item.StandardDocumentId.HasValue && documentNodeMap.ContainsKey(item.StandardDocumentId.Value))
-                .GroupBy(item => $"{item.StandardDocumentId.Value}:{item.SeriesName}", StringComparer.OrdinalIgnoreCase))
+                .GroupBy(BuildStandardSeriesGroupKey, StringComparer.OrdinalIgnoreCase))
             {
                 StandardManagementSeriesClient firstSeries = seriesGroup.First();
                 CategoryTreeNode documentNode = documentNodeMap[firstSeries.StandardDocumentId.Value];
@@ -16234,11 +16264,18 @@ namespace GB_NewCadPlus_IV
                 CategoryTreeNode seriesGroupNode = new CategoryTreeNode(
                     groupId,
                     firstSeries.SeriesCode,
-                    string.IsNullOrWhiteSpace(firstSeries.SeriesName) ? firstSeries.SeriesCode : firstSeries.SeriesName,
+                    BuildStandardSeriesGroupDisplayName(seriesGroup),
                     3,
                     documentNode.Id,
                     new StandardSeriesGroupTreeData(firstSeries.StandardDocumentId.Value, firstSeries.SeriesName));
                 documentNode.Children.Add(seriesGroupNode);
+
+                LogManager.Instance.LogInfo(
+                    $"规范系列分组生成：DocumentId={firstSeries.StandardDocumentId.Value}，"
+                    + $"GroupName={seriesGroupNode.DisplayText}，"
+                    + $"FlangeType={firstSeries.FlangeType}，FaceType={firstSeries.FaceType}，"
+                    + $"SeriesCount={seriesGroup.Count()}，"
+                    + $"Subdivisions={string.Join("、", seriesGroup.Select(BuildSeriesSubdivisionDisplayText))}");
 
                 foreach (StandardManagementSeriesClient series in seriesGroup.OrderBy(item => item.TableNumber).ThenBy(item => item.PressureRating).ThenBy(item => item.Id))
                 {
@@ -16273,6 +16310,80 @@ namespace GB_NewCadPlus_IV
 
             RefreshStandardTreeViewItemsSource();
             LogManager.Instance.LogInfo($"规范树生成完成：根节点数量={_standardTreeNodes.Count}");
+        }
+
+        /// <summary>
+        /// 使用不可变的系列编码构造分组键，不能使用可被管理员重命名的 SeriesName。
+        /// </summary>
+        private static string BuildStandardSeriesGroupKey(StandardManagementSeriesClient series)
+        {
+            string flangeType = (series.FlangeType ?? string.Empty).Trim();
+            string faceType = (series.FaceType ?? string.Empty).Trim();
+            string recoveredGroupName = GetRecoveredStandardSeriesGroupName(series);
+            if (string.IsNullOrWhiteSpace(flangeType) && string.IsNullOrWhiteSpace(faceType))
+            {
+                // 历史细分被误重命名后，优先使用不可变的导入文件名恢复原父级系列名称。
+                return $"{series.StandardDocumentId}:NAME:{recoveredGroupName}";
+            }
+
+            return $"{series.StandardDocumentId}:TYPE:{flangeType}:{faceType}";
+        }
+
+        /// <summary>
+        /// 选择规范系列组名称，忽略历史上误将“表号 / PN”写入 SeriesName 的记录。
+        /// </summary>
+        private static string BuildStandardSeriesGroupDisplayName(
+            IEnumerable<StandardManagementSeriesClient> seriesGroup)
+        {
+            StandardManagementSeriesClient? baseSeries = seriesGroup
+                .Where(item => !IsSubdivisionDisplayName(item.SeriesName))
+                .OrderByDescending(item => string.IsNullOrWhiteSpace(item.TableNumber)
+                    && string.IsNullOrWhiteSpace(item.PressureRating))
+                .ThenBy(item => item.Id)
+                .FirstOrDefault();
+
+            StandardManagementSeriesClient? selected = baseSeries ?? seriesGroup.FirstOrDefault();
+            string recoveredGroupName = selected == null ? string.Empty : GetRecoveredStandardSeriesGroupName(selected);
+            if (!IsSubdivisionDisplayName(recoveredGroupName))
+                return recoveredGroupName;
+
+            return string.IsNullOrWhiteSpace(selected?.SeriesName)
+                ? selected?.SeriesCode ?? "未命名规范系列"
+                : selected.SeriesName;
+        }
+
+        /// <summary>
+        /// 当系列名称已被错误改成“表号 / PN”时，从原始导入文件名恢复真正的部件系列名称。
+        /// 文件名格式为“部件名称_标准号_表号_PN”。
+        /// </summary>
+        private static string GetRecoveredStandardSeriesGroupName(StandardManagementSeriesClient series)
+        {
+            string currentName = (series.SeriesName ?? string.Empty).Trim();
+            if (!IsSubdivisionDisplayName(currentName))
+                return currentName;
+
+            string fileName = Path.GetFileNameWithoutExtension(series.SourceFileName ?? string.Empty);
+            string[] parts = fileName.Split(new[] { '_' }, StringSplitOptions.None);
+            string recoveredName = parts.Length >= 4 ? parts[0].Trim() : string.Empty;
+            if (!string.IsNullOrWhiteSpace(recoveredName) && !IsSubdivisionDisplayName(recoveredName))
+            {
+                LogManager.Instance.LogWarning(
+                    $"已从原始导入文件名恢复规范系列名称：SeriesId={series.Id}，错误名称={currentName}，恢复名称={recoveredName}，文件={series.SourceFileName}");
+                return recoveredName;
+            }
+
+            return currentName;
+        }
+
+        /// <summary>
+        /// 判断名称是否只是细分节点的“表号 / PN”显示名称。
+        /// </summary>
+        private static bool IsSubdivisionDisplayName(string? value)
+        {
+            return Regex.IsMatch(
+                value ?? string.Empty,
+                @"^表\s*[0-9０-９]+\s*(?:[/／_\-－—、，,：:]\s*)?PN\s*[0-9０-９]+(?:[.．][0-9０-９]+)?$",
+                RegexOptions.IgnoreCase);
         }
 
         /// <summary>
@@ -16404,7 +16515,7 @@ namespace GB_NewCadPlus_IV
 
             string table = NormalizeDynamicNumber(match.Groups["table"].Value);
             string pn = NormalizeDynamicNumber(match.Groups["pn"].Value).ToUpperInvariant();
-            return $"{table}_{pn}";
+            return $"{table} / {pn}";
         }
         /// <summary>
         /// 将全角数字、中文句点和空格转换为半角数字、英文句点，并去除前后空白。

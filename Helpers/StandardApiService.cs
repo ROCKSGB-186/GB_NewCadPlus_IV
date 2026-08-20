@@ -43,7 +43,18 @@ namespace GB_NewCadPlus_IV.Helpers
                         throw new HttpRequestException($"规范目录查询失败，HTTP {(int)response.StatusCode}，响应：{body}");
 
                     StandardManagementTreeClientResponse? result = JsonConvert.DeserializeObject<StandardManagementTreeClientResponse>(body);
-                    return result ?? throw new InvalidOperationException("服务器返回的规范目录为空。");
+                    StandardManagementTreeClientResponse tree = result ?? throw new InvalidOperationException("服务器返回的规范目录为空。");
+                    foreach (StandardManagementSeriesClient series in tree.Series
+                        .Where(item => Regex.IsMatch(item.SeriesName ?? string.Empty, @"^表\s*[0-9０-９]+\s*(?:[/／_\-－—、，,：:]\s*)?PN", RegexOptions.IgnoreCase)))
+                    {
+                        LogManager.Instance.LogWarning(
+                            $"规范目录响应包含细分名称系列：SeriesId={series.Id}，SeriesName={series.SeriesName}，"
+                            + $"DocumentId={series.StandardDocumentId?.ToString() ?? "空"}，"
+                            + $"SourceFileName={Path.GetFileName(series.SourceFileName ?? string.Empty)}，"
+                            + $"TableNumber={series.TableNumber}，PressureRating={series.PressureRating}");
+                    }
+
+                    return tree;
                 }
 
             }
@@ -419,6 +430,20 @@ namespace GB_NewCadPlus_IV.Helpers
             using HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Delete, BuildServerUrl($"/api/standards/management/versions/{versionId}"));
             AddOperatorHeader(message, operatorName);
             return await SendManagementRequestAsync<StandardManagementOperationClientResponse>(message, "删除规范版本", cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 删除一个表号/PN具体规范系列，不影响同一父级部件系列的其他表号。
+        /// </summary>
+        public async Task<StandardManagementOperationClientResponse> DeleteManagementSubdivisionSeriesAsync(
+            long seriesId,
+            string operatorName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (seriesId <= 0) throw new ArgumentException("规范系列 ID 必须大于 0。", nameof(seriesId));
+            using HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Delete, BuildServerUrl($"/api/standards/management/series/{seriesId}"));
+            AddOperatorHeader(message, operatorName);
+            return await SendManagementRequestAsync<StandardManagementOperationClientResponse>(message, "删除具体规范", cancellationToken).ConfigureAwait(false);
         }
 
         public async Task<StandardManagementOperationClientResponse> RestoreManagementVersionAsync(
@@ -848,17 +873,7 @@ namespace GB_NewCadPlus_IV.Helpers
             request.DN = NormalizeDn(request.DN);
 
             // 读取登录窗口保存的服务器地址；开发环境没有配置时回退到本机。
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-
-            // 与现有分类 API 保持相同端口读取规则。
-            int apiPort = VariableDictionary._apiPort > 0
-                ? VariableDictionary._apiPort
-                : 10010;
-
-            // 组合服务器规范查询接口地址。
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/standards/flanges/match";
+            string requestUrl = ApiEndpoint.Build("api/standards/flanges/match");
 
             try
             {
@@ -947,11 +962,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static string BuildServerUrl(string path)
         {
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            return $"http://{serverIp}:{apiPort}{path}";
+            return ApiEndpoint.Build(path);
         }
     }
 }

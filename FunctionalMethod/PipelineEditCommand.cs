@@ -110,14 +110,21 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
                 using (DocumentLock documentLock = document.LockDocument())
                 {
                     LogManager.Instance.LogInfo("[PIPELINE_EDIT][文档锁成功] 已获取当前文档写锁。");
-                    PipelineCadEditService.UpdatePipeline(
+                    Dictionary<string, string> changedAttributes = GetChangedAttributes(
+                        attributes,
+                        window.ConfirmedAttributes);
+                    IReadOnlyList<ObjectId> flangeComponentIds = PipelineCadEditService.UpdatePipeline(
                         document.Database,
                         pipelineObjectId,
-                        window.ConfirmedAttributes);
+                        window.ConfirmedAttributes,
+                        changedAttributes);
+                    PipelineCadEditService.RefreshFlangeStandards(
+                        document.Database,
+                        flangeComponentIds);
                     editor.Regen();
                 }
                 LogManager.Instance.LogInfo(
-                    $"[PIPELINE_EDIT][回写完成] PipeId={pipeId}, AttributeCount={window.ConfirmedAttributes.Count}");
+                    $"[PIPELINE_EDIT][回写完成] PipeId={pipeId}, AttributeCount={window.ConfirmedAttributes.Count}, ChangedAttributeCount={GetChangedAttributes(attributes, window.ConfirmedAttributes).Count}");
                 editor.WriteMessage($"\n管道参数已更新，PipeId={pipeId}。\n");
             }
             catch (Exception exception)
@@ -155,6 +162,40 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
 
             editor.WriteMessage("\n预选对象不是管道 Polyline，请重新选择。\n");
             return ObjectId.Null;
+        }
+
+        /// <summary>
+        /// 比较编辑前后的管道属性，仅保留本次确认时实际变更的字段。
+        /// </summary>
+        private static Dictionary<string, string> GetChangedAttributes(
+            IDictionary<string, string> originalAttributes,
+            IDictionary<string, string> confirmedAttributes)
+        {
+            var changedAttributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (confirmedAttributes == null)
+            {
+                return changedAttributes;
+            }
+
+            foreach (KeyValuePair<string, string> confirmedAttribute in confirmedAttributes)
+            {
+                if (string.IsNullOrWhiteSpace(confirmedAttribute.Key))
+                {
+                    continue;
+                }
+
+                string originalValue = originalAttributes != null &&
+                    originalAttributes.TryGetValue(confirmedAttribute.Key, out string value)
+                    ? value ?? string.Empty
+                    : string.Empty;
+                string confirmedValue = confirmedAttribute.Value ?? string.Empty;
+                if (!string.Equals(originalValue, confirmedValue, StringComparison.Ordinal))
+                {
+                    changedAttributes[confirmedAttribute.Key] = confirmedValue;
+                }
+            }
+
+            return changedAttributes;
         }
     }
 }

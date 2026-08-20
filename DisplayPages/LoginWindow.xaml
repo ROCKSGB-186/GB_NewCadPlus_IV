@@ -5,7 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Width="370"
-    Height="550"
+    Height="300"
     ResizeMode="NoResize"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
@@ -26,13 +26,14 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="30" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="5" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock
+        <TextBlock x:Name="登录" 
             Grid.Row="0"
             Margin="6,0,6,6"
             FontSize="18"
@@ -40,7 +41,7 @@
             Foreground="#0078D4"
             Text="登录" />
 
-        <StackPanel
+        <StackPanel x:Name="部门与用户名密码" 
             Grid.Row="2"
             Grid.RowSpan="2"
             Margin="4,0,4,5"
@@ -65,7 +66,34 @@
                 Margin="2,8,0,2"
                 FontSize="12"
                 Text="密码：" />
-            <PasswordBox x:Name="Login_Password" Height="26" />
+            <Grid Height="26">
+                <PasswordBox
+                    x:Name="Login_Password"
+                    Height="26"
+                    Padding="4,0,30,0" />
+                <TextBox
+                    x:Name="Login_PasswordVisible"
+                    Height="26"
+                    Padding="4,0,30,0"
+                    TextChanged="Login_PasswordVisible_TextChanged"
+                    Visibility="Collapsed" />
+                <Button
+                    x:Name="BtnTogglePassword"
+                    Width="28"
+                    Height="24"
+                    Margin="0,1,1,1"
+                    Padding="0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="BtnTogglePassword_Click"
+                    Content="👁"
+                    FontFamily="Segoe UI Symbol"
+                    FontSize="14"
+                    Foreground="Gray"
+                    ToolTip="显示密码" />
+            </Grid>
 
             <StackPanel
                 Width="351"
@@ -84,34 +112,34 @@
             </TextBlock>-->
         </StackPanel>
 
-        <StackPanel
+        <StackPanel x:Name="登录与取消按键" 
             Grid.Row="4"
             Grid.RowSpan="2"
-            Width="204"
+            Width="230"
             Height="42"
             Margin="0,0,0,0"
             HorizontalAlignment="Right"
             Orientation="Horizontal">
             <Button
                 x:Name="BtnCancel"
-                Width="90"
+                Width="100"
                 Height="30"
                 Margin="6"
                 Click="BtnCancel_Click"
                 Content="取消" />
             <Button
                 x:Name="BtnLogin"
-                Width="90"
+                Width="100"
                 Height="30"
                 Margin="6"
                 Click="BtnLogin_Click"
                 Content="登录" />
         </StackPanel>
 
-        <StackPanel
-            Grid.Row="6"
-            Grid.RowSpan="2"
+        <StackPanel x:Name="ServerSettingsPanel"
+            Grid.Row="7"
             Margin="4,0,4,5"
+            Visibility="Collapsed"
             Orientation="Vertical">
             <Separator Margin="0,0,0,8" />
             <TextBlock
@@ -134,34 +162,60 @@
                 x:Name="Login_ServerIP"
                 Height="26"
                 Style="{StaticResource WatermarkTextBoxStyle}"
-                Tag="例如：127.0.0.1" />
+                Tag="例如：服务器 IP 或主机名" />
 
             <TextBlock
                 Margin="2,8,0,2"
                 FontSize="12"
-                Text="端口：" />
+                Text="数据库端口：" />
             <TextBox
                 x:Name="Login_DataBaseserverPort"
                 Height="26"
                 PreviewTextInput="TxtServerPort_PreviewTextInput" />
+            <TextBlock
+                Margin="2,8,0,2"
+                FontSize="12"
+                Text="API 服务端口：" />
+            <TextBox
+                x:Name="Login_ApiPort"
+                Height="26"
+                PreviewTextInput="TxtServerPort_PreviewTextInput" />
         </StackPanel>
+
+        <Button x:Name="BtnToggleServerSettings"
+            Grid.Row="5"
+            Height="22"
+            Margin="4,4,0,2"
+            HorizontalAlignment="Left"
+            Padding="0"
+            Background="Transparent"
+            BorderThickness="0"
+            Click="BtnToggleServerSettings_Click"
+            Content="显示服务器配置"
+            FontSize="11"
+            Foreground="#0078D4"
+            HorizontalContentAlignment="Left"
+            VerticalContentAlignment="Center" />
 
         <!--  状态显示：用于在代码中更新登录、保存等状态  -->
         <TextBlock
             x:Name="TxtStatus"
-            Grid.Row="8"
-            Grid.RowSpan="3"
-            Margin="6,0,6,26"
+            Grid.Row="9"
+            Margin="6,4,6,4"
             FontSize="12"
             Foreground="Gray"
             Text="状态信息"
-            TextWrapping="Wrap" />
+            TextWrapping="Wrap"
+            VerticalAlignment="Top"
+            Visibility="Collapsed" />
 
         <StackPanel
-            Grid.Row="10"
+            x:Name="ServerActionsPanel"
+            Grid.Row="11"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
-            Orientation="Horizontal">
+            Orientation="Horizontal"
+            Visibility="Collapsed">
             <Button
                 x:Name="BtnTestServer测试服务器"
                 Width="100"
@@ -174,7 +228,7 @@
                 Width="150"
                 Height="24"
                 Click="BtnSaveServer_Click"
-                Content="保存服务器\端口" />
+                Content="保存服务器配置" />
         </StackPanel>
     </Grid>
 </Window>

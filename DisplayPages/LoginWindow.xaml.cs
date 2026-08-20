@@ -75,6 +75,7 @@ namespace GB_NewCadPlus_IV
                 "GB_CADPLUS",
                 "login_config.json");//C:\Users\ShiGu\AppData\Local\GB_CADPLUS\Logs
 
+            ApiEndpoint.LoadDefaults();
             LoadConfig();//加载配置
             Loaded += LoginWindow_Loaded;//注册窗口加载事件处理程序
         }
@@ -88,7 +89,10 @@ namespace GB_NewCadPlus_IV
             {
                 // 1. 确保服务器 IP 有默认值
                 if (string.IsNullOrWhiteSpace(Login_ServerIP.Text))
-                    Login_ServerIP.Text = "127.0.0.1";
+                    Login_ServerIP.Text = VariableDictionary._serverIP;
+
+                if (string.IsNullOrWhiteSpace(Login_ApiPort.Text))
+                    Login_ApiPort.Text = VariableDictionary._apiPort.ToString();
 
                 // 2. 确定当前数据库类型（UI > VariableDictionary > 默认 "DM"）
                 string selectedDb = ResolveSelectedDatabaseType();
@@ -100,16 +104,24 @@ namespace GB_NewCadPlus_IV
                 // 4. 将 UI 状态同步到全局变量（统一操作，消除分散赋值）
                 SyncUiToGlobalVariables();
 
+                if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
+                {
+                    TxtStatus.Text = "请填写服务器 IP 地址后再连接。";
+                    CmbDepartments.ItemsSource = null;
+                    Login_ServerIP.Focus();
+                    return;
+                }
+
                 // 5. 检测服务器 API 端口；数据库端口只供后续数据库连接使用。
                 int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-                TxtStatus.Text = $"正在检测服务器连接... (数据库类型: {selectedDb})";
+                TxtStatus.Text = $"正在检测 API 连接... ({ApiEndpoint.GetDisplayAddress()}，数据库类型: {selectedDb})";
                 bool tcpOk = await Task.Run(() =>
                     TestNetworkConnection(VariableDictionary._serverIP,
                         apiPort, 3000));
 
                 if (!tcpOk)
                 {
-                    TxtStatus.Text = $"无法连接到服务器 {VariableDictionary._serverIP}:{apiPort}，请检查服务器 API 是否启动。";
+                    TxtStatus.Text = $"无法连接到 API {ApiEndpoint.GetDisplayAddress()}，请检查正式服务器 API 是否启动。";
                     CmbDepartments.ItemsSource = null;
                     return;
                 }
@@ -118,7 +130,7 @@ namespace GB_NewCadPlus_IV
                 bool loaded = await TryLoadDepartmentsAsync(VariableDictionary._serverIP, apiPort);
                 if (loaded)
                 {
-                    TxtStatus.Text = $"已连接 {selectedDb} 并加载部门。";
+                    TxtStatus.Text = $"已连接 API {ApiEndpoint.GetDisplayAddress()} 并加载部门。";
                 }
                 else
                 {
@@ -131,6 +143,53 @@ namespace GB_NewCadPlus_IV
                 LogManager.Instance.LogError($"LoginWindow_Loaded 异常: {ex}");
                 TxtStatus.Text = "初始化窗口时发生错误。";
             }
+        }
+
+        private void BtnToggleServerSettings_Click(object sender, RoutedEventArgs e)
+        {
+            bool isVisible = ServerSettingsPanel.Visibility == System.Windows.Visibility.Visible;
+            var newVisibility = isVisible
+                ? System.Windows.Visibility.Collapsed
+                : System.Windows.Visibility.Visible;
+
+            ServerSettingsPanel.Visibility = isVisible
+                ? System.Windows.Visibility.Collapsed
+                : System.Windows.Visibility.Visible;
+            TxtStatus.Visibility = newVisibility;
+            ServerActionsPanel.Visibility = newVisibility;
+            BtnToggleServerSettings.Content = isVisible ? "显示服务器配置" : "隐藏服务器配置";
+            Height = isVisible ? 300 : 650;
+        }
+
+        private void BtnTogglePassword_Click(object sender, RoutedEventArgs e)
+        {
+            bool isPasswordVisible = Login_PasswordVisible.Visibility == System.Windows.Visibility.Visible;
+
+            if (isPasswordVisible)
+            {
+                Login_Password.Password = Login_PasswordVisible.Text;
+                Login_PasswordVisible.Visibility = System.Windows.Visibility.Collapsed;
+                Login_Password.Visibility = System.Windows.Visibility.Visible;
+                BtnTogglePassword.Content = "👁";
+                BtnTogglePassword.ToolTip = "显示密码";
+                Login_Password.Focus();
+            }
+            else
+            {
+                Login_PasswordVisible.Text = Login_Password.Password;
+                Login_Password.Visibility = System.Windows.Visibility.Collapsed;
+                Login_PasswordVisible.Visibility = System.Windows.Visibility.Visible;
+                BtnTogglePassword.Content = "🙈";
+                BtnTogglePassword.ToolTip = "隐藏密码";
+                Login_PasswordVisible.Focus();
+                Login_PasswordVisible.CaretIndex = Login_PasswordVisible.Text.Length;
+            }
+        }
+
+        private void Login_PasswordVisible_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (Login_PasswordVisible.Visibility == System.Windows.Visibility.Visible)
+                Login_Password.Password = Login_PasswordVisible.Text;
         }
 
         /// <summary>
@@ -153,6 +212,7 @@ namespace GB_NewCadPlus_IV
                 // 恢复基本连接信息
                 Login_ServerIP.Text = cfg.ServerIP ?? string.Empty; // 登录服务器 IP
                 Login_DataBaseserverPort.Text = cfg.DataBaseserverPort ?? string.Empty; // 登录服务器端口
+                Login_ApiPort.Text = cfg.ApiPort ?? string.Empty; // API 服务端口
                 Login_Username.Text = cfg.Username ?? string.Empty; // 登录用户名
                 _savedUsername = Login_Username.Text.Trim();
 
@@ -323,7 +383,9 @@ namespace GB_NewCadPlus_IV
             VariableDictionary._dbPassWord = (dbType == "MYSQL") ? "123456" : "675756SGBsgb";
 
             // API 端口（固定值）
-            VariableDictionary._apiPort = 10010;
+            VariableDictionary._apiPort = int.TryParse(Login_ApiPort.Text.Trim(), out int apiPort) && apiPort > 0
+                ? apiPort
+                : 10010;
         }
 
         #endregion
@@ -404,10 +466,10 @@ namespace GB_NewCadPlus_IV
                 }
             }
             catch { }
-            VariableDictionary._databaseType = CmbDatabaseType.SelectedItem?.ToString(); // 尝试从 UI 读取数据库类型，后续认证逻辑会根据这个值分支处理
+            VariableDictionary._databaseType = ResolveSelectedDatabaseType(); // 使用 ComboBoxItem.Content 获取数据库类型，避免得到控件类型名
             VariableDictionary._serverIP = Login_ServerIP.Text.Trim(); // 更新全局服务器 IP
             VariableDictionary._dataBaseServerPort = int.TryParse(Login_DataBaseserverPort.Text.Trim(), out int port) ? port : 5236; // 更新全局数据库端口
-            VariableDictionary._apiPort = 10010; // API 端口固定为 10010，后续可改为 UI 可配置
+            VariableDictionary._apiPort = int.TryParse(Login_ApiPort.Text.Trim(), out int apiPort) && apiPort > 0 ? apiPort : 10010;
             VariableDictionary._userName = Login_Username.Text.Trim(); // 更新全局用户名
             VariableDictionary._passWord = Login_Password.Password.Trim(); // 更新全局密码
 
@@ -427,8 +489,8 @@ namespace GB_NewCadPlus_IV
             BtnLogin.IsEnabled = false; // 禁用登录按钮，防止重复点击
             TxtStatus.Text = "正在连接并验证用户..."; // 更新状态提示
             // 1) 先做快速 TCP 连通性检测；失败则直接退回 FormMain
-            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, apiPort));
+            int currentApiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
+            bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, currentApiPort));
             if (!tcpOk)
             {
                 TxtStatus.Text = "无法连接服务器，将进入本地工具界面。";
@@ -598,9 +660,6 @@ namespace GB_NewCadPlus_IV
             }
             catch { }
 
-            SaveConfig(ChkSavePassword.IsChecked == true);//保存登录配置
-
-            // 尝试用新配置连接并加载部门
             VariableDictionary._serverIP = Login_ServerIP.Text.Trim();
             if (string.IsNullOrWhiteSpace(VariableDictionary._serverIP))
             {
@@ -609,21 +668,27 @@ namespace GB_NewCadPlus_IV
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(Login_DataBaseserverPort.Text))
+            if (!int.TryParse(Login_DataBaseserverPort.Text.Trim(), out int databasePort) || databasePort <= 0 || databasePort > 65535)
             {
-                MessageBox.Show("请填写服务器端口。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("请输入有效的数据库端口（1-65535）。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                 Login_DataBaseserverPort.Focus();
                 return;
             }
-            else
+
+            if (!int.TryParse(Login_ApiPort.Text.Trim(), out int apiPort) || apiPort <= 0 || apiPort > 65535)
             {
-                VariableDictionary._dataBaseServerPort = Convert.ToInt32(Login_DataBaseserverPort.Text);
+                MessageBox.Show("请输入有效的 API 服务端口（1-65535）。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Login_ApiPort.Focus();
+                return;
             }
+
+            VariableDictionary._dataBaseServerPort = databasePort;
+            VariableDictionary._apiPort = apiPort;
+            SaveConfig(ChkSavePassword.IsChecked == true);//保存登录配置
 
             TxtStatus.Text = "正在连接服务器...";
 
             // 先做 TCP 层检测，快速反馈
-            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
             bool tcpOk = await Task.Run(() => TestNetworkConnection(VariableDictionary._serverIP, apiPort));
             if (!tcpOk)
             {
@@ -785,22 +850,75 @@ namespace GB_NewCadPlus_IV
 
         private async void BtnTestServer测试服务器_Click(object sender, RoutedEventArgs e)
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             BtnTestServer测试服务器.IsEnabled = false;
             TxtStatus.Text = "正在测试服务器连接...";
             try
             {
-                VariableDictionary._serverIP = Login_ServerIP.Text.Trim();
-                VariableDictionary._apiPort = 10010;
+                string host = Login_ServerIP.Text.Trim();
+                string databasePortText = Login_DataBaseserverPort.Text.Trim();
+                string apiPortText = Login_ApiPort.Text.Trim();
+                string databaseType = ResolveSelectedDatabaseType();
+
+                LogManager.Instance.LogInfo(
+                    $"测试服务器开始：输入配置 ServerIP={host}, DatabasePort={databasePortText}, ApiPort={apiPortText}, DatabaseType={databaseType}");
+
+                if (string.IsNullOrWhiteSpace(host))
+                {
+                    LogManager.Instance.LogWarning("测试服务器终止：服务器 IP 为空。");
+                    TxtStatus.Text = "操作失败：请填写服务器 IP。";
+                    Login_ServerIP.Focus();
+                    return;
+                }
+
+                if (!int.TryParse(apiPortText, out int apiPort) || apiPort <= 0 || apiPort > 65535)
+                {
+                    LogManager.Instance.LogWarning($"测试服务器终止：API 端口无效，ApiPort={apiPortText}。");
+                    TxtStatus.Text = "操作失败：请输入有效的 API 服务端口。";
+                    Login_ApiPort.Focus();
+                    return;
+                }
+
+                bool databasePortValid = int.TryParse(databasePortText, out int databasePort)
+                    && databasePort > 0
+                    && databasePort <= 65535;
+
+                VariableDictionary._serverIP = host;
+                VariableDictionary._apiPort = apiPort;
+                VariableDictionary._dataBaseServerPort = databasePortValid ? databasePort : 0;
+                VariableDictionary._databaseType = databaseType;
+
+                LogManager.Instance.LogInfo(
+                    $"测试服务器目标已确定：API={host}:{apiPort}, DM/数据库={host}:{(databasePortValid ? databasePort.ToString() : "无效端口")}, Scheme=http");
+
+                var tcpStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                bool tcpOk = await Task.Run(() => TestNetworkConnection(host, apiPort, 5000));
+                tcpStopwatch.Stop();
+                LogManager.Instance.LogInfo(
+                    $"测试服务器 API TCP 检测结束：Target={host}:{apiPort}, Success={tcpOk}, ElapsedMs={tcpStopwatch.ElapsedMilliseconds}");
+
+                if (!tcpOk)
+                {
+                    TxtStatus.Text = $"操作失败：无法连接 API {host}:{apiPort}。";
+                    return;
+                }
+
+                LogManager.Instance.LogInfo($"测试服务器开始请求部门接口：GET {ApiEndpoint.Build("api/departments")}");
                 var departments = await new DepartmentApiService().GetDepartmentsWithCountsAsync();
+                LogManager.Instance.LogInfo(
+                    $"测试服务器部门接口成功：DepartmentCount={departments.Count}, ElapsedMs={stopwatch.ElapsedMilliseconds}");
                 TxtStatus.Text = $"服务器连接成功，已读取 {departments.Count} 个部门。";
             }
             catch (Exception ex)
             {
+                LogManager.Instance.LogError($"测试服务器失败：ElapsedMs={stopwatch.ElapsedMilliseconds}, ExceptionType={ex.GetType().FullName}, Message={ex.Message}");
                 TxtStatus.Text = $"操作失败：{ex.Message}";
                 Console.WriteLine($"错误：{ex.Message}");
             }
             finally
             {
+                stopwatch.Stop();
+                LogManager.Instance.LogInfo($"测试服务器结束：ElapsedMs={stopwatch.ElapsedMilliseconds}");
                 BtnTestServer测试服务器.IsEnabled = true; // 恢复按钮可用状态
             }
         }
@@ -813,6 +931,7 @@ namespace GB_NewCadPlus_IV
     {
         public string ServerIP { get; set; }
         public string DataBaseserverPort { get; set; }
+        public string ApiPort { get; set; }
         public string Username { get; set; }
         public bool SavePassword { get; set; }
         public string EncryptedPassword { get; set; }

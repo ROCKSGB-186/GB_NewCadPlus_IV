@@ -32,17 +32,7 @@ namespace GB_NewCadPlus_IV.Helpers
         public async Task<CategoryTreeApiResponse> GetCategoryTreeAsync(CancellationToken cancellationToken = default)
         {
             // 读取登录窗口保存的服务器 IP；没有配置时使用本机地址作为开发环境兜底。
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-
-            // 使用登录窗口统一保存的 API 端口；没有配置时使用服务器默认端口 10010。
-            int apiPort = VariableDictionary._apiPort > 0
-                ? VariableDictionary._apiPort
-                : 10010;
-
-            // 组合分类树接口地址。
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/categories/tree";
+            string requestUrl = ApiEndpoint.Build("api/categories/tree");
 
             try
             {
@@ -123,16 +113,7 @@ namespace GB_NewCadPlus_IV.Helpers
                     "主分类ID必须大于0且小于10000。");
             }
 
-            // 读取服务器地址和 API 端口配置。
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-            int apiPort = VariableDictionary._apiPort > 0
-                ? VariableDictionary._apiPort
-                : 10010;
-
-            // 组合主分类删除接口地址。
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/categories/{categoryId}";
+            string requestUrl = ApiEndpoint.Build($"api/categories/{categoryId}");
 
             try
             {
@@ -200,17 +181,7 @@ namespace GB_NewCadPlus_IV.Helpers
             CancellationToken cancellationToken = default)
         {
             // 读取登录窗口保存的服务器 IP。
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-
-            // 读取服务器 API 端口。
-            int apiPort = VariableDictionary._apiPort > 0
-                ? VariableDictionary._apiPort
-                : 10010;
-
-            // 组合新增主分类接口地址。
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/categories";
+            string requestUrl = ApiEndpoint.Build("api/categories");
 
             // 使用服务器 DTO 发送 JSON，客户端不再直接访问数据库。
             var request = new AddCategoryApiRequest
@@ -307,17 +278,7 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             // 读取服务器地址配置。
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-
-            // 读取服务器 API 端口配置。
-            int apiPort = VariableDictionary._apiPort > 0
-                ? VariableDictionary._apiPort
-                : 10010;
-
-            // 组合新增子分类接口地址。
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/categories/{parentId}/subcategories";
+            string requestUrl = ApiEndpoint.Build($"api/categories/{parentId}/subcategories");
 
             // 使用服务器 DTO 发送请求，客户端不再生成 ID、层级或更新父级列表。
             var request = new AddSubcategoryApiRequest
@@ -410,17 +371,7 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             // 读取服务器地址配置。
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-
-            // 读取服务器 API 端口配置。
-            int apiPort = VariableDictionary._apiPort > 0
-                ? VariableDictionary._apiPort
-                : 10010;
-
-            // 组合删除子分类接口地址。
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/categories/subcategories/{subcategoryId}";
+            string requestUrl = ApiEndpoint.Build($"api/categories/subcategories/{subcategoryId}");
 
             try
             {
@@ -500,13 +451,7 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             // 组合分类更新接口地址。
-            string serverIp = string.IsNullOrWhiteSpace(VariableDictionary._serverIP)
-                ? "127.0.0.1"
-                : VariableDictionary._serverIP.Trim();
-            int apiPort = VariableDictionary._apiPort > 0
-                ? VariableDictionary._apiPort
-                : 10010;
-            string requestUrl = $"http://{serverIp}:{apiPort}/api/categories/{categoryId}";
+            string requestUrl = ApiEndpoint.Build($"api/categories/{categoryId}");
 
             // 按服务端 DTO 结构构造请求，客户端不直接拼接 SQL。
             var request = new CategoryUpdateApiRequest

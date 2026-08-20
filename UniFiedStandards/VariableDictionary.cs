@@ -24,7 +24,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
         /// <summary>
         /// 默认为 10010，后续可从配置文件中动态加载
         /// </summary>
-        public static int _apiPort = 10010; 
+        public static int _apiPort;
         /// <summary>
         /// 数据库名称
         /// </summary>

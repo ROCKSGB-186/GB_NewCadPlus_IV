@@ -224,6 +224,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
         {
             var server = ExtractConnectionStringValue(connectionString, "Server")
                 ?? ExtractConnectionStringValue(connectionString, "Host")
+                ?? VariableDictionary._serverIP
                 ?? "127.0.0.1";
             var port = ExtractConnectionStringValue(connectionString, "Port") ?? "5236";
             var user = ExtractConnectionStringValue(connectionString, "User Id")

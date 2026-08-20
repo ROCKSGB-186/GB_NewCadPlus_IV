@@ -621,9 +621,7 @@ namespace GB_NewCadPlus_IV.FunctionalMethod
             if (!File.Exists(localPath)) throw new FileNotFoundException("本地替换文件不存在", localPath);
 
             // 1. 构建 URL
-            string serverIp = VariableDictionary._serverIP ?? "127.0.0.1";
-            int port = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            string url = $"http://{serverIp}:{port}/api/graphics/{storage.Id}/file";
+            string url = ApiEndpoint.Build($"api/graphics/{storage.Id}/file");
 
             using var httpClient = new HttpClient();
             using var form = new MultipartFormDataContent();

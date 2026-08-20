@@ -23,9 +23,7 @@ namespace GB_NewCadPlus_IV.Helpers
         /// </summary>
         private static string GetServerBaseUrl()
         {
-            string ip = VariableDictionary._serverIP ?? "127.0.0.1";
-            int apiPort = VariableDictionary._apiPort > 0 ? VariableDictionary._apiPort : 10010;
-            return $"http://{ip}:{apiPort}";
+            return ApiEndpoint.GetBaseUrl();
         }
 
         /// <summary>
