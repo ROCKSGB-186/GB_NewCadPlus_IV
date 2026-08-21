@@ -1668,7 +1668,6 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// TabControl 选择改变处理（打开分类面板或加载 CSV 表）
         /// </summary>
-        // 异步处理 TabControl 选择变更事件
         private async void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try

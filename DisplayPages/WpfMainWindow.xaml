@@ -226,7 +226,8 @@
                             Background="Azure"
                             ItemContainerStyle="{StaticResource VerticalTabStyle}"
                             SelectionChanged="TabControl_SelectionChanged"
-                            TabStripPlacement="Left">
+                            TabStripPlacement="Left"
+                            SelectedItem="工艺">
                             <TabItem x:Name="公用工具"
                                 Height="68"
                                 FontSize="12"
