@@ -140,6 +140,56 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 将用户确认的属性补充为当前块参照的隐藏 AttributeReference。
+        /// </summary>
+        public int EnsureEditedAttributes(
+            Transaction transaction,
+            BlockReference blockReference,
+            IDictionary<string, string> editedProperties)
+        {
+            // 参数无效时不创建属性，避免误修改当前图纸。
+            if (transaction == null || blockReference == null || editedProperties == null || editedProperties.Count == 0)
+            {
+                return 0;
+            }
+
+            // 先收集当前块参照已经存在的属性 Tag，避免重复创建块属性定义。
+            var existingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ObjectId attributeId in blockReference.AttributeCollection)
+            {
+                if (transaction.GetObject(attributeId, OpenMode.ForRead) is AttributeReference attribute &&
+                    !string.IsNullOrWhiteSpace(attribute.Tag))
+                {
+                    existingTags.Add(NormalizeTag(attribute.Tag));
+                }
+            }
+
+            // 仅为缺失字段创建隐藏属性；已有字段仍由原有回写逻辑更新值。
+            int createdCount = 0;
+            foreach (KeyValuePair<string, string> property in editedProperties)
+            {
+                string tag = property.Key?.Trim() ?? string.Empty;
+                string normalizedTag = NormalizeTag(tag);
+                if (string.IsNullOrWhiteSpace(tag) ||
+                    string.IsNullOrWhiteSpace(normalizedTag) ||
+                    existingTags.Contains(normalizedTag))
+                {
+                    continue;
+                }
+
+                if (AddHiddenAttribute(transaction, blockReference, tag, property.Value ?? string.Empty))
+                {
+                    existingTags.Add(normalizedTag);
+                    createdCount++;
+                    LogManager.Instance.LogInfo(
+                        $"[插入前属性编辑新增AttributeReference] Tag={tag}, OldValue=<不存在>, NewValue={property.Value ?? string.Empty}, TargetObjectId={blockReference.ObjectId}");
+                }
+            }
+
+            return createdCount;
+        }
+
+        /// <summary>
         /// 判断属性 Tag 是否属于法兰标准字段。
         /// </summary>
         private static bool IsFlangeStandardTag(string normalizedTag)

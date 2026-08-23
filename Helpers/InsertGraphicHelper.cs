@@ -1,12 +1,14 @@
 using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Models;
 using GB_NewCadPlus_IV.UniFiedStandards;
+using GB_NewCadPlus_IV.Views;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Interop;
 using static GB_NewCadPlus_IV.Helpers.JsonHelper;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 
@@ -56,6 +58,328 @@ namespace GB_NewCadPlus_IV.Helpers
         private static bool TryEnterCopyDwgAllFastBusy()
         {
             return System.Threading.Interlocked.CompareExchange(ref _copyDwgAllFastBusyFlag, 1, 0) == 0;
+        }
+
+        /// <summary>
+        /// 在图元正式炸开前显示属性编辑窗口，并返回用户确认后的属性。
+        /// </summary>
+        private static bool TryEditPropertiesBeforeInsert(
+            DBTrans tr,
+            BlockReference blockReference,
+            string? title,
+            LogManager logger,
+            bool hasFlangeStandardMatch,
+            FlangeStandardMatchResponse? flangeStandardResponse,
+            out Dictionary<string, string> editedProperties)
+        {
+            editedProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var propertyMap = ReadInsertEditablePropertyMap(tr, blockReference, logger);
+
+            // 规范返回的字段可能在源图元中不存在，先补入编辑页面，保证 BOLT_HOLES 等字段可以参与计算。
+            if (flangeStandardResponse?.Success == true && flangeStandardResponse.Attributes != null)
+            {
+                foreach (KeyValuePair<string, string> standardProperty in flangeStandardResponse.Attributes)
+                {
+                    if (string.IsNullOrWhiteSpace(standardProperty.Key) || propertyMap.ContainsKey(standardProperty.Key)) continue;
+                    propertyMap[standardProperty.Key] = standardProperty.Value ?? string.Empty;
+                }
+
+                logger.LogInfo($"规范返回属性已补充到插入前编辑页面：属性数量={flangeStandardResponse.Attributes.Count}");
+            }
+
+            // 只有本次确实命中法兰/连接规范时，才加入新增的三个业务属性。
+            if (hasFlangeStandardMatch)
+            {
+                string boltHoles = FindProperty(propertyMap, "BOLT_HOLES") ?? string.Empty;
+                string connectionType = FindProperty(propertyMap, "CONN_TYPE") ?? string.Empty;
+                int flangeQuantity = GetInsertFlangeQuantity(connectionType);
+                int boltQuantity = flangeQuantity * ParseIntegerOrZeroForInsert(boltHoles);
+                propertyMap["FLG_QTY"] = flangeQuantity.ToString();
+                propertyMap["BOLT_QTY"] = boltQuantity.ToString();
+                propertyMap["BOLT_LENGTH"] = "0";
+                logger.LogInfo($"插入前法兰扩展属性已加入：连接方式={connectionType}, FLG_QTY={propertyMap["FLG_QTY"]}, BOLT_HOLES={boltHoles}, BOLT_QTY={propertyMap["BOLT_QTY"]}, BOLT_LENGTH=0");
+            }
+
+            logger.LogInfo($"插入前属性编辑窗口准备打开：属性数量={propertyMap.Count}");
+            try
+            {
+                var window = new InsertGraphicPropertyWindow(propertyMap, title);
+                window.SourceInitialized += (_, _) =>
+                {
+                    try
+                    {
+                        new WindowInteropHelper(window) { Owner = Application.MainWindow.Handle };
+                    }
+                    catch (Exception ownerEx)
+                    {
+                        logger.LogWarning($"设置插入属性窗口宿主失败，将继续显示窗口：{ownerEx.Message}");
+                    }
+                };
+
+                if (window.ShowDialog() != true)
+                {
+                    logger.LogInfo("用户在插入前属性编辑窗口中取消了插入。");
+                    return false;
+                }
+
+                editedProperties = window.GetEditedProperties();
+                logger.LogInfo($"用户确认插入图元：编辑后属性数量={editedProperties.Count}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"显示插入前属性编辑窗口失败：{ex.Message}");
+                return false;
+            }
+        }
+
+        private static int ParseIntegerOrZeroForInsert(string value)
+        {
+            if (int.TryParse(value?.Trim(), out int result)) return Math.Max(0, result);
+            if (double.TryParse(value?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double number))
+            {
+                return Math.Max(0, (int)Math.Round(number));
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// 根据插入前连接方式计算法兰数量。
+        /// </summary>
+        private static int GetInsertFlangeQuantity(string connectionType)
+        {
+            // 兼容页面选项和规范数据中可能出现的“法兰连接”“单侧法兰连接”等完整文本。
+            string value = connectionType?.Trim() ?? string.Empty;
+            if (value.Contains("单侧法兰", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (value.Contains("法兰", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains("对夹", StringComparison.OrdinalIgnoreCase)) return 2;
+            return 0;
+        }
+
+        /// <summary>
+        /// 将用户编辑后的属性写回块属性和 XRecord，允许用户将属性清空。
+        /// </summary>
+        private static void ApplyEditedPropertiesToEntity(
+            DBTrans tr,
+            Entity entity,
+            IDictionary<string, string> editedProperties,
+            LogManager logger)
+        {
+            // 参数无效时不执行任何数据库写入。
+            if (tr == null || entity == null || editedProperties == null || editedProperties.Count == 0) return;
+
+            // 块属性必须按实际 AttributeReference.Tag 匹配，不能只按字典键名匹配。
+            if (entity is BlockReference blockReference)
+            {
+                foreach (ObjectId attributeId in blockReference.AttributeCollection)
+                {
+                    if (tr.GetObject(attributeId, OpenMode.ForWrite) is not AttributeReference attribute) continue;
+
+                    string tag = (attribute.Tag ?? string.Empty).Trim();
+                    string decodedTag = PipelineCadPropertyKeyHelper.Decode(tag);
+                    if (!TryGetEditedValue(editedProperties, tag, decodedTag, out string newValue)) continue;
+
+                    string oldValue = attribute.TextString ?? string.Empty;
+                    if (string.Equals(oldValue, newValue, StringComparison.Ordinal)) continue;
+
+                    attribute.TextString = newValue;
+                    logger.LogInfo($"[插入前属性编辑赋值][AttributeReference] Tag={tag}, OldValue={oldValue}, NewValue={newValue}, TargetObjectId={entity.ObjectId}");
+                }
+            }
+
+            // 先创建不存在的属性记录，确保新增的 FLG_QTY、BOLT_QTY、BOLT_LENGTH 不会因源图元没有同名属性而丢失。
+            EnsureEditedPropertiesInXRecord(tr, entity, editedProperties, logger);
+
+            // XRecord 继续更新已有记录，保留原有字段类型和存储结构。
+            if (entity.ExtensionDictionary == ObjectId.Null) return;
+            if (tr.GetObject(entity.ExtensionDictionary, OpenMode.ForWrite) is not DBDictionary dictionary) return;
+
+            foreach (DBDictionaryEntry entry in dictionary)
+            {
+                if (tr.GetObject(entry.Value, OpenMode.ForWrite) is not Xrecord record) continue;
+                TypedValue[] values = record.Data?.AsArray() ?? Array.Empty<TypedValue>();
+                if (values.Length == 0) continue;
+
+                string key = PipelineCadPropertyKeyHelper.Decode((entry.Key ?? string.Empty).Trim());
+                if (string.Equals(entry.Key, PipelineCadPropertyKeyHelper.StorageKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    // 管道专用 XRecord 按“键、值”交替存储，偶数项为键，奇数项为值。
+                    var updatedValues = values.ToArray();
+                    bool changed = false;
+                    for (int index = 0; index + 1 < updatedValues.Length; index += 2)
+                    {
+                        string itemKey = updatedValues[index].Value?.ToString()?.Trim() ?? string.Empty;
+                        if (!TryGetEditedValue(editedProperties, itemKey, PipelineCadPropertyKeyHelper.Decode(itemKey), out string newValue)) continue;
+                        string oldValue = updatedValues[index + 1].Value?.ToString() ?? string.Empty;
+                        if (string.Equals(oldValue, newValue, StringComparison.Ordinal)) continue;
+                        updatedValues[index + 1] = new TypedValue(updatedValues[index + 1].TypeCode, ConvertValueByTypeCode(updatedValues[index + 1].TypeCode, newValue));
+                        changed = true;
+                        logger.LogInfo($"[插入前属性编辑赋值][XRecord] Tag={itemKey}, OldValue={oldValue}, NewValue={newValue}, TargetObjectId={entity.ObjectId}");
+                    }
+                    if (changed) record.Data = new ResultBuffer(updatedValues);
+                    continue;
+                }
+
+                if (!TryGetEditedValue(editedProperties, key, entry.Key, out string editedValue)) continue;
+                string oldText = values[0].Value?.ToString() ?? string.Empty;
+                if (string.Equals(oldText, editedValue, StringComparison.Ordinal)) continue;
+                // 重新组合首项和其余 TypedValue，保留原 XRecord 的附加数据项。
+                var rewrittenValues = new[]
+                {
+                    new TypedValue(values[0].TypeCode, ConvertValueByTypeCode(values[0].TypeCode, editedValue))
+                }
+                .Concat(values.Skip(1))
+                .ToArray();
+                record.Data = new ResultBuffer(rewrittenValues);
+                logger.LogInfo($"[插入前属性编辑赋值][XRecord] Tag={key}, OldValue={oldText}, NewValue={editedValue}, TargetObjectId={entity.ObjectId}");
+            }
+        }
+
+        /// <summary>
+        /// 按原始键、解码键及归一化键查找用户编辑值。
+        /// </summary>
+        private static bool TryGetEditedValue(
+            IDictionary<string, string> properties,
+            string firstKey,
+            string secondKey,
+            out string value)
+        {
+            if (properties.TryGetValue(firstKey, out value!)) return true;
+            if (!string.IsNullOrWhiteSpace(secondKey) && properties.TryGetValue(secondKey, out value!)) return true;
+            string normalized = NormalizePropertyKey(firstKey);
+            if (!string.IsNullOrWhiteSpace(normalized) && properties.TryGetValue(normalized, out value!)) return true;
+
+            // 编辑窗口只保留一个规范 Tag，因此需要按归一化结果反向匹配原始 Tag。
+            foreach (var property in properties)
+            {
+                if (string.Equals(NormalizePropertyKey(property.Key), normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value ?? string.Empty;
+                    return true;
+                }
+            }
+
+            value = string.Empty;
+            return false;
+        }
+
+        // 为实体扩展字典补充编辑窗口中的缺失属性，确保新增字段不会因源图元没有同名属性而丢失。
+        private static void EnsureEditedPropertiesInXRecord(
+            DBTrans tr,
+            Entity entity,
+            IDictionary<string, string> editedProperties,
+            LogManager logger)
+        {
+            if (tr == null || entity == null || editedProperties == null || editedProperties.Count == 0) return;
+
+            var existingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var attributeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (entity is BlockReference blockReference)
+            {
+                foreach (ObjectId attributeId in blockReference.AttributeCollection)
+                {
+                    if (tr.GetObject(attributeId, OpenMode.ForRead) is AttributeReference attribute)
+                    {
+                        string tag = PipelineCadPropertyKeyHelper.Decode((attribute.Tag ?? string.Empty).Trim());
+                        if (!string.IsNullOrWhiteSpace(tag))
+                        {
+                            string normalizedTag = NormalizePropertyKey(tag);
+                            attributeKeys.Add(normalizedTag);
+                            existingKeys.Add(normalizedTag);
+                        }
+                    }
+                }
+            }
+
+            if (entity.ExtensionDictionary == ObjectId.Null) entity.CreateExtensionDictionary();
+            if (tr.GetObject(entity.ExtensionDictionary, OpenMode.ForWrite) is not DBDictionary dictionary) return;
+
+            Xrecord? storageRecord = null;
+            foreach (DBDictionaryEntry entry in dictionary)
+            {
+                if (string.Equals(entry.Key, PipelineCadPropertyKeyHelper.StorageKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    storageRecord = tr.GetObject(entry.Value, OpenMode.ForWrite) as Xrecord;
+                    continue;
+                }
+
+                string key = PipelineCadPropertyKeyHelper.Decode((entry.Key ?? string.Empty).Trim());
+                if (!string.IsNullOrWhiteSpace(key)) existingKeys.Add(NormalizePropertyKey(key));
+            }
+
+            var storageValues = storageRecord?.Data?.AsArray()?.ToList() ?? new List<TypedValue>();
+            for (int index = 0; index + 1 < storageValues.Count; index += 2)
+            {
+                string key = storageValues[index].Value?.ToString()?.Trim() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(key)) existingKeys.Add(NormalizePropertyKey(key));
+            }
+
+            foreach (KeyValuePair<string, string> property in editedProperties)
+            {
+                string key = PipelineCadPropertyKeyHelper.Decode((property.Key ?? string.Empty).Trim());
+                if (string.IsNullOrWhiteSpace(key) || !existingKeys.Add(NormalizePropertyKey(key))) continue;
+
+                storageValues.Add(new TypedValue((int)DxfCode.Text, key));
+                storageValues.Add(new TypedValue((int)DxfCode.Text, property.Value ?? string.Empty));
+                logger.LogInfo($"[插入前属性编辑新增赋值][XRecord] Tag={key}, OldValue=<不存在>, NewValue={property.Value ?? string.Empty}, TargetObjectId={entity.ObjectId}");
+            }
+
+            // 统一存储记录保存全部确认后的字段，包含空值和 0，避免业务字段被过滤掉。
+            if (storageValues.Count > 0 && storageRecord == null)
+            {
+                storageRecord = new Xrecord { Data = new ResultBuffer(storageValues.ToArray()) };
+                dictionary.SetAt(PipelineCadPropertyKeyHelper.StorageKey, storageRecord);
+                tr.Transaction.AddNewlyCreatedDBObject(storageRecord, true);
+            }
+            else if (storageRecord != null && storageValues.Count > 0)
+            {
+                storageRecord.Data = new ResultBuffer(storageValues.ToArray());
+            }
+
+            // 为没有 AttributeReference 的字段额外建立独立 XRecord，兼容只按字典键读取属性的旧逻辑。
+            foreach (KeyValuePair<string, string> property in editedProperties)
+            {
+                string key = PipelineCadPropertyKeyHelper.Decode((property.Key ?? string.Empty).Trim());
+                string normalizedKey = NormalizePropertyKey(key);
+                if (string.IsNullOrWhiteSpace(key) ||
+                    string.Equals(key, PipelineCadPropertyKeyHelper.StorageKey, StringComparison.OrdinalIgnoreCase) ||
+                    attributeKeys.Contains(normalizedKey)) continue;
+
+                string encodedKey = PipelineCadPropertyKeyHelper.Encode(key);
+                if (dictionary.Contains(encodedKey)) continue;
+
+                var propertyRecord = new Xrecord
+                {
+                    Data = new ResultBuffer(new TypedValue(
+                        (int)DxfCode.Text,
+                        property.Value ?? string.Empty))
+                };
+                dictionary.SetAt(encodedKey, propertyRecord);
+                tr.Transaction.AddNewlyCreatedDBObject(propertyRecord, true);
+                logger.LogInfo(
+                    $"[插入前属性编辑新增赋值][独立XRecord] Tag={key}, OldValue=<不存在>, NewValue={property.Value ?? string.Empty}, TargetObjectId={entity.ObjectId}");
+            }
+        }
+
+        // 按 XRecord 原字段类型转换编辑后的文本，避免修改属性时破坏 TypedValue 类型。
+        private static object ConvertValueByTypeCode(int typeCode, string value)
+        {
+            string text = value ?? string.Empty;
+            if (typeCode == 70 || typeCode == 71 || typeCode == 72 || typeCode == 73)
+            {
+                return short.TryParse(text, out short shortValue) ? shortValue : (short)0;
+            }
+            if (typeCode == 90 || typeCode == 91 || typeCode == 92 || typeCode == 93)
+            {
+                return int.TryParse(text, out int intValue) ? intValue : 0;
+            }
+            if (typeCode == 40 || typeCode == 41 || typeCode == 42 || typeCode == 43)
+            {
+                return double.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double doubleValue)
+                    ? doubleValue
+                    : 0.0;
+            }
+            return text;
         }
 
         /// <summary>
@@ -555,7 +879,7 @@ namespace GB_NewCadPlus_IV.Helpers
 
             try
             {
-                // 管道通常是 Line、Polyline 或其他 Curve，使用曲线最近点进行精确距离判断。
+                // 管道通常是 Line、Polyline 或其他 Curve，使用曲线最近点进行精確距离判断。
                 if (candidate is Curve curve)
                 {
                     Point3d closestPoint = curve.GetClosestPointTo(referencePoint, false);
@@ -627,7 +951,10 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 读取实体属性映射（支持：块属性 + 扩展字典XRecord）
         /// </summary>
-        private static Dictionary<string, string> ReadEntityPropertyMap(DBTrans tr, Entity entity)
+        private static Dictionary<string, string> ReadEntityPropertyMap(
+            DBTrans tr,
+            Entity entity,
+            bool skipEmptyOrZero = true)
         {
             // 创建不区分大小写字典，降低字段大小写差异影响
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -699,7 +1026,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             {
                                 string key = values[index].Value?.ToString()?.Trim() ?? string.Empty;
                                 string val = values[index + 1].Value?.ToString() ?? string.Empty;
-                                AddPropertyToMap(map, key, val);
+                                AddPropertyToMap(map, key, val, skipEmptyOrZero);
                             }
                         }
                         else
@@ -707,7 +1034,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             // 历史/普通 XRecord 仍使用“字典键作为属性名、首项作为属性值”。
                             string key = PipelineCadPropertyKeyHelper.Decode((entry.Key ?? string.Empty).Trim());
                             string val = values[0].Value?.ToString() ?? string.Empty;
-                            AddPropertyToMap(map, key, val);
+                            AddPropertyToMap(map, key, val, skipEmptyOrZero);
                         }
                     }
                 }
@@ -718,15 +1045,174 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 读取插入前编辑窗口需要显示的完整属性。
+        /// </summary>
+        private static Dictionary<string, string> ReadInsertEditablePropertyMap(
+            DBTrans tr,
+            Entity entity,
+            LogManager logger)
+        {
+            // 先保留原有读取结果，保证重叠继承和规范回写产生的属性仍然显示。
+            // 插入前编辑页面必须保留 0 和空值，否则用户确认后的完整字段会再次从页面中消失。
+            var map = ReadEntityPropertyMap(tr, entity, skipEmptyOrZero: false);
+            var visitedBlockDefinitions = new HashSet<ObjectId>();
+
+            // 递归扫描当前块、块定义和嵌套块，补充源 DWG 中实际保存的属性。
+            CollectInsertEditableProperties(tr, entity, map, visitedBlockDefinitions, 0);
+            // 窗口只显示一个业务 Tag，避免 TAG_NO/TAGNO 这类匹配别名重复出现。
+            map = CollapseInsertPropertyAliases(map);
+            logger.LogInfo($"插入前属性完整收集完成：属性数量={map.Count}");
+            return map;
+        }
+
+        /// <summary>
+        /// 折叠插入编辑窗口中的归一化别名，只保留一个最有业务含义的 Tag。
+        /// </summary>
+        private static Dictionary<string, string> CollapseInsertPropertyAliases(
+            IDictionary<string, string> source)
+        {
+            // 使用不区分大小写的字典，保证大小写不同的 Tag 也不会重复显示。
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (source == null || source.Count == 0) return result;
+
+            // 按归一化键分组，例如 TAG_NO 和 TAGNO 会进入同一组。
+            foreach (var group in source
+                .Where(item => !string.IsNullOrWhiteSpace(item.Key))
+                .GroupBy(item => NormalizePropertyKey(item.Key), StringComparer.OrdinalIgnoreCase))
+            {
+                // 优先保留下划线、点号等业务分隔符更完整的原始 Tag。
+                var selected = group
+                    .OrderByDescending(item => CountPropertySeparators(item.Key))
+                    .ThenBy(item => item.Key.Length)
+                    .First();
+
+                string selectedValue = selected.Value ?? string.Empty;
+
+                // 归一化键对应的值如果只是空值或 0，则优先采用同组中更有实际内容的值。
+                if (IsEmptyOrZeroPropertyValue(selectedValue))
+                {
+                    var meaningful = group.FirstOrDefault(item => !IsEmptyOrZeroPropertyValue(item.Value));
+                    if (!string.IsNullOrWhiteSpace(meaningful.Key))
+                    {
+                        selectedValue = meaningful.Value ?? string.Empty;
+                    }
+                }
+
+                result[selected.Key.Trim()] = selectedValue;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 统计 Tag 中用于区分业务字段的分隔符数量。
+        /// </summary>
+        private static int CountPropertySeparators(string key)
+        {
+            // 下划线和点号是当前项目中最常见的业务 Tag 分隔符。
+            return (key ?? string.Empty).Count(character => character == '_' || character == '.');
+        }
+
+        /// <summary>
+        /// 判断属性值是否为空或只是占位数值 0。
+        /// </summary>
+        private static bool IsEmptyOrZeroPropertyValue(string value)
+        {
+            // 只把空字符串和纯数字 0 当作占位值，不影响正常文本属性。
+            return string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "0", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// 递归收集块参照、块定义及嵌套块中的属性。
+        /// </summary>
+        private static void CollectInsertEditableProperties(
+            DBTrans tr,
+            Entity entity,
+            Dictionary<string, string> map,
+            HashSet<ObjectId> visitedBlockDefinitions,
+            int depth)
+        {
+            // 防止异常 DWG 的循环块引用造成无限递归。
+            if (tr == null || entity == null || map == null || visitedBlockDefinitions == null || depth > 20) return;
+
+            // 先读取当前实体直接拥有的 AttributeReference，即使值为空也要显示给用户编辑。
+            if (entity is BlockReference blockReference)
+            {
+                foreach (ObjectId attributeId in blockReference.AttributeCollection)
+                {
+                    if (tr.GetObject(attributeId, OpenMode.ForRead) is not AttributeReference attribute) continue;
+                    AddEditableProperty(map, attribute.Tag, attribute.TextString);
+                }
+
+                // 动态块属性也属于用户可编辑属性，读取其名称和值。
+                try
+                {
+                    foreach (DynamicBlockReferenceProperty property in blockReference.DynamicBlockReferencePropertyCollection)
+                    {
+                        if (property == null || string.IsNullOrWhiteSpace(property.PropertyName)) continue;
+                        AddEditableProperty(map, property.PropertyName, property.Value?.ToString());
+                    }
+                }
+                catch
+                {
+                    // 部分普通块不支持动态属性，读取失败不影响普通属性显示。
+                }
+
+                // 打开当前块定义并递归检查其 AttributeDefinition、嵌套块和扩展属性。
+                ObjectId blockDefinitionId = blockReference.BlockTableRecord;
+                if (!visitedBlockDefinitions.Add(blockDefinitionId)) return;
+                if (tr.GetObject(blockDefinitionId, OpenMode.ForRead) is not BlockTableRecord blockDefinition) return;
+
+                foreach (ObjectId childId in blockDefinition)
+                {
+                    if (tr.GetObject(childId, OpenMode.ForRead) is AttributeDefinition definition)
+                    {
+                        AddEditableProperty(map, definition.Tag, definition.TextString);
+                        continue;
+                    }
+
+                    if (tr.GetObject(childId, OpenMode.ForRead) is Entity childEntity)
+                    {
+                        CollectInsertEditableProperties(tr, childEntity, map, visitedBlockDefinitions, depth + 1);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 将属性加入编辑字典，不过滤空字符串，以便窗口能够显示空属性字段。
+        /// </summary>
+        private static void AddEditableProperty(
+            Dictionary<string, string> map,
+            string? rawKey,
+            string? rawValue)
+        {
+            // 清理 CAD Tag 并还原管道属性编码。
+            string key = PipelineCadPropertyKeyHelper.Decode((rawKey ?? string.Empty).Trim());
+            if (string.IsNullOrWhiteSpace(key)) return;
+
+            // 保存原始业务键和值。
+            map[key] = rawValue ?? string.Empty;
+
+            // 同时保存归一化键，兼容后续回写的大小写和特殊字符匹配。
+            string normalizedKey = NormalizePropertyKey(key);
+            if (!string.IsNullOrWhiteSpace(normalizedKey) && !map.ContainsKey(normalizedKey))
+            {
+                map[normalizedKey] = rawValue ?? string.Empty;
+            }
+        }
+
+        /// <summary>
         /// 将属性加入映射，同时保留原始键和归一化键，统一处理空值过滤。
         /// </summary>
         private static void AddPropertyToMap(
             Dictionary<string, string> map,
             string key,
-            string value)
+            string value,
+            bool skipEmptyOrZero = true)
         {
             if (map == null || string.IsNullOrWhiteSpace(key)) return;
-            if (ShouldSkipInheritedValue(value)) return;
+            if (skipEmptyOrZero && ShouldSkipInheritedValue(value)) return;
 
             map[key] = value ?? string.Empty;
             string normalizedKey = NormalizePropertyKey(key);
@@ -790,44 +1276,6 @@ namespace GB_NewCadPlus_IV.Helpers
                 LogManager.Instance.LogInfo(
                     $"[属性继承赋值][AttributeReference] Tag={tag}, OldValue={oldValue}, NewValue={newValue}, TargetObjectId={targetBr.ObjectId}");
             }
-        }
-
-        /// <summary>
-        /// 根据目标 TypedValue 的类型码把字符串转换为对应对象（用于尽量保持 XRecord 原类型）
-        /// </summary>
-        private static object ConvertValueByTypeCode(int typeCode, string raw)
-        {
-            // 空值统一按空串处理
-            string text = raw ?? string.Empty;
-
-            // 整型类型码分支
-            if (typeCode == (int)DxfCode.Int16 ||
-                typeCode == (int)DxfCode.Int32 ||
-                typeCode == (int)DxfCode.Int64 ||
-                typeCode == (int)DxfCode.ExtendedDataInteger16 ||
-                typeCode == (int)DxfCode.ExtendedDataInteger32)
-            {
-                // 尽量转整型，失败回退原字符串
-                if (int.TryParse(text, out int iv)) return iv;
-                return text;
-            }
-
-            // 实数类型码分支
-            if (typeCode == (int)DxfCode.Real ||
-                typeCode == (int)DxfCode.ExtendedDataReal)
-            {
-                // 先按不变文化解析
-                if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double dv))
-                    return dv;
-                // 再按当前文化解析
-                if (double.TryParse(text, out dv))
-                    return dv;
-                // 失败回退字符串
-                return text;
-            }
-
-            // 默认按字符串写入
-            return text;
         }
 
         /// <summary>
@@ -1055,7 +1503,7 @@ namespace GB_NewCadPlus_IV.Helpers
             "CREATEDBY","UPDATEDBY","USER","USERNAME","OWNER", "VERSION","REVISION","REV", "FILENAME","FILEPATH",
             "FILEHASH","PREVIEWIMAGEPATH","PREVIEWIMAGENAME", "BLOCKNAME","LAYERNAME", "NAME", "名称"
         };
-
+ 
 
 
 
@@ -1480,6 +1928,25 @@ namespace GB_NewCadPlus_IV.Helpers
 
                         // ================== 结束核心新功能 ==================
 
+                        // 规范匹配及规范属性回写完成后，先让用户确认并编辑最终要插入的图元属性。
+                        if (!TryEditPropertiesBeforeInsert(
+                             tr,
+                             fileEntity,
+                             insertContext?.CategoryPath,
+                             logger,
+                             flangeStandardResponse?.Success == true,
+                             flangeStandardResponse,
+                             out var editedProperties))
+                        {
+                            // 用户取消或窗口异常时必须在炸开前退出，事务不会把临时插入保存到当前图纸。
+                            failReason = "用户取消插入或属性编辑窗口打开失败。";
+                            tr.Abort();
+                            return;
+                        }
+
+                        // 将用户确认后的值写回原始块，随后炸开时这些值会随属性引用进入最终图元。
+                        ApplyEditedPropertiesToEntity(tr, fileEntity, editedProperties, logger);
+
                         // 创建集合 newIds 用于存储分解后产生的所有新实体
                         var newIds = new DBObjectCollection();
 
@@ -1519,6 +1986,28 @@ namespace GB_NewCadPlus_IV.Helpers
                             insertedEntities,
                             flangeStandardResponse,
                             logger);
+
+                        // 规范同步完成后，为确认窗口中缺失的字段创建隐藏 AttributeReference。
+                        // 这样字段不仅保存在 XRecord 中，也会出现在最终图块属性集合中。
+                        foreach (Entity insertedEntity in insertedEntities)
+                        {
+                            if (insertedEntity is BlockReference insertedBlockReference)
+                            {
+                                int createdAttributeCount = new StandardPropertySyncService()
+                                    .EnsureEditedAttributes(
+                                        tr.Transaction,
+                                        insertedBlockReference,
+                                        editedProperties);
+                                logger.LogInfo(
+                                    $"炸开后插入属性定义补充完成：ObjectId={insertedBlockReference.ObjectId}, 新增AttributeReference数量={createdAttributeCount}");
+                            }
+                        }
+
+                        // 规范同步完成后再次应用用户编辑值，确保用户修改优先于默认规范值。
+                        foreach (Entity insertedEntity in insertedEntities)
+                        {
+                            ApplyEditedPropertiesToEntity(tr, insertedEntity, editedProperties, logger);
+                        }
 
                         // 检查是否有待创建的标注文本 dimString
                         if (VariableDictionary.dimString != null)
@@ -1607,10 +2096,10 @@ namespace GB_NewCadPlus_IV.Helpers
             var existingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ObjectId attributeId in blockReference.AttributeCollection)
             {
-                if (tr.GetObject(attributeId, OpenMode.ForRead) is AttributeReference attribute &&
-                    !string.IsNullOrWhiteSpace(attribute.Tag))
+                if (tr.GetObject(attributeId, OpenMode.ForRead) is AttributeReference attribute)
                 {
-                    existingTags.Add(NormalizePropertyKey(attribute.Tag));
+                    string tag = PipelineCadPropertyKeyHelper.Decode((attribute.Tag ?? string.Empty).Trim());
+                    if (!string.IsNullOrWhiteSpace(tag)) existingTags.Add(NormalizePropertyKey(tag));
                 }
             }
 
@@ -1618,7 +2107,7 @@ namespace GB_NewCadPlus_IV.Helpers
             var blockDefinition = tr.GetObject(blockReference.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
             if (blockDefinition == null || !blockDefinition.HasAttributeDefinitions) return;
 
-            int createdCount = 0;
+            // 遍历 AttributeDefinition，同时检查 Tag 和 Prompt
             foreach (ObjectId entityId in blockDefinition)
             {
                 if (!(tr.GetObject(entityId, OpenMode.ForRead) is AttributeDefinition attributeDefinition) ||
@@ -1638,16 +2127,6 @@ namespace GB_NewCadPlus_IV.Helpers
                 blockReference.AttributeCollection.AppendAttribute(attributeReference);
                 tr.Transaction.AddNewlyCreatedDBObject(attributeReference, true);
                 existingTags.Add(normalizedTag);
-                createdCount++;
-
-                // 记录关键属性，便于确认蝶阀属性是否已经初始化
-                logger?.LogInfo(
-                    $"补齐插入块属性引用：Tag={attributeDefinition.Tag}, Prompt={attributeDefinition.Prompt}, DefaultValue={attributeDefinition.TextString}, TargetObjectId={blockReference.ObjectId}");
-            }
-
-            if (createdCount > 0)
-            {
-                logger?.LogInfo($"插入块属性引用初始化完成：ObjectId={blockReference.ObjectId}, 新增数量={createdCount}");
             }
         }
 
@@ -2292,8 +2771,8 @@ namespace GB_NewCadPlus_IV.Helpers
                 var uiScale = AutoCadHelper.GetScale(); // 获取当前图纸的比例，作为块的默认插入比例
                 var plScale = 0.3 * uiScale; // 多段线宽度缩放比例，基于 UI 比例计算
                 Directory.CreateDirectory(GetPath.referenceFile); // 确保参考文件目录存在
-                if (VariableDictionary.btnFileName == null) return; // 若按钮名为空则直接返回
-                if (VariableDictionary.resourcesFile == null) return; // 若资源文件为空则直接返回
+                if (VariableDictionary.btnFileName == null) return; // 判断点现的按键名是不是空；
+                if (VariableDictionary.resourcesFile == null) return; // 判断点现的原文件是不是空；
 
                 using var tr = new DBTrans(); // 使用事务包装对图形数据库的修改
 

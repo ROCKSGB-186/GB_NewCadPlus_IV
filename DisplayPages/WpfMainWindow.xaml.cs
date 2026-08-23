@@ -1438,35 +1438,42 @@ namespace GB_NewCadPlus_IV
         /// <summary>
         /// 为单个 FileStorage 创建按钮（显示名称、绑定 Tag、并注册拖拽/点击事件）
         /// </summary>
+        /// <summary>
+        /// 创建一个用于在 WrapPanel 或 StackPanel 中显示的按钮，表示一个文件存储项。
+        /// </summary>
+        /// <param name="file">文件存储对象，包含显示名称和相关信息</param>
+        /// <returns>配置好的按钮实例</returns>
         private Button CreateFileButton(FileStorage file)
         {
-            // 中文注释：创建用于在 WrapPanel/StackPanel 中显示的按钮
+            // 获取按钮显示文本：优先使用文件对象的 DisplayName，若为空则使用空字符串
             string caption = file?.DisplayName ?? string.Empty;
+
+            // 创建按钮实例并设置基本外观属性
             var btn = new Button
             {
-                Content = caption,
-                Width = 88,
-                Height = 22,
-                Margin = new Thickness(0, 0, 5, 0),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = System.Windows.VerticalAlignment.Top,   // ✅ 使用完全限定名
-                Tag = new ButtonTagCommandInfo
+                Content = caption,                           // 按钮上显示的文字
+                Width = 95,                                  // 固定宽度
+                Height = 22,                                 // 固定高度
+                Margin = new Thickness(0, 0, 5, 0),          // 右边距5像素，实现水平间隔
+                HorizontalAlignment = HorizontalAlignment.Left,   // 水平左对齐
+                VerticalAlignment = System.Windows.VerticalAlignment.Top, // 垂直顶对齐（完全限定名避免歧义）
+                Tag = new ButtonTagCommandInfo               // 自定义Tag，存储按钮关联的命令数据
                 {
-                    Type = "FileStorage",
-                    ButtonName = caption,
-                    fileStorage = file,
-                    InsertContext = BuildGraphicInsertContext(file)
+                    Type = "FileStorage",                    // 标识此按钮类型为文件存储
+                    ButtonName = caption,                    // 按钮名称
+                    fileStorage = file,                      // 关联的文件存储对象
+                    InsertContext = BuildGraphicInsertContext(file) // 构建插入上下文（如图形插入所需数据）
                 },
-                Background = Brushes.Azure
+                Background = Brushes.Azure                   // 背景色为天蓝色
             };
 
-            // 事件：单击显示属性/预览；拖拽双用途（单击+拖动或双击）
-            btn.Click += DynamicButton_Click;
-            btn.PreviewMouseLeftButtonDown += DynamicButton_PreviewMouseLeftButtonDown;
-            btn.PreviewMouseMove += DynamicButton_PreviewMouseMove;
-            btn.PreviewMouseLeftButtonUp += DynamicButton_PreviewMouseLeftButtonUp;
+            // 注册事件处理程序，实现点击、拖拽等交互行为
+            btn.Click += DynamicButton_Click;                      // 单击事件：显示属性/预览
+            btn.PreviewMouseLeftButtonDown += DynamicButton_PreviewMouseLeftButtonDown; // 鼠标左键按下预览（用于拖拽开始）
+            btn.PreviewMouseMove += DynamicButton_PreviewMouseMove;                     // 鼠标移动（用于拖拽过程）
+            btn.PreviewMouseLeftButtonUp += DynamicButton_PreviewMouseLeftButtonUp;     // 鼠标左键释放（用于拖拽结束）
 
-            return btn;
+            return btn; // 返回已配置好的按钮
         }
 
         /// <summary>
@@ -3627,73 +3634,73 @@ namespace GB_NewCadPlus_IV
                 // 准备：canonical 列表（应与 AttributeKeyMapper 中 canonical 对齐）
                 var canonicalFields = new[]
                 {
-            "PIPELINETITLE","TAG_NO","NAME","MODEL","DRAWINGNO_STANDARDNO","STRUCT_LEN_STD",
-            "START_POINT","END_POINT","FLG_STD","TEST_STD","DN","PIPE_OD","PIPE_ID","PIPE_THK",
-            "SCHEDULE","PN","CLASS","WORK_PRESSURE","DESIGN_PRESSURE","DESIGN_TEMP","WORK_TEMP",
-            "TEMP_RANGE","MEDIUM","PIPE_TYPE","PIPE_CLASS","CONN_TYPE","PIPE_MATL","LINING_MATL",
-            "LINING_THK","LINING_PROC","PIPE_LENGTH","FLOW_VEL","FLOW_RATE","PIPE_WEIGHT","PIPE_COATING",
-            "COATING_THK","INSUL_MATL","INSUL_THK","INSUL_TYPE","HEAT_TRACE","HEAT_TRACE_POWER",
-            "NDT_RATIO","NDT_TYPE","PRESSURE_LOSS","ROUGHNESS","MAX_BENDING","EXPANSION","CLEANING_REQ",
-            "QTY","WEIGHT","SW_MODEL","SYSTEM","REMARK"
-        };
+                    "PIPELINETITLE","TAG_NO","NAME","MODEL","DRAWINGNO_STANDARDNO","STRUCT_LEN_STD",
+                    "START_POINT","END_POINT","FLG_STD","TEST_STD","DN","PIPE_OD","PIPE_ID","PIPE_THK",
+                    "SCHEDULE","PN","CLASS","WORK_PRESSURE","DESIGN_PRESSURE","DESIGN_TEMP","WORK_TEMP",
+                    "TEMP_RANGE","MEDIUM","PIPE_TYPE","PIPE_CLASS","CONN_TYPE","PIPE_MATL","LINING_MATL",
+                    "LINING_THK","LINING_PROC","PIPE_LENGTH","FLOW_VEL","FLOW_RATE","PIPE_WEIGHT","PIPE_COATING",
+                    "COATING_THK","INSUL_MATL","INSUL_THK","INSUL_TYPE","HEAT_TRACE","HEAT_TRACE_POWER",
+                    "NDT_RATIO","NDT_TYPE","PRESSURE_LOSS","ROUGHNESS","MAX_BENDING","EXPANSION","CLEANING_REQ",
+                    "QTY","WEIGHT","SW_MODEL","SYSTEM","REMARK"
+                };
 
                 // 显示名映射（中文），建议把这张表放到 AttributeKeyMapper/GetDisplayName 中统一维护
                 var displayMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            {"PIPELINETITLE","管道提示标题"},
-            {"TAG_NO","管段号"},
-            {"NAME","名称"},
-            {"MODEL","规格型号"},
-            {"DRAWINGNO_STANDARDNO","图号/标准号"},
-            {"STRUCT_LEN_STD","结构长度标准"},
-            {"START_POINT","起点"},
-            {"END_POINT","终点"},
-            {"FLG_STD","法兰标准"},
-            {"TEST_STD","试验标准"},
-            {"DN","公称通径"},
-            {"PIPE_OD","外径"},
-            {"PIPE_ID","内径"},
-            {"PIPE_THK","壁厚"},
-            {"SCHEDULE","壁厚等级"},
-            {"PN","公称压力"},
-            {"CLASS","压力等级"},
-            {"WORK_PRESSURE","工作压力"},
-            {"DESIGN_PRESSURE","设计压力"},
-            {"DESIGN_TEMP","设计温度"},
-            {"WORK_TEMP","工作温度"},
-            {"TEMP_RANGE","适用温度范围"},
-            {"MEDIUM","介质"},
-            {"PIPE_TYPE","管道类型"},
-            {"PIPE_CLASS","管道等级"},
-            {"CONN_TYPE","连接方式"},
-            {"PIPE_MATL","管道材质"},
-            {"LINING_MATL","衬里材质"},
-            {"LINING_THK","衬里厚度"},
-            {"LINING_PROC","衬里工艺"},
-            {"PIPE_LENGTH","管道长度"},
-            {"FLOW_VEL","设计流速"},
-            {"FLOW_RATE","介质流量"},
-            {"PIPE_WEIGHT","管道计算重量"},
-            {"PIPE_COATING","防腐涂层"},
-            {"COATING_THK","涂层厚度"},
-            {"INSUL_MATL","保温材料"},
-            {"INSUL_THK","保温厚度"},
-            {"INSUL_TYPE","保温方式"},
-            {"HEAT_TRACE","伴热类型"},
-            {"HEAT_TRACE_POWER","伴热功率"},
-            {"NDT_RATIO","无损检测比例"},
-            {"NDT_TYPE","无损检测方法"},
-            {"PRESSURE_LOSS","允许压损"},
-            {"ROUGHNESS","内壁粗糙度"},
-            {"MAX_BENDING","允许弯曲半径"},
-            {"EXPANSION","热膨胀量"},
-            {"CLEANING_REQ","清洁度要求"},
-            {"QTY","数量"},
-            {"WEIGHT","总重量"},
-            {"SW_MODEL","3D模型文件名"},
-            {"SYSTEM","所属系统"},
-            {"REMARK","备注"}
-        };
+                    {
+                        {"PIPELINETITLE","管道提示标题"},
+                        {"TAG_NO","管段号"},
+                        {"NAME","名称"},
+                        {"MODEL","规格型号"},
+                        {"DRAWINGNO_STANDARDNO","图号/标准号"},
+                        {"STRUCT_LEN_STD","结构长度标准"},
+                        {"START_POINT","起点"},
+                        {"END_POINT","终点"},
+                        {"FLG_STD","法兰标准"},
+                        {"TEST_STD","试验标准"},
+                        {"DN","公称通径"},
+                        {"PIPE_OD","外径"},
+                        {"PIPE_ID","内径"},
+                        {"PIPE_THK","壁厚"},
+                        {"SCHEDULE","壁厚等级"},
+                        {"PN","公称压力"},
+                        {"CLASS","压力等级"},
+                        {"WORK_PRESSURE","工作压力"},
+                        {"DESIGN_PRESSURE","设计压力"},
+                        {"DESIGN_TEMP","设计温度"},
+                        {"WORK_TEMP","工作温度"},
+                        {"TEMP_RANGE","适用温度范围"},
+                        {"MEDIUM","介质"},
+                        {"PIPE_TYPE","管道类型"},
+                        {"PIPE_CLASS","管道等级"},
+                        {"CONN_TYPE","连接方式"},
+                        {"PIPE_MATL","管道材质"},
+                        {"LINING_MATL","衬里材质"},
+                        {"LINING_THK","衬里厚度"},
+                        {"LINING_PROC","衬里工艺"},
+                        {"PIPE_LENGTH","管道长度"},
+                        {"FLOW_VEL","设计流速"},
+                        {"FLOW_RATE","介质流量"},
+                        {"PIPE_WEIGHT","管道计算重量"},
+                        {"PIPE_COATING","防腐涂层"},
+                        {"COATING_THK","涂层厚度"},
+                        {"INSUL_MATL","保温材料"},
+                        {"INSUL_THK","保温厚度"},
+                        {"INSUL_TYPE","保温方式"},
+                        {"HEAT_TRACE","伴热类型"},
+                        {"HEAT_TRACE_POWER","伴热功率"},
+                        {"NDT_RATIO","无损检测比例"},
+                        {"NDT_TYPE","无损检测方法"},
+                        {"PRESSURE_LOSS","允许压损"},
+                        {"ROUGHNESS","内壁粗糙度"},
+                        {"MAX_BENDING","允许弯曲半径"},
+                        {"EXPANSION","热膨胀量"},
+                        {"CLEANING_REQ","清洁度要求"},
+                        {"QTY","数量"},
+                        {"WEIGHT","总重量"},
+                        {"SW_MODEL","3D模型文件名"},
+                        {"SYSTEM","所属系统"},
+                        {"REMARK","备注"}
+                    };
 
                 // 构建 UI 用的行（两列形式：显示名 / 值；第二列临时存放 canonical 以便保存时读取）
                 var properties = new List<CategoryPropertyEditModel>();

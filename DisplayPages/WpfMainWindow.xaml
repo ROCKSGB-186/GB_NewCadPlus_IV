@@ -23,11 +23,12 @@
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
+
     <Grid
         MinWidth="350"
         MinHeight="700"
         MaxWidth="350"
-        Background="White">       
+        Background="White">
         <TabControl x:Name="MainTabControl"
             ItemContainerStyle ="{StaticResource HorizontalTabStyle}"
                     Padding="0,2,0,2" >
@@ -36,10 +37,10 @@
                      FontSize="14"
                      FontWeight="Bold"
                      RenderTransformOrigin="0.5,0.5"
-                     Margin="0,0,0,0">               
+                     Margin="0,0,0,0">
 
                 <Grid x:Name="CAD图元Grid" >
-                    
+
                     <Grid.RowDefinitions>
                         <RowDefinition Height="125" />
                         <RowDefinition Height="2" />
@@ -226,8 +227,7 @@
                             Background="Azure"
                             ItemContainerStyle="{StaticResource VerticalTabStyle}"
                             SelectionChanged="TabControl_SelectionChanged"
-                            TabStripPlacement="Left"
-                            SelectedItem="工艺">
+                            TabStripPlacement="Left">
                             <TabItem x:Name="公用工具"
                                 Height="68"
                                 FontSize="12"
@@ -451,20 +451,22 @@
                                 </Grid>
                             </TabItem>
 
-                            <TabItem x:Name="工艺"
-                                
+                            <TabItem x:Name="工艺"                                
                                      FontWeight="Bold"
-                                     Header="工艺">
+                                     Header="工艺"
+                                     IsSelected="True">
                                 <TabControl
                                     x:Name="MajorTabControl"
                                     Padding="1,1,1,1"
                                     FontSize="12">
                                     <TabItem x:Name="工艺图元" Header=" 工艺图元 ">
-                                        <ScrollViewer
+                                        <ScrollViewer x:Name="图元功能区" 
                                             Margin="0,0,0,0"
                                             FontSize="12"
-                                            VerticalScrollBarVisibility="Visible">
-                                            <Grid Width="285 " HorizontalAlignment="Left">
+                                            HorizontalScrollBarVisibility="Auto"
+                                            CanContentScroll="False"
+                                            VerticalScrollBarVisibility="Auto">
+                                            <Grid x:Name="按键功能区" HorizontalAlignment="Left" Width="305">
                                                 <Grid >
                                                     <Grid Margin="0">
                                                         <Grid.RowDefinitions>
@@ -479,9 +481,9 @@
                                                                 Header="工艺表格" Margin="0,5,0,0">
                                                                 <WrapPanel x:Name="工艺表格按钮面板" Orientation="Horizontal" Height="55">
                                                                     <Button x:Name="生成管道表"                                                                         
-                                                                            Width="88"
+                                                                            Width="90"
                                                                             Height="25"
-                                                                            Margin="1,1,1,1"
+                                                                            Margin="5,1,1,1"
                                                                             HorizontalAlignment="Left"
                                                                             VerticalAlignment="Top"
                                                                             Background="#FF0050A0"
@@ -491,9 +493,9 @@
                                                                             FontSize="12"
                                                                             Foreground="White" />
                                                                     <Button x:Name="生成设备表"
-                                                                         Width="88"
+                                                                         Width="90"
                                                                          Height="25"
-                                                                         Margin="1,1,1,1"
+                                                                         Margin="5,1,1,1"
                                                                          HorizontalAlignment="Left"
                                                                          VerticalAlignment="Top"
                                                                          Background="#FF0050A0"
@@ -503,7 +505,7 @@
                                                                          FontSize="12"
                                                                          Foreground="White" />
                                                                     <Button x:Name="插入管道表"
-                                                                         Width="88"
+                                                                         Width="90"
                                                                          Height="25"
                                                                          HorizontalAlignment="Center"
                                                                          VerticalAlignment="Center"
@@ -512,9 +514,9 @@
                                                                          Click="插入管道表_Click"
                                                                          Content="插入管道表"
                                                                          FontSize="12"
-                                                                         Foreground="White" />
+                                                                         Foreground="White" Margin="5,1,1,1" />
                                                                     <Button x:Name="导出表格"
-                                                                         Width="88"
+                                                                         Width="90"
                                                                          Height="25"
                                                                          HorizontalAlignment="Center"
                                                                          VerticalAlignment="Top"
@@ -523,9 +525,9 @@
                                                                          Click="导出表格_Click"
                                                                          Content="导出表格"
                                                                          FontSize="12"
-                                                                         Foreground="White" />
+                                                                         Foreground="White" Margin="5,1,1,1" />
                                                                     <Button x:Name="表格同步"
-                                                                         Width="88"
+                                                                         Width="90"
                                                                          Height="25"
                                                                          HorizontalAlignment="Center"
                                                                          VerticalAlignment="Center"
@@ -534,9 +536,9 @@
                                                                          Click="表格同步_Click"
                                                                          Content="表格同步"
                                                                          FontSize="12"
-                                                                         Foreground="White" />
+                                                                         Foreground="White" Margin="5,1,1,1" />
                                                                     <Button x:Name="加载Excel表"
-                                                                         Width="88"
+                                                                         Width="90"
                                                                          Height="25"
                                                                          HorizontalAlignment="Center"
                                                                          VerticalAlignment="Center"
@@ -545,28 +547,24 @@
                                                                          Click="加载Excel表_Click"
                                                                          Content="加载Excel表"
                                                                          FontSize="12"
-                                                                         Foreground="White" />
+                                                                         Foreground="White" Margin="5,1,1,1" />
                                                                 </WrapPanel>
                                                             </GroupBox>
                                                         </Grid>
                                                         <Grid Grid.Row="1">
                                                             <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="187*" />
-                                                                <ColumnDefinition Width="98*" />
+                                                                <ColumnDefinition Width="214*" />
                                                             </Grid.ColumnDefinitions>
-                                                            <GroupBox
-                                                                x:Name="工艺绘制"
+                                                            <GroupBox x:Name="工艺绘制"
                                                                 Grid.ColumnSpan="2"
                                                                 Margin="0,5,0,0"
                                                                 Padding="0,3,0,0"
                                                                 FontFamily="Microsoft YaHei UI"
                                                                 Header="工艺绘制">
                                                                 <WrapPanel VerticalAlignment="Center">
-                                                                    <Button
-                                                                        x:Name="绘制进口管道"
-                                                                        Width="88"
+                                                                    <Button Width="90"
                                                                         Height="25"
-                                                                        Margin="1,1,1,1"
+                                                                        Margin="5,1,1,1"
                                                                         HorizontalAlignment="Left"
                                                                         Background="#FF0050A0"
                                                                         BorderBrush="#FFC2C6CE"
@@ -574,11 +572,10 @@
                                                                         Content="绘制进口管道"
                                                                         FontSize="12"
                                                                         Foreground="White" VerticalAlignment="Center" VerticalContentAlignment="Center" />
-                                                                    <Button
-                                                                        x:Name="绘制出口管道"
-                                                                        Width="88"
+                                                                    <Button x:Name="绘制出口管道"
+                                                                        Width="90"
                                                                         Height="25"
-                                                                        Margin="1,1,1,1"
+                                                                        Margin="5,1,1,1"
                                                                         HorizontalAlignment="Left"
                                                                         VerticalAlignment="Center"
                                                                         Background="#FF0050A0"
@@ -587,11 +584,10 @@
                                                                         Content="绘制出口管道"
                                                                         FontSize="12"
                                                                         Foreground="White" VerticalContentAlignment="Center" />
-                                                                    <Button
-                                                                        x:Name="管道修改"
-                                                                        Width="88"
+                                                                    <Button x:Name="管道修改"
+                                                                        Width="90"
                                                                         Height="25"
-                                                                        Margin="1,1,1,1"
+                                                                        Margin="5,1,1,1"
                                                                         HorizontalAlignment="Center"
                                                                         VerticalAlignment="Center"
                                                                         Background="#FF0050A0"
@@ -4681,7 +4677,7 @@ Background="FloralWhite">
                             x:Name="CategoryTreeView"
                             Grid.Column="0"
                             MinWidth="100"
-                            MaxWidth="170"
+                            MaxWidth="300"
                             Margin="0,0,-3,0"
                             SelectedItemChanged="CategoryTreeView_SelectedItemChanged">
                             <TreeView.ItemContainerStyle>
@@ -5043,13 +5039,13 @@ Background="FloralWhite">
                 FontSize="14"
                 FontWeight="Bold"
                      Margin="0,0,0,0"  >
-                 <Grid x:Name="部门_人员模块_Grid">
+                <Grid x:Name="部门_人员模块_Grid">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="2" />
                         <RowDefinition Height="1.5*" />
                     </Grid.RowDefinitions>
-                     
+
                     <Grid Name="部门管理页面"
                         Grid.Column="0"
                         Margin="0"
@@ -5131,7 +5127,7 @@ Background="FloralWhite">
                             </DataGrid.Columns>
                         </DataGrid>
                     </Grid>
-                     
+
                     <Grid x:Name="部门用户_分配_Grid" 
                         Grid.Row="2"
                         Margin="0"
@@ -5249,7 +5245,7 @@ Background="FloralWhite">
                         Margin="10,0,0,58"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Bottom" />
-                     
+
                     <StackPanel
                         Grid.Row="2"
                         Height="50"
