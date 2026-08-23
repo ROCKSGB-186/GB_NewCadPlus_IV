@@ -33,6 +33,27 @@
             IsReadOnly="False"
             ItemsSource="{Binding Properties}"
             SelectionUnit="CellOrRowHeader">
+            <DataGrid.CellStyle>
+                <Style TargetType="DataGridCell">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Name}" Value="BOLT_QTY">
+                            <Setter Property="Background" Value="LightGoldenrodYellow" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Name}" Value="FLG_QTY">
+                            <Setter Property="Background" Value="LightGoldenrodYellow" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Name}" Value="BOLT_LENGTH">
+                            <Setter Property="Background" Value="LightGoldenrodYellow" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Name}" Value="BOLT_HOLES">
+                            <Setter Property="Background" Value="LightGoldenrodYellow" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Name}" Value="CONN_TYPE">
+                            <Setter Property="Background" Value="MistyRose" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.CellStyle>
             <DataGrid.Columns>
                 <DataGridTextColumn
                     Width="220"

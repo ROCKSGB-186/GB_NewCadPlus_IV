@@ -70,6 +70,7 @@ namespace GB_NewCadPlus_IV.Helpers
             LogManager logger,
             bool hasFlangeStandardMatch,
             FlangeStandardMatchResponse? flangeStandardResponse,
+            IDictionary<string, string>? inheritedProperties,
             out Dictionary<string, string> editedProperties)
         {
             editedProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -80,8 +81,20 @@ namespace GB_NewCadPlus_IV.Helpers
             {
                 foreach (KeyValuePair<string, string> standardProperty in flangeStandardResponse.Attributes)
                 {
-                    if (string.IsNullOrWhiteSpace(standardProperty.Key) || propertyMap.ContainsKey(standardProperty.Key)) continue;
-                    propertyMap[standardProperty.Key] = standardProperty.Value ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(standardProperty.Key)) continue;
+
+                    // 法兰规范命中后，按归一化 Tag 覆盖编辑窗口中的同名旧值，避免 DWG 默认值再次覆盖服务器规范值。
+                    string? existingKey = FindPropertyKeyByNormalizedKey(propertyMap, standardProperty.Key);
+                    if (existingKey != null)
+                    {
+                        propertyMap[existingKey] = standardProperty.Value ?? string.Empty;
+                        logger.LogInfo($"[规范属性合并][插入前窗口] Tag={standardProperty.Key}, 覆盖原键={existingKey}, NewValue={standardProperty.Value ?? string.Empty}");
+                    }
+                    else
+                    {
+                        propertyMap[standardProperty.Key] = standardProperty.Value ?? string.Empty;
+                        logger.LogInfo($"[规范属性合并][插入前窗口] Tag={standardProperty.Key}, 原属性不存在，新增值={standardProperty.Value ?? string.Empty}");
+                    }
                 }
 
                 logger.LogInfo($"规范返回属性已补充到插入前编辑页面：属性数量={flangeStandardResponse.Attributes.Count}");
@@ -91,13 +104,22 @@ namespace GB_NewCadPlus_IV.Helpers
             if (hasFlangeStandardMatch)
             {
                 string boltHoles = FindProperty(propertyMap, "BOLT_HOLES") ?? string.Empty;
-                string connectionType = FindProperty(propertyMap, "CONN_TYPE") ?? string.Empty;
+                // 当前块属性中可能没有连接方式，使用已确认的重叠继承属性作为计算兜底来源。
+                string connectionType = FindProperty(propertyMap, "CONN_TYPE", "DNCONN_TYPE", "连接方式", "连接形式")
+                    ?? FindProperty(inheritedProperties ?? new Dictionary<string, string>(), "CONN_TYPE", "DNCONN_TYPE", "连接方式", "连接形式")
+                    ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(connectionType))
+                {
+                    // 将继承得到的连接方式补回编辑字典，确保页面显示和后续属性写回使用同一个值。
+                    SetPropertyValueByNormalizedKey(propertyMap, "CONN_TYPE", connectionType);
+                }
                 int flangeQuantity = GetInsertFlangeQuantity(connectionType);
-                int boltQuantity = flangeQuantity * ParseIntegerOrZeroForInsert(boltHoles);
-                propertyMap["FLG_QTY"] = flangeQuantity.ToString();
-                propertyMap["BOLT_QTY"] = boltQuantity.ToString();
-                propertyMap["BOLT_LENGTH"] = "0";
-                logger.LogInfo($"插入前法兰扩展属性已加入：连接方式={connectionType}, FLG_QTY={propertyMap["FLG_QTY"]}, BOLT_HOLES={boltHoles}, BOLT_QTY={propertyMap["BOLT_QTY"]}, BOLT_LENGTH=0");
+                // 螺栓数量按螺栓孔数量显示；法兰数量只单独记录在 FLG_QTY，不再参与 BOLT_QTY 计算。
+                int boltQuantity = ParseIntegerOrZeroForInsert(boltHoles);
+                SetPropertyValueByNormalizedKey(propertyMap, "FLG_QTY", flangeQuantity.ToString());
+                SetPropertyValueByNormalizedKey(propertyMap, "BOLT_QTY", boltQuantity.ToString());
+                SetPropertyValueByNormalizedKey(propertyMap, "BOLT_LENGTH", "0");
+                logger.LogInfo($"插入前法兰扩展属性已加入：连接方式={connectionType}, FLG_QTY={FindProperty(propertyMap, "FLG_QTY") ?? string.Empty}, BOLT_HOLES={boltHoles}, BOLT_QTY={FindProperty(propertyMap, "BOLT_QTY") ?? string.Empty}, BOLT_LENGTH={FindProperty(propertyMap, "BOLT_LENGTH") ?? string.Empty}");
             }
 
             logger.LogInfo($"插入前属性编辑窗口准备打开：属性数量={propertyMap.Count}");
@@ -144,15 +166,45 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 按归一化 Tag 查找属性字典中的原始键，兼容 CONN_TYPE/CONNTYPE、FLG_STD/FLGSTD 等写法。
+        /// </summary>
+        private static string? FindPropertyKeyByNormalizedKey(
+            IDictionary<string, string> properties,
+            string key)
+        {
+            string normalizedKey = NormalizePropertyKey(key);
+            if (string.IsNullOrWhiteSpace(normalizedKey)) return null;
+
+            foreach (string existingKey in properties.Keys)
+            {
+                if (string.Equals(NormalizePropertyKey(existingKey), normalizedKey, StringComparison.OrdinalIgnoreCase))
+                    return existingKey;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 按归一化 Tag 更新已有属性，找不到时才新增规范键，避免产生同名重复字段。
+        /// </summary>
+        private static void SetPropertyValueByNormalizedKey(
+            IDictionary<string, string> properties,
+            string key,
+            string value)
+        {
+            string? existingKey = FindPropertyKeyByNormalizedKey(properties, key);
+            properties[existingKey ?? key] = value ?? string.Empty;
+        }
+
+        /// <summary>
         /// 根据插入前连接方式计算法兰数量。
         /// </summary>
         private static int GetInsertFlangeQuantity(string connectionType)
         {
-            // 兼容页面选项和规范数据中可能出现的“法兰连接”“单侧法兰连接”等完整文本。
+            // 法兰类图元插入时默认按一个法兰计数，用户可在插入前属性页面中修改该值。
             string value = connectionType?.Trim() ?? string.Empty;
-            if (value.Contains("单侧法兰", StringComparison.OrdinalIgnoreCase)) return 1;
             if (value.Contains("法兰", StringComparison.OrdinalIgnoreCase) ||
-                value.Contains("对夹", StringComparison.OrdinalIgnoreCase)) return 2;
+                value.Contains("对夹", StringComparison.OrdinalIgnoreCase)) return 1;
             return 0;
         }
 
@@ -1711,6 +1763,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 {
                     // 从磁盘读取源 DWG 文件内容到内存数据库 sourceDb
                     sourceDb.ReadDwgFile(sourceFilePath, FileShare.Read, true, null);
+                    logger.LogInfo($"[插入流程][步骤1] 本地 DWG 读取完成：文件名={Path.GetFileName(sourceFilePath)}");
                     // 关闭输入流，释放文件占用，允许其他进程访问该文件
                     sourceDb.CloseInput(true);
 
@@ -1719,8 +1772,10 @@ namespace GB_NewCadPlus_IV.Helpers
                     {
                         // 将源数据库作为匿名块定义插入到目标数据库 destDb 中
                         var blkDefId = destDb.Insert("*U", sourceDb, false);
+                        logger.LogInfo($"[插入流程][步骤2] DWG 已插入为临时块定义：BlockTableRecord={blkDefId}");
                         // 基于插入的块定义创建一个新的块参照实体 br
                         var br = new BlockReference(targetPoint, blkDefId);
+                        logger.LogInfo("[插入流程][步骤2] 临时块参照已创建。");
 
                         // 初始化缩放比例 scale 为 1.0
                         double scale = AutoCadHelper.GetScale();
@@ -1737,15 +1792,18 @@ namespace GB_NewCadPlus_IV.Helpers
                         }
                         // 如果比例值非法（NaN 或小于等于 0），强制重置为 1.0
                         if (double.IsNaN(scale) || scale <= 0) scale = 1.0;
+                        logger.LogInfo($"[插入流程][步骤3] 当前图纸及界面比例已确定：Scale={scale:F6}, WinForm={VariableDictionary.winForm_Status}");
 
                         // 设置块参照 br 的初始缩放比例
                         br.ScaleFactors = new Scale3d(scale);
                         // 将块参照 br 添加到当前空间的模型空间中
                         var entityObjectId = tr.CurrentSpace.AddEntity(br);
+                        logger.LogInfo($"[插入流程][步骤4] 临时块参照已加入当前空间：ObjectId={entityObjectId}");
                         // 以写模式打开刚刚添加的块参照 fileEntity，以便后续修改属性或变换
                         var fileEntity = (BlockReference)tr.GetObject(entityObjectId, OpenMode.ForWrite);
                         // 整图插入路径不会自动创建属性引用，这里先按块定义补齐属性引用
                         EnsureBlockAttributeReferences(tr, fileEntity, logger);
+                        logger.LogInfo($"[插入流程][步骤5] 块属性引用补齐完成：ObjectId={fileEntity.ObjectId}, AttributeCount={fileEntity.AttributeCollection.Count}");
                         // 记录当前的旋转角度 tempAngle，用于拖拽过程中的增量计算
                         double tempAngle = VariableDictionary.entityRotateAngle;
                         // 记录当前的缩放比例 tempScale，用于拖拽过程中的增量计算
@@ -1837,12 +1895,14 @@ namespace GB_NewCadPlus_IV.Helpers
 
                         // 记录日志，表示拖拽结束，开始核心逻辑
                         logger.LogInfo($"拖拽结束：插入点=({targetPoint.X:F3},{targetPoint.Y:F3},{targetPoint.Z:F3}), ObjectId={fileEntity.ObjectId}, 图块名={fileEntity.Name}");
+                        logger.LogInfo($"[插入流程][步骤7] 用户已确认插入点：ObjectId={fileEntity.ObjectId}");
                         logger.LogInfo($"开始重叠检测：候选上限={_propertySyncMaxCandidates}, 当前图层={fileEntity.Layer}");
 
                         // ================== 核心新功能：重叠检测与属性继承（带 LogManager 日志） ==================
 
                         // 初始化字典 overlapSourcePropertyMap，用于存储从重叠图元读取到的属性
                         var overlapSourcePropertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        logger.LogInfo("[插入流程][步骤8] 开始执行重叠图元检测。");
 
                         List<OverlapCandidate> overlapCandidates = new List<OverlapCandidate>();
 
@@ -1906,8 +1966,10 @@ namespace GB_NewCadPlus_IV.Helpers
                             // 记录日志，说明已向块参照同步了多少个属性
                             logger.LogInfo($"已向新图块同步入口管道属性：属性数量={overlapSourcePropertyMap.Count}");
                         }
+                        logger.LogInfo($"[插入流程][步骤9] 重叠属性读取及继承准备完成：继承属性数量={overlapSourcePropertyMap.Count}");
 
                         logger.LogInfo($"准备执行规范匹配：块ObjectId={fileEntity.ObjectId}");
+                        logger.LogInfo($"[插入流程][步骤10] 开始执行连接规范查询：图元类型={insertContext?.EntityType.ToString() ?? "Unknown"}, 分类路径={insertContext?.CategoryPath ?? "未知"}");
 
                         // 所有插入图元都在炸开前完成连接规范查询，确保规范属性可以写入原始块的 AttributeReference。
                         FlangeStandardMatchResponse? flangeStandardResponse =
@@ -1925,6 +1987,10 @@ namespace GB_NewCadPlus_IV.Helpers
                             logger.LogInfo(
                                 $"插入块炸开前连接规范回写完成：ObjectId={fileEntity.ObjectId}, 写入数量={blockUpdatedCount}");
                         }
+                        else
+                        {
+                            logger.LogWarning("[插入流程][步骤10] 规范查询未返回成功结果，炸开前没有可回写的规范属性。");
+                        }
 
                         // ================== 结束核心新功能 ==================
 
@@ -1936,6 +2002,7 @@ namespace GB_NewCadPlus_IV.Helpers
                              logger,
                              flangeStandardResponse?.Success == true,
                              flangeStandardResponse,
+                             overlapSourcePropertyMap,
                              out var editedProperties))
                         {
                             // 用户取消或窗口异常时必须在炸开前退出，事务不会把临时插入保存到当前图纸。
@@ -1943,15 +2010,18 @@ namespace GB_NewCadPlus_IV.Helpers
                             tr.Abort();
                             return;
                         }
+                        logger.LogInfo($"[插入流程][步骤11-12] 插入前属性窗口已确认：最终属性数量={editedProperties.Count}");
 
                         // 将用户确认后的值写回原始块，随后炸开时这些值会随属性引用进入最终图元。
                         ApplyEditedPropertiesToEntity(tr, fileEntity, editedProperties, logger);
+                        logger.LogInfo($"[插入流程][步骤13] 用户确认属性已写回临时块：ObjectId={fileEntity.ObjectId}, 属性数量={editedProperties.Count}");
 
                         // 创建集合 newIds 用于存储分解后产生的所有新实体
                         var newIds = new DBObjectCollection();
 
                         // 执行分解操作，将块参照 fileEntity 炸开为独立的图元
                         fileEntity.Explode(newIds);
+                        logger.LogInfo($"[插入流程][步骤14] 临时块炸开完成：原始ObjectId={fileEntity.ObjectId}, 生成实体数量={newIds.Count}");
 
                         // 删除原始的块参照实体 fileEntity，因为已经被分解替代
                         fileEntity.Erase();
@@ -1966,6 +2036,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             // 将实体 ent 加入跟踪列表 insertedEntities
                             insertedEntities.Add(ent);
                         }
+                        logger.LogInfo($"[插入流程][步骤15] 炸开实体已加入当前空间：实体数量={insertedEntities.Count}");
 
                         // 如果之前读取到了重叠属性，需要将这些属性进一步同步到分解后的子实体上
                         if (overlapSourcePropertyMap.Count > 0)
@@ -1986,6 +2057,7 @@ namespace GB_NewCadPlus_IV.Helpers
                             insertedEntities,
                             flangeStandardResponse,
                             logger);
+                        logger.LogInfo($"[插入流程][步骤16] 继承属性、规范属性和用户属性同步流程已完成：实体数量={insertedEntities.Count}, 规范查询成功={flangeStandardResponse?.Success == true}");
 
                         // 规范同步完成后，为确认窗口中缺失的字段创建隐藏 AttributeReference。
                         // 这样字段不仅保存在 XRecord 中，也会出现在最终图块属性集合中。
@@ -2158,6 +2230,11 @@ namespace GB_NewCadPlus_IV.Helpers
             // 合并入口图元属性和当前插入块已有属性，兼容连接方式位于不同属性来源的情况。
             var queryProperties = new Dictionary<string, string>(inheritedProperties, StringComparer.OrdinalIgnoreCase);
             var insertedBlockProperties = ReadEntityPropertyMap(transaction, flangeBlock);
+            logger.LogInfo($"[规范查询][属性来源] 当前临时块属性数量={insertedBlockProperties.Count}，继承属性数量={inheritedProperties.Count}");
+            logger.LogInfo($"[规范查询][关键字段] 继承CONN_TYPE={FindProperty(inheritedProperties, "CONN_TYPE", "DNCONN_TYPE", "连接方式", "连接形式") ?? "<空>"}，块内CONN_TYPE={FindProperty(insertedBlockProperties, "CONN_TYPE", "DNCONN_TYPE", "连接方式", "连接形式") ?? "<空>"}");
+            logger.LogInfo($"[规范查询][关键字段] 继承DN={FindProperty(inheritedProperties, "DN", "公称通径", "通径", "管径", "公称直径") ?? "<空>"}，块内DN={FindProperty(insertedBlockProperties, "DN", "公称通径", "通径", "管径", "公称直径") ?? "<空>"}");
+            logger.LogInfo($"[规范查询][关键字段] 继承PN={FindProperty(inheritedProperties, "PN", "公称压力", "压力等级") ?? "<空>"}，块内PN={FindProperty(insertedBlockProperties, "PN", "公称压力", "压力等级") ?? "<空>"}");
+            logger.LogInfo($"[规范查询][关键字段] 继承FLG_STD={FindProperty(inheritedProperties, "FLG_STD", "法兰标准", "标准号") ?? "<空>"}，块内FLG_STD={FindProperty(insertedBlockProperties, "FLG_STD", "法兰标准", "标准号") ?? "<空>"}");
             foreach (KeyValuePair<string, string> property in insertedBlockProperties)
             {
                 if (!queryProperties.ContainsKey(property.Key))
@@ -2180,7 +2257,7 @@ namespace GB_NewCadPlus_IV.Helpers
                 "连接类别") ?? string.Empty;
             if (!ShouldQueryFlangeStandard(queryProperties))
             {
-                logger.LogInfo($"当前图元连接方式不属于法兰/对夹，跳过连接规范查询：CONN_TYPE={connectionMode}");
+                logger.LogWarning($"[规范查询][跳过] 当前图元连接方式不属于法兰/对夹：CONN_TYPE={connectionMode}，查询属性总数={queryProperties.Count}");
                 return null;
             }
             logger.LogInfo($"当前图元连接方式确认，开始查询法兰/对夹连接规范：CONN_TYPE={connectionMode}");
@@ -2192,7 +2269,7 @@ namespace GB_NewCadPlus_IV.Helpers
             // 必须同时具有 DN 和 PN 才能进行查询
             if (string.IsNullOrWhiteSpace(dn) || string.IsNullOrWhiteSpace(pn))
             {
-                logger.LogWarning($"缺少 DN/PN，跳过查询：DN={dn ?? string.Empty}, PN={pn ?? string.Empty}");
+                logger.LogWarning($"[规范查询][跳过] 缺少 DN/PN：DN={dn ?? "<空>"}, PN={pn ?? "<空>"}，CONN_TYPE={connectionMode}");
                 return null;
             }
 

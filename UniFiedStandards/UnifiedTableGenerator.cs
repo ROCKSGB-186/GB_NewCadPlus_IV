@@ -1070,7 +1070,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     }
 
                     // 33. 单元格总宽度增加足够的左右边距，避免文字贴线或越过表线。
-                    double estimatedWidth = (maxLineWidth + cellTextHeight * 4.0) * 1.15;
+                    double estimatedWidth = (maxLineWidth + cellTextHeight * 2.0) * 1.15;
 
                     // 34. 如果当前单元格的估算宽度大于当前列之前记录的最大宽度，则更新列的最大宽度
                     if (estimatedWidth > maxWidthInCol)
@@ -1078,7 +1078,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 }
 
                 // 35. 列宽保护：设置最小宽度，防止空值列过窄。
-                double minWidth = contentHeight * 2.0;
+                double minWidth = contentHeight * 1.0;
                 if (maxWidthInCol < minWidth) maxWidthInCol = minWidth;
 
                 // 36. 使用 AutoCAD 当前版本实际写入表格实体的列宽接口，确保边界线同步更新。
@@ -7097,7 +7097,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
 
                         #region ================== 填充第5列：介质名称 ==================
                         // 查找介质相关信息
-                        var mediumVal = FindFirstAttrValue(item.Attributes, new[] { "介质名称", "介质", "MEDIUM" });
+                        var mediumVal = FindFirstAttrValue(item.Attributes, new[] { "介质名称", "适用介质", "MEDIUM" });
                         if (!string.IsNullOrWhiteSpace(mediumVal)) table.Cells[rowIndex, 4].TextString = mediumVal;
                         #endregion
 
@@ -7129,7 +7129,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             (k.IndexOf("操作压力", StringComparison.OrdinalIgnoreCase) >= 0 ||
                              k.IndexOf("WORK_PRESSURE", StringComparison.OrdinalIgnoreCase) >= 0 ||
                              k.IndexOf("压力等级", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                             k.IndexOf("P(MPaG)", StringComparison.OrdinalIgnoreCase) >= 0));
+                             k.IndexOf("PN", StringComparison.OrdinalIgnoreCase) >= 0));
                         if (!string.IsNullOrWhiteSpace(pressureKey))
                             table.Cells[rowIndex, 6].TextString = item.Attributes[pressureKey];
                         #endregion
@@ -7145,28 +7145,34 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             table.Cells[rowIndex, 8].TextString = anti;
                         #endregion
 
-                        #region ================== 填充第10列：流速 ==================
+                        #region ================== 填充第10列：名称 ==================
                         // 
-                        if (item.Attributes != null && item.Attributes.TryGetValue("FLOW_VEL", out var FLOW) && !string.IsNullOrWhiteSpace(FLOW))
-                            table.Cells[rowIndex, 9].TextString = FLOW;
+                        if (item.Attributes != null && item.Attributes.TryGetValue("NAME", out var NAME) && !string.IsNullOrWhiteSpace(NAME))
+                            table.Cells[rowIndex, 9].TextString = NAME;
                         #endregion
 
                         #region ================== 填充第11列：规格 ==================
                         // 
-                        if (item.Attributes != null && item.Attributes.TryGetValue("MODEL", out var MODEL) && !string.IsNullOrWhiteSpace(MODEL))
-                            table.Cells[rowIndex, 10].TextString = MODEL;
+                        string DNPN = string.Empty;
+                        if (item.Attributes != null && item.Attributes.TryGetValue("DN", out var DN) && !string.IsNullOrWhiteSpace(DN))
+                            DNPN = DN;
+                        if (item.Attributes != null && item.Attributes.TryGetValue("PN", out var PN) && !string.IsNullOrWhiteSpace(PN))
+                        {
+                            DNPN = $"{DNPN}/{PN}";
+                        }
+                            table.Cells[rowIndex, 10].TextString = DNPN;
                         #endregion
 
-                        #region ================== 填充第12列：数量 ==================
-                        // 
-                        if (item.Attributes != null && item.Attributes.TryGetValue("QTY", out var QTY) && !string.IsNullOrWhiteSpace(QTY))
-                            table.Cells[rowIndex, 11].TextString = QTY;
-                        #endregion
-
-                        #region ================== 填充第13列：介质 ==================
+                        #region ================== 填充第12列：介质 ==================
                         // 
                         if (item.Attributes != null && item.Attributes.TryGetValue("MEDIUM", out var MEDIUM) && !string.IsNullOrWhiteSpace(MEDIUM))
-                            table.Cells[rowIndex, 12].TextString = MEDIUM;
+                            table.Cells[rowIndex, 11].TextString = MEDIUM;
+                        #endregion
+
+                        #region ================== 填充第13列：数量 ==================
+                        // 
+                        if (item.Attributes != null && item.Attributes.TryGetValue("QTY", out var QTY) && !string.IsNullOrWhiteSpace(QTY))
+                            table.Cells[rowIndex, 12].TextString = QTY;
                         #endregion
 
                         #region ================== 填充第14列：图号与设计标准号 ==================
@@ -7181,147 +7187,6 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                             table.Cells[rowIndex, 14].TextString = PUMP_BEFORE_AFTER;
                         #endregion
 
-
-
-                        #region ================== 填充管道组动态列（特定逻辑处理） ==================
-
-                        //for (int i = 0; i < pipeGroupColumns.Count; i++)
-                        //{
-                        //    // 计算当前动态列在表格中的实际列索引
-                        //    int col = baseFixedCols + i;
-                        //    // 防止列索引越界
-                        //    if (col >= table.Columns.Count) break;
-
-                        //    // 获取当前列对应的属性键名
-                        //    var headerKey = pipeGroupColumns[i];
-
-                        //    // --- 特殊处理1：核算流速 ---
-                        //    if (string.Equals(headerKey, "FLOW_VEL", StringComparison.OrdinalIgnoreCase))
-                        //    {
-                        //        var flows = new List<string>();
-                        //        if (item.Attributes != null)
-                        //        {
-                        //            // 遍历所有属性，收集包含“流速”、“流量”或“flow”的值
-                        //            foreach (var kv in item.Attributes)
-                        //            {
-                        //                if (kv.Key.IndexOf("流速", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        //                    kv.Key.IndexOf("流量", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        //                    kv.Key.IndexOf("FLOW_VEL", StringComparison.OrdinalIgnoreCase) >= 0)
-                        //                {
-                        //                    // 避免重复添加
-                        //                    if (!string.IsNullOrWhiteSpace(kv.Value) && !flows.Contains(kv.Value)) flows.Add(kv.Value);
-                        //                }
-                        //            }
-                        //        }
-                        //        // 如果属性中有明确的“核算流速”，优先放在最前面
-                        //        if (item.Attributes != null && item.Attributes.TryGetValue("FLOW_VEL", out var hv) && !string.IsNullOrWhiteSpace(hv) && !flows.Contains(hv))
-                        //            flows.Insert(0, hv);
-
-                        //        // 将收集到的流速值用逗号连接后填入单元格
-                        //        if (flows.Count > 0) table.Cells[rowIndex, col].TextString = string.Join(", ", flows);
-                        //        continue;
-                        //    }
-
-                        //    // --- 特殊处理2：规格 ---
-                        //    if (string.Equals(headerKey, "MODEL", StringComparison.OrdinalIgnoreCase))
-                        //    {
-                        //        if (item.Attributes != null && item.Attributes.TryGetValue("MODEL", out var gv) && !string.IsNullOrWhiteSpace(gv))
-                        //            table.Cells[rowIndex, col].TextString = gv;
-                        //        else
-                        //            table.Cells[rowIndex, col].TextString = item.Specifications ?? string.Empty;
-                        //        continue;
-                        //    }
-                        //    // --- 特殊处理3：数量 ---
-                        //    if (string.Equals(headerKey, "QTY", StringComparison.OrdinalIgnoreCase))
-                        //    {
-                        //        // 优先使用属性中的“数量”，如果没有则使用 DeviceInfo 自带的 Count 属性
-                        //        if (item.Attributes != null && item.Attributes.TryGetValue("QTY", out var qv) && !string.IsNullOrWhiteSpace(qv))
-                        //            table.Cells[rowIndex, col].TextString = qv;
-                        //        else
-                        //            table.Cells[rowIndex, col].TextString = item.Count.ToString();
-                        //        continue;
-                        //    }
-
-                        //    // --- 特殊处理3：管道材质 ---
-                        //    if (string.Equals(headerKey, "PIPE_MATL", StringComparison.OrdinalIgnoreCase))
-                        //    {
-                        //        if (item.Attributes != null && item.Attributes.TryGetValue("PIPE_MATL", out var mv) && !string.IsNullOrWhiteSpace(mv))
-                        //            table.Cells[rowIndex, col].TextString = mv;
-                        //        else
-                        //            table.Cells[rowIndex, col].TextString = item.Material ?? string.Empty;
-                        //        continue;
-                        //    }
-                        //    // --- 特殊处理4：图号或标准号 ---
-                        //    if (string.Equals(headerKey, "DRAWINGNO.STANDARDNO", StringComparison.OrdinalIgnoreCase))
-                        //    {
-                        //        string matched = string.Empty;
-                        //        if (item.Attributes != null)
-                        //        {
-                        //            // 按优先级查找：标准 -> 标准号 -> 图号 -> DWG.No. -> STD.No.
-                        //            if (item.Attributes.TryGetValue("DRAWINGNO.STANDARDNO", out var stdVal) && !string.IsNullOrWhiteSpace(stdVal)) matched = stdVal;
-                        //            if (string.IsNullOrWhiteSpace(matched))
-                        //            {
-                        //                if (item.Attributes.TryGetValue("图号", out var stdVal2) && !string.IsNullOrWhiteSpace(stdVal2)) matched = stdVal2;
-                        //            }
-                        //            if (string.IsNullOrWhiteSpace(matched))
-                        //            {
-                        //                if (item.Attributes.TryGetValue("DRAWINGNO.STANDARDNO", out var dwgVal) && !string.IsNullOrWhiteSpace(dwgVal)) matched = dwgVal;
-                        //                else if (item.Attributes.TryGetValue("DWG.No.", out var dwgDot) && !string.IsNullOrWhiteSpace(dwgDot)) matched = dwgDot;
-                        //                else if (item.Attributes.TryGetValue("STD.No.", out var stdDot) && !string.IsNullOrWhiteSpace(stdDot)) matched = stdDot;
-                        //            }
-
-                        //            // 如果上述精确匹配都失败，进行模糊匹配（键名包含“标准”、“图号”、“DWG”、“STD”）
-                        //            if (string.IsNullOrWhiteSpace(matched))
-                        //            {
-                        //                foreach (var kv in item.Attributes)
-                        //                {
-                        //                    if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value)) continue;
-                        //                    if (kv.Key.IndexOf("标准", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        //                        kv.Key.IndexOf("图号", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        //                        kv.Key.IndexOf("DWG", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        //                        kv.Key.IndexOf("STD", StringComparison.OrdinalIgnoreCase) >= 0)
-                        //                    {
-                        //                        matched = kv.Value;
-                        //                        break;
-                        //                    }
-                        //                }
-                        //            }
-                        //        }
-
-                        //        // 写入匹配到的图号或标准号
-                        //        if (!string.IsNullOrWhiteSpace(matched))
-                        //            table.Cells[rowIndex, col].TextString = matched;
-
-                        //        continue;
-                        //    }
-
-                        //    // --- 通用处理：其他动态列 ---
-                        //    string matchedValue = string.Empty;
-                        //    if (item.Attributes != null)
-                        //    {
-                        //        // 首先尝试精确匹配键名
-                        //        if (item.Attributes.TryGetValue(headerKey, out var dv) && !string.IsNullOrWhiteSpace(dv))
-                        //            matchedValue = dv;
-                        //        else
-                        //        {
-                        //            // 如果精确匹配失败，尝试模糊匹配（键名互相包含）
-                        //            foreach (var kv in item.Attributes)
-                        //            {
-                        //                if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrWhiteSpace(kv.Value)) continue;
-                        //                if (kv.Key.IndexOf(headerKey, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        //                    headerKey.IndexOf(kv.Key, StringComparison.OrdinalIgnoreCase) >= 0)
-                        //                {
-                        //                    matchedValue = kv.Value;
-                        //                    break;
-                        //                }
-                        //            }
-                        //        }
-                        //    }
-                        //    // 写入匹配到的值
-                        //    if (!string.IsNullOrWhiteSpace(matchedValue))
-                        //        table.Cells[rowIndex, col].TextString = matchedValue;
-                        //}
-                        #endregion
 
                         #region ================== 填充其余动态列（剩余属性） ==================
                         // 遍历剩余的动态属性键，填充到表格中
@@ -7358,10 +7223,7 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                     // 第一步：先应用缩放后的文字高度和行高
                     // 必须在调整列宽之前执行，因为列宽计算依赖 TextHeight
                     try { ApplyScaledHeightsToTable(table, appliedScaleDenom); } catch { }
-
-                    // 第二步：自动调整列宽以适应内容
-                    // 此时 TextHeight 已正确设置，计算结果更准确
-                    //AutoResizeColumns(table);
+                                
 
                     // ================== 结束关键修改区域 ==================
 

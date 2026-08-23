@@ -79,6 +79,10 @@ namespace GB_NewCadPlus_IV.Helpers
             var existingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string standardDn = FindAttributeValue(response.Attributes, NormalizeTag("DN"));
             string standardPn = FindAttributeValue(response.Attributes, NormalizeTag("PN"));
+            LogManager.Instance.LogInfo(
+                $"[规范回写][开始] TargetObjectId={blockReference.ObjectId}, createMissingAttributes={createMissingAttributes}, " +
+                $"目标块AttributeCount={blockReference.AttributeCollection.Count}, 服务器属性数量={response.Attributes?.Count ?? 0}, " +
+                $"服务器DN={standardDn ?? "<缺失>"}, 服务器PN={standardPn ?? "<缺失>"}");
 
             // 遍历块参照已有的属性，优先更新现有属性并保留其原始 Prompt。
             foreach (ObjectId attributeId in blockReference.AttributeCollection)
@@ -102,11 +106,27 @@ namespace GB_NewCadPlus_IV.Helpers
                 {
                     value = SynchronizeModelSpecification(attribute.TextString, standardDn, standardPn);
                 }
-                if (value == null) continue;
+                if (value == null)
+                {
+                    if (IsFlangeStandardTag(tag) || IsModelSpecificationTag(tag))
+                    {
+                        LogManager.Instance.LogWarning(
+                            $"[规范回写][跳过] 目标属性未找到对应服务器值：Tag={attribute.Tag}, NormalizedTag={tag}, TargetObjectId={blockReference.ObjectId}");
+                    }
+                    continue;
+                }
 
                 // 只在值发生变化时写入 AutoCAD 属性。
                 string oldValue = attribute.TextString ?? string.Empty;
-                if (string.Equals(oldValue, value, StringComparison.Ordinal)) continue;
+                if (string.Equals(oldValue, value, StringComparison.Ordinal))
+                {
+                    if (IsFlangeStandardTag(tag) || IsModelSpecificationTag(tag))
+                    {
+                        LogManager.Instance.LogInfo(
+                            $"[规范回写][无需修改] Tag={attribute.Tag}, Value={value}, TargetObjectId={blockReference.ObjectId}");
+                    }
+                    continue;
+                }
 
                 // 写入当前选定系列对应的显示值。
                 attribute.TextString = value;
@@ -125,7 +145,15 @@ namespace GB_NewCadPlus_IV.Helpers
                 {
                     string tag = NormalizeTag(serverAttribute.Key);
                     string value = serverAttribute.Value ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(tag) || existingTags.Contains(tag)) continue;
+                    if (string.IsNullOrWhiteSpace(tag)) continue;
+                    if (existingTags.Contains(tag)) continue;
+
+                    if (IsFlangeStandardTag(tag) || IsModelSpecificationTag(tag))
+                    {
+                        LogManager.Instance.LogWarning(
+                            $"[规范回写][目标缺少Tag] 服务器返回字段未在目标块中找到：ServerTag={serverAttribute.Key}, " +
+                            $"Value={value}, TargetObjectId={blockReference.ObjectId}, createMissingAttributes={createMissingAttributes}");
+                    }
 
                     if (AddHiddenAttribute(transaction, blockReference, serverAttribute.Key, value))
                     {
@@ -136,6 +164,9 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             // 返回已有属性和新增隐藏属性的实际写入数量。
+            LogManager.Instance.LogInfo(
+                $"[规范回写][完成] TargetObjectId={blockReference.ObjectId}, 实际写入数量={updatedCount}, " +
+                $"目标块原有Tag数量={existingTags.Count}, createMissingAttributes={createMissingAttributes}");
             return updatedCount;
         }
 

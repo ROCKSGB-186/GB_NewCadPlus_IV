@@ -89,17 +89,14 @@ namespace GB_NewCadPlus_IV.Views
             string connectionType = FindConnectionTypeRow()?.Value?.Trim() ?? string.Empty;
             int boltHoles = ParseIntegerOrZero(FindRow("BOLT_HOLES")?.Value);
 
-            // 法兰和对夹为两侧法兰，单侧法兰为一侧法兰，其余连接方式没有法兰。
-            int flangeQuantity = connectionType switch
-            {
-                "法兰" => 2,
-                "对夹" => 2,
-                "单侧法兰" => 1,
-                _ => 0
-            };
+            // 法兰类图元默认按一个法兰计数；该值显示在页面中并且仍可由用户编辑。
+            int flangeQuantity = connectionType.Contains("法兰", StringComparison.OrdinalIgnoreCase) ||
+                                  connectionType.Contains("对夹", StringComparison.OrdinalIgnoreCase)
+                ? 1
+                : 0;
 
-            // 螺栓总数统一按照法兰数量乘以每个法兰的螺栓孔数量计算。
-            int boltQuantity = flangeQuantity * boltHoles;
+            // 螺栓数量直接采用螺栓孔数量，FLG_QTY 只单独表示法兰数量。
+            int boltQuantity = boltHoles;
 
             // 更新页面中的计算结果行；缺少行时保持现有属性结构不变。
             InsertGraphicPropertyRow? flangeQuantityRow = FindRow("FLG_QTY");
@@ -146,6 +143,7 @@ namespace GB_NewCadPlus_IV.Views
         private static bool IsConnectionTypeName(string name)
         {
             return string.Equals(name, "CONN_TYPE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "CONNTYPE", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(name, "DNCONN_TYPE", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(name, "连接方式", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(name, "连接形式", StringComparison.OrdinalIgnoreCase);

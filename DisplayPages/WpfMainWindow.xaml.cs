@@ -3875,8 +3875,7 @@ namespace GB_NewCadPlus_IV
                     MessageBox.Show("当前图元正在跟随插入，请先左键落点或按 Esc 结束当前插入。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
-                // 获取当前绘图比例（优先使用用户在 TextBox_绘图比例 中设置的值）
-                //VariableDictionary.wpfTextBoxScale = AutoCadHelper.GetScale();
+            
                 string? tempPath = null;
 
                 // 优先：WPF 窗口中选中的 FileStorage（视实现而定）
@@ -3906,10 +3905,10 @@ namespace GB_NewCadPlus_IV
                 {
                     tempPath = _selectedFilePath;
                 }
-                var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);
+                var (ok, err) = await ExecuteInsertAndWaitResultAsync(tempPath);// 调用统一插入方法并等待结果
                 if (ok)
                 {
-                    await CleanupLocalCadCacheAfterInsertAsync(tempPath);
+                    await CleanupLocalCadCacheAfterInsertAsync(tempPath); // 插入成功后清理本地缓存
                 }
                 else
                 {
@@ -3923,7 +3922,7 @@ namespace GB_NewCadPlus_IV
                 }
 
                 // 调用统一插入方法
-                GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
+                //GB_NewCadPlus_IV.Helpers.InsertGraphicHelper.ExecuteCopyDwgAllFastWithRepeat(tempPath);
             }
             catch (Exception ex)
             {
