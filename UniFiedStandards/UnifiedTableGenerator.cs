@@ -506,9 +506,12 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                 string specification = GetFirstAttributeValue(source.Attributes,
                     "规格型号", "规格", "型号", "MODEL", "SPECIFICATION", "SPEC");
                 string material = GetFirstAttributeValue(source.Attributes,
-                    "材料", "材质", "MATERIAL", "MATERIALS", "MATL");
+                    "材料", "材质", "MATERIAL", "MATERIALS", "MATL", "MEDIUM");
                 string standardNumber = GetFirstAttributeValue(source.Attributes,
-                    "图号或标准号", "图号", "标准号", "DRAWINGNO", "STANDARDNO");
+                    "图号或标准号", "DRAWINGNO.STANDARDNO", "[DRAWINGNO.STANDARDNO]", "图号", "标准号", "DRAWINGNO", "STANDARDNO");
+
+                LogManager.Instance.LogInfo(
+                    $"[设备表][字段解析] NAME={componentName}, Material={material}, DrawingStandard={standardNumber}");
 
                 // 相同图元只按 NAME 判断；规格、材质和标准号作为该 NAME 首条记录的显示属性保留。
                 string groupingKey = NormalizeDeviceGroupingPart(componentName);
@@ -6494,8 +6497,8 @@ namespace GB_NewCadPlus_IV.UniFiedStandards
                            var attrs = d.Attributes;
                            var name = SafeAttr(attrs, new[] { "名称" }, d.Name);
                            var spec = SafeAttr(attrs, new[] { "规格", "规格型号" }, d.Specifications);
-                           var material = SafeAttr(attrs, new[] { "材料", "材质" }, d.Material);
-                           var stdNo = SafeAttr(attrs, new[] { "图号或标准号", "图号" }, d.DrawingNumber);
+                    var material = SafeAttr(attrs, new[] { "材料", "材质", "MATERIAL", "MATERIALS", "MATL", "MEDIUM" }, d.Material);
+                    var stdNo = SafeAttr(attrs, new[] { "图号或标准号", "DRAWINGNO.STANDARDNO", "[DRAWINGNO.STANDARDNO]", "图号", "标准号", "DRAWINGNO", "STANDARDNO" }, d.DrawingNumber);
              
                            // 计算记录数量：优先级 Quantity > Count > 属性“数量” > 默认1
                            int qty = d.Quantity > 0 ? d.Quantity : (d.Count > 0 ? d.Count : 0);

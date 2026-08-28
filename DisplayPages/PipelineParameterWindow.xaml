@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Width="980"
-        Height="720"
-        MinWidth="800"
-        MinHeight="560"
+        Width="850"
+        Height="1000"
+        MinWidth="600"
+        MinHeight="700"
         WindowStartupLocation="CenterOwner"
         Title="管道通用参数">
     <Grid Margin="8">
@@ -61,18 +61,18 @@
                   ItemsSource="{Binding Parameters}"
                   SelectionMode="Single">
             <DataGrid.Columns>
-                <DataGridTextColumn Width="190"
+                <DataGridTextColumn Width="200"
                                     Binding="{Binding Tag}"
                                     Header="Tag（标记）"
                                     IsReadOnly="True" />
-                <DataGridTextColumn Width="260"
+                <DataGridTextColumn Width="300"
                                     Binding="{Binding Prompt}"
                                     Header="Prompt（提示）"
                                     IsReadOnly="True" />
-                <DataGridTextColumn Width="260"
+                <DataGridTextColumn Width="165"
                                     Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                     Header="Value（值）" />
-                <DataGridTextColumn Width="160"
+                <DataGridTextColumn Width="165"
                                     Binding="{Binding Group}"
                                     Header="分组"
                                     IsReadOnly="True" />
@@ -85,15 +85,20 @@
                        Foreground="#666666"
                        Text="就绪" />
             <StackPanel DockPanel.Dock="Right"
-                        Orientation="Horizontal">
+                        Orientation="Horizontal" Width="288" HorizontalAlignment="Right">
                 <Button Width="110"
                         Margin="8,0,0,0"
                         Click="CancelButton_Click"
                         Content="取消" />
                 <Button Width="150"
+                        Height="30"
                         Margin="8,0,0,0"
                         Click="CompleteButton_Click"
-                        Content="完成管道绘制" />
+                        Background="#FF0050A0"
+                        BorderBrush="#FFC2C6CE"
+                        Content="完成管道绘制"
+                        FontSize="12"
+                        Foreground="White"/>
             </StackPanel>
         </DockPanel>
     </Grid>

@@ -106,4 +106,30 @@ namespace GB_NewCadPlus_IV.Models
         public int RowNumber { get; set; }
         public Dictionary<string, string> Values { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// 客户端螺栓规范查询条件。
+    /// </summary>
+    public sealed class BoltStandardMatchRequest
+    {
+        public string FamilyCode { get; set; } = "BOLT";
+        public string SeriesCode { get; set; } = string.Empty;
+        public string StandardNumber { get; set; } = string.Empty;
+        public string DN { get; set; } = string.Empty;
+        public string PN { get; set; } = string.Empty;
+        public string Short { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// 客户端螺栓规范查询结果。
+    /// </summary>
+    public sealed class BoltStandardMatchResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int MatchCount { get; set; }
+        public bool IsUniqueMatch { get; set; }
+        public Dictionary<string, string> Attributes { get; set; }
+            = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
 }

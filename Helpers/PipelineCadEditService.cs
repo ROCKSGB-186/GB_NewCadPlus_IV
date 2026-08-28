@@ -49,6 +49,10 @@ namespace GB_NewCadPlus_IV.Helpers
                     throw new InvalidOperationException("选择的对象不是管道 Polyline。\n");
                 }
 
+                Dictionary<string, string> originalPipelineProperties =
+                    PipelineEndpointPropertyHelper.ReadEntityProperties(transaction, pipeline);
+                string originalTagNo = GetTagNo(originalPipelineProperties);
+
                 string pipeId = GetAttribute(attributes, "PIPEID");
                 if (string.IsNullOrWhiteSpace(pipeId))
                 {
@@ -77,11 +81,24 @@ namespace GB_NewCadPlus_IV.Helpers
                 WriteXRecords(transaction, pipeline, attributes);
                 string tagNo = GetTagNo(attributes);
 
+                LogManager.Instance.LogInfo(
+                    $"[管段属性批量同步][开始] PipeId={pipeId}, OldTagNo={originalTagNo}, NewTagNo={tagNo}, ChangedFields={string.Join(",", changedAttributes?.Keys ?? Enumerable.Empty<string>())}, Scope=CurrentSpace");
+
                 BlockTableRecord currentSpace = transaction.GetObject(
                     database.CurrentSpaceId,
                     OpenMode.ForRead) as BlockTableRecord;
                 if (currentSpace != null)
                 {
+                    // 必须先按修改前的管段号同步，避免下面的 PIPEID 同步先把属性载体改成新管段号，导致旧号图元无法命中。
+                    int synchronizedComponentCount = SynchronizeSameTagNoComponents(
+                        transaction,
+                        currentSpace,
+                        pipelineObjectId,
+                        originalTagNo,
+                        tagNo,
+                        changedAttributes,
+                        flangeComponentIds);
+
                     foreach (ObjectId objectId in currentSpace)
                     {
                         Entity entity = transaction.GetObject(objectId, OpenMode.ForWrite) as Entity;
@@ -120,13 +137,6 @@ namespace GB_NewCadPlus_IV.Helpers
                         }
                     }
 
-                    int synchronizedComponentCount = SynchronizeSameTagNoComponents(
-                        transaction,
-                        currentSpace,
-                        pipelineObjectId,
-                        tagNo,
-                        changedAttributes,
-                        flangeComponentIds);
                     LogManager.Instance.LogInfo(
                         $"[管段属性批量同步][完成] PipeId={pipeId}, TagNo={tagNo}, ChangedFieldCount={changedAttributes?.Count ?? 0}, ComponentCount={synchronizedComponentCount}");
                 }
@@ -137,43 +147,71 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
-        /// 按唯一管段号同步当前空间内的非管道部件；只更新本次实际修改且部件已存在的字段。
+        /// 按修改前的管段号同步当前空间内的同号图元；只更新本次实际修改且图元已存在的字段。
         /// </summary>
         private static int SynchronizeSameTagNoComponents(
             Transaction transaction,
             BlockTableRecord currentSpace,
             ObjectId pipelineObjectId,
+            string originalTagNo,
             string tagNo,
             IDictionary<string, string> changedAttributes,
             ICollection<ObjectId> flangeComponentIds)
         {
-            if (string.IsNullOrWhiteSpace(tagNo) || changedAttributes == null || changedAttributes.Count == 0)
+            if (string.IsNullOrWhiteSpace(originalTagNo) ||
+                changedAttributes == null ||
+                changedAttributes.Count == 0)
             {
-                LogManager.Instance.LogInfo($"[管段属性批量同步][跳过] TagNo={tagNo}, 原因=管段号为空或本次没有实际修改字段。");
+                LogManager.Instance.LogInfo($"[管段属性批量同步][跳过] OldTagNo={originalTagNo}, NewTagNo={tagNo}, 原因=修改前管段号为空或本次没有实际修改字段。");
                 return 0;
             }
 
-            int componentCount = 0;
-            foreach (ObjectId objectId in currentSpace)
+            int scannedEntityCount = 0;
+            int entityWithTagNoCount = 0;
+            int matchedEntityCount = 0;
+            int updatedEntityCount = 0;
+            var tagNoDistribution = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var visitedEntities = new HashSet<ObjectId>();
+            foreach (Entity entity in EnumerateCurrentSpaceEntities(transaction, currentSpace, visitedEntities))
             {
-                if (objectId == pipelineObjectId)
+                scannedEntityCount++;
+                if (entity == null || entity.IsErased || entity.ObjectId == pipelineObjectId)
                 {
                     continue;
                 }
 
-                Entity entity = transaction.GetObject(objectId, OpenMode.ForWrite) as Entity;
-                // 所有 Polyline 均为管道或图线，按规则不参与部件属性同步。
-                if (entity == null || entity.IsErased || entity is Polyline)
+                // 普通文字的 TextString 不作为管段号属性来源，避免修改文字内容。
+                if (entity is DBText || entity is MText)
                 {
                     continue;
                 }
 
                 Dictionary<string, string> componentProperties =
                     PipelineEndpointPropertyHelper.ReadEntityProperties(transaction, entity);
-                if (!string.Equals(GetTagNo(componentProperties), tagNo, StringComparison.OrdinalIgnoreCase))
+                string entityTagNo = GetTagNo(componentProperties);
+                if (string.IsNullOrWhiteSpace(entityTagNo))
                 {
                     continue;
                 }
+
+                entityWithTagNoCount++;
+                if (tagNoDistribution.TryGetValue(entityTagNo, out int tagNoCount))
+                {
+                    tagNoDistribution[entityTagNo] = tagNoCount + 1;
+                }
+                else
+                {
+                    tagNoDistribution[entityTagNo] = 1;
+                }
+
+                if (!string.Equals(entityTagNo, originalTagNo, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                matchedEntityCount++;
+                LogManager.Instance.LogInfo(
+                    $"[管段属性批量同步][匹配] OldTagNo={originalTagNo}, NewTagNo={tagNo}, TargetObjectId={entity.ObjectId}, EntityType={entity.GetType().Name}, AttributeCount={componentProperties.Count}");
 
                 int updatedCount = UpdateExistingComponentProperties(
                     transaction,
@@ -182,9 +220,9 @@ namespace GB_NewCadPlus_IV.Helpers
                     tagNo);
                 if (updatedCount > 0)
                 {
-                    componentCount++;
+                    updatedEntityCount++;
                     LogManager.Instance.LogInfo(
-                        $"[管段属性批量同步][部件完成] TagNo={tagNo}, TargetObjectId={entity.ObjectId}, EntityType={entity.GetType().Name}, UpdatedCount={updatedCount}");
+                        $"[管段属性批量同步][完成] OldTagNo={originalTagNo}, NewTagNo={tagNo}, TargetObjectId={entity.ObjectId}, EntityType={entity.GetType().Name}, UpdatedCount={updatedCount}");
                 }
 
                 if (updatedCount > 0 &&
@@ -198,7 +236,97 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
             }
 
-            return componentCount;
+            LogManager.Instance.LogInfo(
+                $"[管段属性批量同步][汇总] OldTagNo={originalTagNo}, NewTagNo={tagNo}, ScannedEntityCount={scannedEntityCount}, EntityWithTagNoCount={entityWithTagNoCount}, MatchedEntityCount={matchedEntityCount}, UpdatedEntityCount={updatedEntityCount}, TagNoDistribution={string.Join(";", tagNoDistribution.Select(item => $"{item.Key}:{item.Value}"))}");
+            return updatedEntityCount;
+        }
+
+        /// <summary>
+        /// 枚举当前 Model/Layout 空间中的实体，并递归访问块定义中的嵌套实体。
+        /// 只返回实体对象，不解析普通文字的内容；因此普通文字不会因文字内容包含管段号而被修改。
+        /// </summary>
+        private static IEnumerable<Entity> EnumerateCurrentSpaceEntities(
+            Transaction transaction,
+            BlockTableRecord currentSpace,
+            ISet<ObjectId> visitedEntities)
+        {
+            foreach (ObjectId objectId in currentSpace)
+            {
+                if (!visitedEntities.Add(objectId))
+                {
+                    continue;
+                }
+
+                Entity entity = transaction.GetObject(objectId, OpenMode.ForWrite) as Entity;
+                if (entity == null || entity.IsErased)
+                {
+                    continue;
+                }
+
+                yield return entity;
+
+                if (!(entity is BlockReference blockReference))
+                {
+                    continue;
+                }
+
+                BlockTableRecord blockDefinition = transaction.GetObject(
+                    blockReference.BlockTableRecord,
+                    OpenMode.ForRead) as BlockTableRecord;
+                if (blockDefinition == null)
+                {
+                    continue;
+                }
+
+                foreach (Entity nestedEntity in EnumerateBlockDefinitionEntities(
+                    transaction,
+                    blockDefinition,
+                    visitedEntities))
+                {
+                    yield return nestedEntity;
+                }
+            }
+        }
+
+        private static IEnumerable<Entity> EnumerateBlockDefinitionEntities(
+            Transaction transaction,
+            BlockTableRecord blockDefinition,
+            ISet<ObjectId> visitedEntities)
+        {
+            foreach (ObjectId objectId in blockDefinition)
+            {
+                if (!visitedEntities.Add(objectId))
+                {
+                    continue;
+                }
+
+                Entity entity = transaction.GetObject(objectId, OpenMode.ForWrite) as Entity;
+                if (entity == null || entity.IsErased)
+                {
+                    continue;
+                }
+
+                yield return entity;
+
+                if (entity is BlockReference nestedBlockReference)
+                {
+                    BlockTableRecord nestedDefinition = transaction.GetObject(
+                        nestedBlockReference.BlockTableRecord,
+                        OpenMode.ForRead) as BlockTableRecord;
+                    if (nestedDefinition == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (Entity nestedEntity in EnumerateBlockDefinitionEntities(
+                        transaction,
+                        nestedDefinition,
+                        visitedEntities))
+                    {
+                        yield return nestedEntity;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -235,29 +363,55 @@ namespace GB_NewCadPlus_IV.Helpers
             }
 
             DBDictionary dictionary = transaction.GetObject(entity.ExtensionDictionary, OpenMode.ForRead) as DBDictionary;
-            if (dictionary == null || !dictionary.Contains(PipelineCadPropertyKeyHelper.StorageKey))
+            if (dictionary == null)
             {
                 return updatedCount;
             }
 
-            Xrecord record = transaction.GetObject(dictionary.GetAt(PipelineCadPropertyKeyHelper.StorageKey), OpenMode.ForWrite) as Xrecord;
-            TypedValue[] values = record?.Data?.AsArray();
-            if (values == null) return updatedCount;
-            bool recordChanged = false;
-            for (int index = 0; index + 1 < values.Length; index += 2)
+            foreach (DBDictionaryEntry entry in dictionary)
             {
-                string businessTag = values[index].Value?.ToString() ?? string.Empty;
-                if (!TryGetChangedValue(changedAttributes, businessTag, out string newValue)) continue;
-                string oldValue = values[index + 1].Value?.ToString() ?? string.Empty;
-                if (string.Equals(oldValue, newValue, StringComparison.Ordinal)) continue;
-                values[index + 1] = new TypedValue((int)DxfCode.Text, newValue);
-                updatedCount++;
-                recordChanged = true;
-                LogManager.Instance.LogInfo($"[管段属性批量同步][Xrecord] TagNo={tagNo}, Tag={businessTag}, OldValue={oldValue}, NewValue={newValue}, TargetObjectId={entity.ObjectId}");
-            }
-            if (recordChanged)
-            {
-                record.Data = new ResultBuffer(values);
+                Xrecord record = transaction.GetObject(entry.Value, OpenMode.ForWrite) as Xrecord;
+                TypedValue[] values = record?.Data?.AsArray();
+                if (record == null || values == null || values.Length == 0)
+                {
+                    continue;
+                }
+
+                bool recordChanged = false;
+                if (string.Equals(entry.Key, PipelineCadPropertyKeyHelper.StorageKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    for (int index = 0; index + 1 < values.Length; index += 2)
+                    {
+                        string businessTag = values[index].Value?.ToString() ?? string.Empty;
+                        if (!TryGetChangedValue(changedAttributes, businessTag, out string newValue)) continue;
+                        string oldValue = values[index + 1].Value?.ToString() ?? string.Empty;
+                        if (string.Equals(oldValue, newValue, StringComparison.Ordinal)) continue;
+                        values[index + 1] = new TypedValue((int)DxfCode.Text, newValue);
+                        updatedCount++;
+                        recordChanged = true;
+                        LogManager.Instance.LogInfo($"[管段属性批量同步][Xrecord] TagNo={tagNo}, Tag={businessTag}, OldValue={oldValue}, NewValue={newValue}, TargetObjectId={entity.ObjectId}");
+                    }
+                }
+                else
+                {
+                    string businessTag = PipelineCadPropertyKeyHelper.Decode(entry.Key ?? string.Empty);
+                    if (TryGetChangedValue(changedAttributes, businessTag, out string newValue))
+                    {
+                        string oldValue = values[0].Value?.ToString() ?? string.Empty;
+                        if (!string.Equals(oldValue, newValue, StringComparison.Ordinal))
+                        {
+                            values[0] = new TypedValue((int)DxfCode.Text, newValue);
+                            updatedCount++;
+                            recordChanged = true;
+                            LogManager.Instance.LogInfo($"[管段属性批量同步][独立Xrecord] TagNo={tagNo}, Tag={businessTag}, OldValue={oldValue}, NewValue={newValue}, TargetObjectId={entity.ObjectId}");
+                        }
+                    }
+                }
+
+                if (recordChanged)
+                {
+                    record.Data = new ResultBuffer(values);
+                }
             }
 
             return updatedCount;
@@ -468,10 +622,38 @@ namespace GB_NewCadPlus_IV.Helpers
 
                 try
                 {
-                    FlangeStandardMatchResponse response = new StandardApiService()
+                    StandardApiService standardApiService = new StandardApiService();
+                    FlangeStandardMatchResponse response = standardApiService
                         .MatchFlangeAsync(request)
                         .GetAwaiter()
                         .GetResult();
+
+                    // 管道中的 FLG_STD 可能是阀门/管道标准，不一定是法兰标准；指定标准未命中时按 DN、PN、系列回退查询。
+                    if ((response == null || !response.Success) && !string.IsNullOrWhiteSpace(request.StandardNumber))
+                    {
+                        FlangeStandardMatchRequest fallbackRequest = new FlangeStandardMatchRequest
+                        {
+                            FamilyCode = request.FamilyCode,
+                            SeriesCode = request.SeriesCode,
+                            StandardNumber = string.Empty,
+                            TableNumber = string.Empty,
+                            DN = request.DN,
+                            PN = request.PN,
+                            Series = request.Series,
+                            ConnectionMode = request.ConnectionMode,
+                            FlangeType = string.Empty,
+                            FaceType = string.Empty
+                        };
+                        LogManager.Instance.LogInfo(
+                            $"[管段法兰规范刷新][回退请求] TargetObjectId={flangeObjectId}, 原标准号={request.StandardNumber}, DN={fallbackRequest.DN}, PN={fallbackRequest.PN}, Series={fallbackRequest.Series}");
+                        response = standardApiService
+                            .MatchFlangeAsync(fallbackRequest)
+                            .GetAwaiter()
+                            .GetResult();
+                        LogManager.Instance.LogInfo(
+                            $"[管段法兰规范刷新][回退结果] TargetObjectId={flangeObjectId}, Success={response?.Success}, MatchCount={response?.MatchCount}, Message={response?.Message}");
+                    }
+
                     if (response == null || !response.Success)
                     {
                         LogManager.Instance.LogWarning($"[管段法兰规范刷新][未命中] TargetObjectId={flangeObjectId}, DN={request.DN}, PN={request.PN}, Message={response?.Message}");
@@ -571,7 +753,11 @@ namespace GB_NewCadPlus_IV.Helpers
             foreach (KeyValuePair<string, string> attribute in attributes)
             {
                 string normalizedTag = NormalizeBusinessTag(attribute.Key);
-                if (normalizedTag == "TAGNO" || normalizedTag == "管段号")
+                if (normalizedTag == "TAGNO" ||
+                    normalizedTag == "管段号" ||
+                    normalizedTag == "管段编号" ||
+                    normalizedTag == "PIPENO" ||
+                    normalizedTag == "PIPELINENO")
                 {
                     return (attribute.Value ?? string.Empty).Trim();
                 }

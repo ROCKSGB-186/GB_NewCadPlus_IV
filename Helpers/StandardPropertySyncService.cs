@@ -4,6 +4,7 @@ using GB_NewCadPlus_IV.FunctionalMethod;
 using GB_NewCadPlus_IV.Models;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace GB_NewCadPlus_IV.Helpers
@@ -82,7 +83,8 @@ namespace GB_NewCadPlus_IV.Helpers
             LogManager.Instance.LogInfo(
                 $"[规范回写][开始] TargetObjectId={blockReference.ObjectId}, createMissingAttributes={createMissingAttributes}, " +
                 $"目标块AttributeCount={blockReference.AttributeCollection.Count}, 服务器属性数量={response.Attributes?.Count ?? 0}, " +
-                $"服务器DN={standardDn ?? "<缺失>"}, 服务器PN={standardPn ?? "<缺失>"}");
+                $"服务器DN={standardDn ?? "<缺失>"}, 服务器PN={standardPn ?? "<缺失>"}, " +
+                $"服务器关键字段={FormatKeyFieldValues(response.Attributes)}");
 
             // 遍历块参照已有的属性，优先更新现有属性并保留其原始 Prompt。
             foreach (ObjectId attributeId in blockReference.AttributeCollection)
@@ -137,6 +139,10 @@ namespace GB_NewCadPlus_IV.Helpers
                     $"[规范参数赋值][AttributeReference] Tag={attribute.Tag}, OldValue={oldValue}, NewValue={value}, TargetObjectId={blockReference.ObjectId}");
             }
 
+            // 部分历史图元将规范字段保存在扩展字典 XRecord 中，不能只依赖 AttributeReference。
+            // 同时补充不存在的 GBPIPE_DATA 字段，避免 FLG_ID、RAISED_FACE_HGT 等字段在炸开后丢失。
+            updatedCount += ApplyToXRecords(transaction, blockReference, response.Attributes, createMissingAttributes);
+
             // 炸开后的目标块如果缺少规范字段，则把隐藏属性添加到块定义和块参照中。
             // 炸开前调用本方法时传入 false，避免新增属性被炸开为当前图纸空间中的独立实体。
             if (createMissingAttributes)
@@ -167,6 +173,150 @@ namespace GB_NewCadPlus_IV.Helpers
             LogManager.Instance.LogInfo(
                 $"[规范回写][完成] TargetObjectId={blockReference.ObjectId}, 实际写入数量={updatedCount}, " +
                 $"目标块原有Tag数量={existingTags.Count}, createMissingAttributes={createMissingAttributes}");
+            return updatedCount;
+        }
+
+        private static string FormatKeyFieldValues(IDictionary<string, string> attributes)
+        {
+            string[] keys = { "FLG_ID", "RAISED_FACE_HGT", "BOLT_QTY", "BOLT_HOLES", "BOLT_LENGTH", "FLG_QTY" };
+            var values = new List<string>();
+            foreach (string key in keys)
+            {
+                string value = FindAttributeValue(attributes, NormalizeTag(key));
+                values.Add($"{key}={(value == null ? "<缺失>" : value)}");
+            }
+
+            return string.Join(", ", values);
+        }
+
+        /// <summary>
+        /// 将服务器返回的规范属性同步到块参照的 GBPIPE_DATA 和独立 XRecord。
+        /// </summary>
+        private int ApplyToXRecords(
+            Transaction transaction,
+            BlockReference blockReference,
+            IDictionary<string, string> serverAttributes,
+            bool createMissingRecords)
+        {
+            if (transaction == null || blockReference == null || serverAttributes == null ||
+                serverAttributes.Count == 0)
+            {
+                return 0;
+            }
+
+            DBDictionary dictionary;
+            if (blockReference.ExtensionDictionary == ObjectId.Null)
+            {
+                if (!createMissingRecords)
+                {
+                    return 0;
+                }
+
+                blockReference.CreateExtensionDictionary();
+            }
+
+            dictionary = transaction.GetObject(
+                blockReference.ExtensionDictionary,
+                OpenMode.ForWrite) as DBDictionary;
+            if (dictionary == null)
+            {
+                return 0;
+            }
+
+            int updatedCount = 0;
+            HashSet<string> storedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DBDictionaryEntry entry in dictionary)
+            {
+                Xrecord record = transaction.GetObject(entry.Value, OpenMode.ForWrite) as Xrecord;
+                TypedValue[] values = record?.Data?.AsArray();
+                if (record == null || values == null || values.Length == 0)
+                {
+                    continue;
+                }
+
+                bool changed = false;
+                if (string.Equals(entry.Key, PipelineCadPropertyKeyHelper.StorageKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    for (int index = 0; index + 1 < values.Length; index += 2)
+                    {
+                        string tag = values[index].Value?.ToString() ?? string.Empty;
+                                string normalizedTag = NormalizeTag(tag);
+                                if (!string.IsNullOrWhiteSpace(normalizedTag)) storedTags.Add(normalizedTag);
+                                string value = FindAttributeValue(serverAttributes, normalizedTag);
+                        if (value == null) continue;
+
+                        string oldValue = values[index + 1].Value?.ToString() ?? string.Empty;
+                        if (string.Equals(oldValue, value, StringComparison.Ordinal)) continue;
+
+                        values[index + 1] = new TypedValue(values[index + 1].TypeCode, value);
+                        updatedCount++;
+                        changed = true;
+                        LogManager.Instance.LogInfo(
+                            $"[规范参数赋值][XRecord] Tag={tag}, OldValue={oldValue}, NewValue={value}, TargetObjectId={blockReference.ObjectId}");
+                    }
+                }
+                else
+                {
+                    string tag = PipelineCadPropertyKeyHelper.Decode(entry.Key ?? string.Empty);
+                    string normalizedTag = NormalizeTag(tag);
+                    if (!string.IsNullOrWhiteSpace(normalizedTag)) storedTags.Add(normalizedTag);
+                    string value = FindAttributeValue(serverAttributes, normalizedTag);
+                    if (value == null) continue;
+
+                    string oldValue = values[0].Value?.ToString() ?? string.Empty;
+                    if (string.Equals(oldValue, value, StringComparison.Ordinal)) continue;
+
+                    values[0] = new TypedValue(values[0].TypeCode, value);
+                    updatedCount++;
+                    changed = true;
+                    LogManager.Instance.LogInfo(
+                        $"[规范参数赋值][独立XRecord] Tag={tag}, OldValue={oldValue}, NewValue={value}, TargetObjectId={blockReference.ObjectId}");
+                }
+
+                if (changed)
+                {
+                    record.Data = new ResultBuffer(values);
+                }
+            }
+
+            if (createMissingRecords)
+            {
+                ObjectId storageId = dictionary.Contains(PipelineCadPropertyKeyHelper.StorageKey)
+                    ? dictionary.GetAt(PipelineCadPropertyKeyHelper.StorageKey)
+                    : ObjectId.Null;
+                Xrecord storageRecord = storageId == ObjectId.Null
+                    ? null
+                    : transaction.GetObject(storageId, OpenMode.ForWrite) as Xrecord;
+                List<TypedValue> storageValues = storageRecord?.Data?.AsArray()?.ToList()
+                    ?? new List<TypedValue>();
+
+                foreach (KeyValuePair<string, string> serverAttribute in serverAttributes)
+                {
+                    string tag = serverAttribute.Key?.Trim() ?? string.Empty;
+                    string normalizedTag = NormalizeTag(tag);
+                    if (string.IsNullOrWhiteSpace(tag) || storedTags.Contains(normalizedTag)) continue;
+
+                    if (storageRecord == null)
+                    {
+                        storageRecord = new Xrecord();
+                        dictionary.SetAt(PipelineCadPropertyKeyHelper.StorageKey, storageRecord);
+                        transaction.AddNewlyCreatedDBObject(storageRecord, true);
+                    }
+
+                    storageValues.Add(new TypedValue((int)DxfCode.Text, tag));
+                    storageValues.Add(new TypedValue((int)DxfCode.Text, serverAttribute.Value ?? string.Empty));
+                    storedTags.Add(normalizedTag);
+                    updatedCount++;
+                    LogManager.Instance.LogInfo(
+                        $"[规范参数新增][XRecord] Tag={tag}, NewValue={serverAttribute.Value ?? string.Empty}, TargetObjectId={blockReference.ObjectId}");
+                }
+
+                if (storageRecord != null && storageValues.Count > 0)
+                {
+                    storageRecord.Data = new ResultBuffer(storageValues.ToArray());
+                }
+            }
+
             return updatedCount;
         }
 

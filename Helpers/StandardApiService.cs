@@ -924,6 +924,72 @@ namespace GB_NewCadPlus_IV.Helpers
         }
 
         /// <summary>
+        /// 查询指定螺栓系列、DN、PN 和 SHORT 的螺栓规范。
+        /// </summary>
+        public async Task<BoltStandardMatchResponse> MatchBoltAsync(
+            BoltStandardMatchRequest request,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+
+            request.DN = NormalizeDn(request.DN);
+            string requestUrl = ApiEndpoint.Build("api/standards/bolts/match");
+            try
+            {
+                string requestJson = JsonConvert.SerializeObject(request);
+                using (var content = new StringContent(requestJson, Encoding.UTF8, "application/json"))
+                using (HttpResponseMessage response = await HttpClient
+                    .PostAsync(requestUrl, content, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestException(
+                            $"螺栓规范查询失败，HTTP {(int)response.StatusCode}，地址：{requestUrl}，响应：{responseBody}");
+                    }
+
+                    BoltStandardMatchResponse? result = JsonConvert
+                        .DeserializeObject<BoltStandardMatchResponse>(responseBody);
+                    if (result == null) throw new InvalidOperationException("螺栓规范查询返回为空。");
+
+                    result.Attributes ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    LogManager.Instance.LogInfo(
+                        $"螺栓规范查询完成：地址={requestUrl}，系列={request.SeriesCode}，DN={request.DN}，PN={request.PN}，SHORT={request.Short}，成功={result.Success}，LENGTH={FindBoltValue(result.Attributes, "LENGTH", "Length", "长度")}，QUANTITY={FindBoltValue(result.Attributes, "QUANTITY", "Quantity", "数量")}");
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Instance.LogError(
+                    $"螺栓规范查询异常：地址={requestUrl}，系列={request.SeriesCode}，DN={request.DN}，PN={request.PN}，SHORT={request.Short}，错误={ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 从螺栓规范返回字段中按兼容名称读取值。
+        /// </summary>
+        private static string FindBoltValue(
+            IDictionary<string, string> attributes,
+            params string[] keys)
+        {
+            foreach (string key in keys)
+            {
+                foreach (KeyValuePair<string, string> item in attributes)
+                {
+                    if (string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(item.Value))
+                    {
+                        return item.Value.Trim();
+                    }
+                }
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
         /// 第一阶段验证入口：查询 GB/T 9124.1-2019 表52 PN10 的 DN50 法兰数据。
         /// </summary>
         public Task<FlangeStandardMatchResponse> QueryDn50Async(

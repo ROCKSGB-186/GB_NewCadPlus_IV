@@ -71,6 +71,7 @@ namespace GB_NewCadPlus_IV.Helpers
             bool hasFlangeStandardMatch,
             FlangeStandardMatchResponse? flangeStandardResponse,
             IDictionary<string, string>? inheritedProperties,
+             bool isStandaloneFlangeOrBlindPlate,
             out Dictionary<string, string> editedProperties)
         {
             editedProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -103,39 +104,60 @@ namespace GB_NewCadPlus_IV.Helpers
             // 只有本次确实命中法兰/连接规范时，才加入新增的三个业务属性。
             if (hasFlangeStandardMatch)
             {
-                string boltHoles = FindProperty(propertyMap, "BOLT_HOLES") ?? string.Empty;
+                string boltHoles = FindProperty(propertyMap, "BOLT_HOLES", "BOLTHOLES", "螺栓孔数", "螺栓孔数量") ?? string.Empty;
                 // 当前块属性中可能没有连接方式，使用已确认的重叠继承属性作为计算兜底来源。
-                string connectionType = FindProperty(propertyMap, "CONN_TYPE", "DNCONN_TYPE", "连接方式", "连接形式")
-                    ?? FindProperty(inheritedProperties ?? new Dictionary<string, string>(), "CONN_TYPE", "DNCONN_TYPE", "连接方式", "连接形式")
+                string connectionType = FindProperty(propertyMap, "CONN_TYPE", "CONNTYPE", "DNCONN_TYPE", "连接方式", "连接形式")
+                    ?? FindProperty(inheritedProperties ?? new Dictionary<string, string>(), "CONN_TYPE", "CONNTYPE", "DNCONN_TYPE", "连接方式", "连接形式")
                     ?? string.Empty;
                 if (!string.IsNullOrWhiteSpace(connectionType))
                 {
                     // 将继承得到的连接方式补回编辑字典，确保页面显示和后续属性写回使用同一个值。
                     SetPropertyValueByNormalizedKey(propertyMap, "CONN_TYPE", connectionType);
                 }
-                int flangeQuantity = GetInsertFlangeQuantity(connectionType);
-                // 螺栓数量按螺栓孔数量显示；法兰数量只单独记录在 FLG_QTY，不再参与 BOLT_QTY 计算。
-                int boltQuantity = ParseIntegerOrZeroForInsert(boltHoles);
+                int flangeQuantity = GetInsertFlangeQuantity(connectionType, isStandaloneFlangeOrBlindPlate);
+                // 螺栓数量按法兰数量计算：法兰为两侧法兰，单侧法兰和对夹为单侧法兰。
+                int boltQuantity = ParseIntegerOrZeroForInsert(boltHoles) * flangeQuantity;
                 SetPropertyValueByNormalizedKey(propertyMap, "FLG_QTY", flangeQuantity.ToString());
                 SetPropertyValueByNormalizedKey(propertyMap, "BOLT_QTY", boltQuantity.ToString());
-                SetPropertyValueByNormalizedKey(propertyMap, "BOLT_LENGTH", "0");
+                // 源图元可能没有 BOLT_LENGTH 属性，但插入前页面必须显示该字段，供螺栓规范结果写入。
+                SetPropertyValueByNormalizedKey(propertyMap, "BOLT_LENGTH", string.Empty);
                 logger.LogInfo($"插入前法兰扩展属性已加入：连接方式={connectionType}, FLG_QTY={FindProperty(propertyMap, "FLG_QTY") ?? string.Empty}, BOLT_HOLES={boltHoles}, BOLT_QTY={FindProperty(propertyMap, "BOLT_QTY") ?? string.Empty}, BOLT_LENGTH={FindProperty(propertyMap, "BOLT_LENGTH") ?? string.Empty}");
             }
+
+            // 重叠管道的管段号是当前插入图元的关联标识，必须覆盖源 DWG 中的默认管段号。
+            string inheritedTagNo = FindProperty(
+                inheritedProperties ?? new Dictionary<string, string>(),
+                "TAG_NO",
+                "TAGNO",
+                "管段号",
+                "管段编号");
+            if (!string.IsNullOrWhiteSpace(inheritedTagNo))
+            {
+                SetPropertyValueByNormalizedKey(propertyMap, "TAG_NO", inheritedTagNo.Trim());
+                logger.LogInfo(
+                    $"[插入属性优先级][重叠管道管段号] 窗口默认值已覆盖：InheritedTagNo={inheritedTagNo.Trim()}, SourceTagNo={FindProperty(propertyMap, "TAG_NO") ?? string.Empty}");
+            }
+
+            // 法兰规范属性合并完成后再预加载 S、L 两套螺栓规范，确保使用最终的 DN、PN 和标准号。
+            Dictionary<string, BoltStandardMatchResponse> boltStandardResponses =
+                LoadBoltStandardResponses(propertyMap, logger);
 
             logger.LogInfo($"插入前属性编辑窗口准备打开：属性数量={propertyMap.Count}");
             try
             {
-                var window = new InsertGraphicPropertyWindow(propertyMap, title);
+                var window = new InsertGraphicPropertyWindow(propertyMap, title, boltStandardResponses, isStandaloneFlangeOrBlindPlate);
                 window.SourceInitialized += (_, _) =>
                 {
                     try
                     {
                         new WindowInteropHelper(window) { Owner = Application.MainWindow.Handle };
                     }
+
                     catch (Exception ownerEx)
                     {
                         logger.LogWarning($"设置插入属性窗口宿主失败，将继续显示窗口：{ownerEx.Message}");
                     }
+
                 };
 
                 if (window.ShowDialog() != true)
@@ -145,6 +167,16 @@ namespace GB_NewCadPlus_IV.Helpers
                 }
 
                 editedProperties = window.GetEditedProperties();
+
+                // 再次覆盖窗口返回值，防止源 DWG 默认值或旧窗口字段映射在最终写回阶段恢复旧管段号。
+                if (!string.IsNullOrWhiteSpace(inheritedTagNo))
+                {
+                    string confirmedTagNo = FindProperty(editedProperties, "TAG_NO", "TAGNO", "管段号", "管段编号");
+                    SetPropertyValueByNormalizedKey(editedProperties, "TAG_NO", inheritedTagNo.Trim());
+                    logger.LogInfo(
+                        $"[插入属性优先级][重叠管道管段号] 最终值已锁定：InheritedTagNo={inheritedTagNo.Trim()}, BeforeFinalTagNo={confirmedTagNo}, FinalTagNo={FindProperty(editedProperties, "TAG_NO") ?? string.Empty}");
+                }
+
                 logger.LogInfo($"用户确认插入图元：编辑后属性数量={editedProperties.Count}");
                 return true;
             }
@@ -155,6 +187,57 @@ namespace GB_NewCadPlus_IV.Helpers
             }
         }
 
+        /// <summary>
+        /// 在属性窗口打开前预加载 S、L 两套螺栓规范，窗口内切换连接方式时直接使用内存结果。
+        /// </summary>
+        private static Dictionary<string, BoltStandardMatchResponse> LoadBoltStandardResponses(
+            IDictionary<string, string> properties,
+            LogManager logger)
+        {
+            var responses = new Dictionary<string, BoltStandardMatchResponse>(StringComparer.OrdinalIgnoreCase);
+            string dn = FindProperty(properties, "DN", "公称通径", "通径", "管径", "公称直径") ?? string.Empty;
+            string pn = FindProperty(properties, "PN", "公称压力", "压力等级") ?? string.Empty;
+            string standardNumber = FindProperty(properties, "FLG_STD", "DRAWINGNO.STANDARDNO", "法兰标准", "标准号") ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(dn) || string.IsNullOrWhiteSpace(pn))
+            {
+                logger.LogInfo($"螺栓规范预加载跳过：缺少 DN 或 PN，DN={dn}，PN={pn}");
+                return responses;
+            }
+
+            var api = new StandardApiService();
+            foreach (var item in new[]
+            {
+                new { Short = "S", SeriesCode = "PLATE_WELD", StandardNumber = "LSLM-S 9124.1-2019" },
+                new { Short = "L", SeriesCode = "PLATE_WELD", StandardNumber = "LSLM-L 9124.1-2019" }
+            })
+            {
+                try
+                {
+                    BoltStandardMatchResponse response = new BoltStandardMatchResponse { Success = false };
+                    response = api.MatchBoltAsync(new BoltStandardMatchRequest
+                    {
+                        FamilyCode = "FLANGE",
+                        SeriesCode = item.SeriesCode,
+                        StandardNumber = item.StandardNumber,
+                        DN = NormalizeDn(dn),
+                        PN = NormalizePn(pn),
+                        Short = item.Short
+                    }).GetAwaiter().GetResult();
+                    responses[item.Short] = response;
+                    string responseKeys = response?.Attributes == null
+                        ? string.Empty
+                        : string.Join(",", response.Attributes.Keys);
+                    logger.LogInfo($"螺栓规范预加载完成：SHORT={item.Short}，系列={item.SeriesCode}，标准号={item.StandardNumber}，成功={response?.Success == true}，消息={response?.Message ?? string.Empty}，属性={responseKeys}");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError($"螺栓规范预加载异常：SHORT={item.Short}，系列={item.SeriesCode}，标准号={item.StandardNumber}，错误={ex.Message}");
+                }
+            }
+
+            return responses;
+        }
+
         private static int ParseIntegerOrZeroForInsert(string value)
         {
             if (int.TryParse(value?.Trim(), out int result)) return Math.Max(0, result);
@@ -163,6 +246,19 @@ namespace GB_NewCadPlus_IV.Helpers
                 return Math.Max(0, (int)Math.Round(number));
             }
             return 0;
+        }
+
+        private static bool IsStandaloneFlangeOrBlindPlate(
+            string sourceFilePath,
+            string? categoryPath,
+            GraphicEntityType? entityType)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(sourceFilePath) ?? string.Empty;
+            string category = categoryPath ?? string.Empty;
+
+            return fileName.IndexOf("管端盲板", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   category.IndexOf("管端盲板", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   entityType == GraphicEntityType.Flange;
         }
 
         /// <summary>
@@ -199,12 +295,16 @@ namespace GB_NewCadPlus_IV.Helpers
         /// <summary>
         /// 根据插入前连接方式计算法兰数量。
         /// </summary>
-        private static int GetInsertFlangeQuantity(string connectionType)
+        private static int GetInsertFlangeQuantity(string connectionType, bool isStandaloneFlangeOrBlindPlate)
         {
-            // 法兰类图元插入时默认按一个法兰计数，用户可在插入前属性页面中修改该值。
-            string value = connectionType?.Trim() ?? string.Empty;
-            if (value.Contains("法兰", StringComparison.OrdinalIgnoreCase) ||
-                value.Contains("对夹", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (isStandaloneFlangeOrBlindPlate) return 1;
+
+            // 连接件的“法兰”表示两侧各有一个法兰；“单侧法兰”和“对夹”均只统计一个法兰。
+            string value = (connectionType ?? string.Empty).Replace(" ", string.Empty).Replace("　", string.Empty);
+            if (value.Equals("法兰", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("法兰连接", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (value.IndexOf("单侧法兰", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("对夹", StringComparison.OrdinalIgnoreCase) >= 0) return 1;
             return 0;
         }
 
@@ -1995,6 +2095,10 @@ namespace GB_NewCadPlus_IV.Helpers
                         // ================== 结束核心新功能 ==================
 
                         // 规范匹配及规范属性回写完成后，先让用户确认并编辑最终要插入的图元属性。
+                        bool isStandaloneFlangeOrBlindPlate = IsStandaloneFlangeOrBlindPlate(
+                            sourceFilePath,
+                            insertContext?.CategoryPath,
+                            insertContext?.EntityType);
                         if (!TryEditPropertiesBeforeInsert(
                              tr,
                              fileEntity,
@@ -2003,6 +2107,7 @@ namespace GB_NewCadPlus_IV.Helpers
                              flangeStandardResponse?.Success == true,
                              flangeStandardResponse,
                              overlapSourcePropertyMap,
+                             isStandaloneFlangeOrBlindPlate,
                              out var editedProperties))
                         {
                             // 用户取消或窗口异常时必须在炸开前退出，事务不会把临时插入保存到当前图纸。
